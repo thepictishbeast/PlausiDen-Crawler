@@ -36,6 +36,16 @@ export interface Report {
   };
   events: CapturedEvent[];
   steps: StepResult[];
+  /** Events grouped by what the crawler was doing when they fired.
+   *  "during step N (label X): event kind/text" — answers the user's
+   *  question "what was the crawler doing when the console log hit?" */
+  eventsByStep?: Array<{
+    stepIndex: number;
+    stepLabel: string;
+    stepKind: string;
+    windowMs: [number, number];
+    events: CapturedEvent[];
+  }>;
 }
 
 export interface Diff {

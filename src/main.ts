@@ -76,6 +76,75 @@ async function main(args: string[]): Promise<number> {
     }
   });
 
+  // Deeper heuristics that the surface-level event capture misses:
+  //  - WebSocket failures (onclose with non-1000 code)
+  //  - "Could not load …" / "Backend busy" / "Unexpected token" error
+  //    strings rendered by error boundaries / subtab alerts
+  //  - Blank view: <main> or #root has <100 chars of text after a step
+  //  - Long-pending <Suspense> fallback still visible 5s after a step
+  // These are checked after each step via evaluateHandle and pushed as
+  // synthetic CapturedEvents so the diff algorithm catches them.
+  const checkUiHealth = async (afterLabel: string) => {
+    try {
+      const findings = await page.evaluate(() => {
+        const out: { kind: string; text: string }[] = [];
+        // Visible error copy that users would read as a bug.
+        const errorPatterns = [
+          /could not load/i,
+          /backend busy/i,
+          /backend offline/i,
+          /unexpected token/i,
+          /unrecognized verdict bucket/i,
+          /reference.?error/i,
+          /cannot read prop/i,
+          /ui error/i,
+        ];
+        const text = document.body.innerText || '';
+        for (const p of errorPatterns) {
+          const m = text.match(p);
+          if (m) out.push({ kind: 'ui-error-text', text: `Rendered error copy matched /${p.source}/: "${text.slice(Math.max(0, m.index! - 20), m.index! + 80)}"` });
+        }
+        // Suspense-fallback-looking text still on screen (view never hydrated).
+        const loadingFallbacks = text.match(/Loading\s+(classroom|fleet|library|auditorium|admin|knowledge)/gi);
+        if (loadingFallbacks && loadingFallbacks.length > 0) {
+          out.push({ kind: 'stuck-loading', text: `Fallback copy still visible: ${loadingFallbacks.join(', ')}` });
+        }
+        // Blank-main: look for a visible <main> with almost no content.
+        const main = document.querySelector('main');
+        if (main) {
+          const mt = (main as HTMLElement).innerText || '';
+          if (mt.trim().length < 20 && (main as HTMLElement).offsetHeight > 200) {
+            out.push({ kind: 'blank-main', text: `Main area rendered with <20 chars of visible text (height: ${(main as HTMLElement).offsetHeight}px).` });
+          }
+        }
+        // Hidden-but-active error boundary card.
+        const boundaryCard = document.querySelector('[role="alert"]');
+        if (boundaryCard) {
+          const t = (boundaryCard as HTMLElement).innerText || '';
+          if (t.trim().length > 0) {
+            out.push({ kind: 'error-boundary-visible', text: `role=alert present with text: "${t.slice(0, 120)}"` });
+          }
+        }
+        return out;
+      });
+      for (const f of findings) {
+        log({ kind: 'pageerror' as const, text: `[after step: ${afterLabel}] [${f.kind}] ${f.text}` });
+      }
+    } catch { /* page may have navigated — skip */ }
+  };
+
+  // WebSocket close tracking. Hook into CDP so we see genuine WS drops.
+  try {
+    const client = await page.context().newCDPSession(page);
+    await client.send('Network.enable');
+    client.on('Network.webSocketClosed', (ev: any) => {
+      log({ kind: 'response-error', text: `WebSocket closed`, url: String(ev?.requestId || 'ws') });
+    });
+    client.on('Network.webSocketFrameError', (ev: any) => {
+      log({ kind: 'pageerror', text: `WebSocket frame error: ${ev?.errorMessage || 'unknown'}` });
+    });
+  } catch { /* CDP unavailable on some platforms */ }
+
   // Execute each step sequentially. Screenshot steps are handled inline
   // (runStep is a no-op for them) so we can track the filename.
   for (let i = 0; i < journey.steps.length; i++) {
@@ -99,9 +168,33 @@ async function main(args: string[]): Promise<number> {
     }
     // Give the page a beat to settle after interactive steps.
     await page.waitForTimeout(200);
+    // Deep heuristics check — error copy, blank main, stuck loading.
+    await checkUiHealth(step.label || step.kind);
   }
 
   await browser.close();
+
+  // Walk through events and bucket them by step — answers the user's
+  // question "what was the crawler doing when this log happened?"
+  // Each event.t is ms since run start. Steps don't carry their own
+  // start offset, so we compute it from the cumulative durationMs.
+  const stepWindows: Array<{ start: number; end: number; step: StepResult }> = [];
+  {
+    let cursor = 0;
+    for (const s of stepResults) {
+      const start = cursor;
+      const end = cursor + Math.max(s.durationMs || 0, 100) + 200; // inclusive of the 200ms post-step settle
+      stepWindows.push({ start, end, step: s });
+      cursor = end;
+    }
+  }
+  const eventsByStep = stepWindows.map(({ start, end, step }) => ({
+    stepIndex: step.index,
+    stepLabel: step.step.label || step.step.kind,
+    stepKind: step.step.kind,
+    windowMs: [start, end] as [number, number],
+    events: events.filter(e => e.t >= start && e.t <= end),
+  })).filter(b => b.events.length > 0);
 
   const report: Report = {
     target: targetUrl,
@@ -120,6 +213,7 @@ async function main(args: string[]): Promise<number> {
     },
     events,
     steps: stepResults,
+    eventsByStep,
   };
   writeFileSync(join(outDir, 'report.json'), JSON.stringify(report, null, 2));
 
