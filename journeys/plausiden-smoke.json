@@ -3,7 +3,7 @@
   "description": "End-to-end smoke: land, dismiss welcome, open every top-level view, open admin, close. Catches the crashes that have been recurring (TDZ, stale chunk, CSP, undefined.length).",
   "baseUrl": "http://10.99.0.3:3000/",
   "steps": [
-    { "kind": "goto", "url": "http://10.99.0.3:3000/", "label": "landing" },
+    { "kind": "goto", "url": "http://10.99.0.3:3000/", "timeout": 20000, "label": "landing" },
     { "kind": "wait", "ms": 2000, "label": "settle" },
     { "kind": "click", "selector": "button:has-text('I accept')", "timeout": 4000, "label": "accept-tos" },
     { "kind": "wait", "ms": 300 },
