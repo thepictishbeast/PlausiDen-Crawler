@@ -5,6 +5,10 @@
   "steps": [
     { "kind": "goto", "url": "http://10.99.0.3:3000/", "label": "landing" },
     { "kind": "wait", "ms": 2000, "label": "settle" },
+    { "kind": "press", "key": "Escape", "label": "dismiss-any-overlay" },
+    { "kind": "wait", "ms": 200 },
+    { "kind": "press", "key": "Escape", "label": "dismiss-welcome-too" },
+    { "kind": "wait", "ms": 200 },
     { "kind": "screenshot", "label": "01-landing" },
     { "kind": "click", "selector": "[data-tour='chats-toggle']", "label": "toggle-sidebar", "timeout": 3000 },
     { "kind": "wait", "ms": 500 },
