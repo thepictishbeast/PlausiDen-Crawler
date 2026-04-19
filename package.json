@@ -16,5 +16,9 @@
     "ts-node": "^10.9.2",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "crawlee": "^3.16.0",
+    "puppeteer": "^24.41.0"
   }
 }
