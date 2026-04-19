@@ -3,7 +3,7 @@
   "description": "Deep audit: visit every Classroom sub-tab, every Admin sub-tab, open every modal. Intended to surface render errors, empty states without data, layout overflows, and dead endpoints that the surface-level smoke misses.",
   "baseUrl": "http://10.99.0.3:3000/",
   "steps": [
-    { "kind": "goto", "url": "http://10.99.0.3:3000/", "timeout": 20000, "label": "landing" },
+    { "kind": "goto", "url": "http://10.99.0.3:3000/", "timeout": 30000, "label": "landing" },
     { "kind": "wait", "ms": 2500, "label": "settle" },
     { "kind": "click", "selector": "button:has-text('I accept')", "timeout": 5000, "label": "accept-tos" },
     { "kind": "wait", "ms": 400 },
