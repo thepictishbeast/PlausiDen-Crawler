@@ -16,6 +16,8 @@ import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { runStep, type Journey, type StepResult } from './journey.js';
 import { diffReports, findPriorRun, type CapturedEvent, type Report } from './report.js';
+import { captureAriaTree, ariaTreeToText, interactableNodes, scoreAriaTree } from './aria.js';
+import { installWebVitals, collectVitals } from './webVitals.js';
 
 interface Budget {
   newConsoleErrors: number;
@@ -60,6 +62,9 @@ async function main(args: string[]): Promise<number> {
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ viewport: { width: viewport.w, height: viewport.h } });
   const page: Page = await context.newPage();
+  // Inject Google's web-vitals library before any navigation so LCP/CLS/
+  // INP/TTFB/FCP are captured on every page the crawler visits.
+  await installWebVitals(page);
 
   page.on('console', (msg) => {
     log({ kind: 'console', level: msg.type(), text: msg.text(), url: msg.location().url });
@@ -151,12 +156,38 @@ async function main(args: string[]): Promise<number> {
     const step = journey.steps[i];
     console.log(`[crawler] step ${i + 1}/${journey.steps.length}: ${step.kind}${step.label ? ' · ' + step.label : ''}`);
 
-    // Screenshot steps: take the shot and record the path.
+    // Screenshot steps: take the shot AND an accessibility snapshot.
+    // Aria snapshots are the visionless-AI equivalent — a compact
+    // semantic tree an LLM can reason about without pixel input.
     if (step.kind === 'screenshot') {
-      const filename = `${String(i + 1).padStart(2, '0')}-${step.label || 'shot'}.png`;
-      const path = join(outDir, filename);
-      try { await page.screenshot({ path, fullPage: true }); } catch { /* silent */ }
-      stepResults.push({ step, index: i, ok: true, durationMs: 0, screenshot: path });
+      const base = `${String(i + 1).padStart(2, '0')}-${step.label || 'shot'}`;
+      const imgPath = join(outDir, `${base}.png`);
+      const ariaPath = join(outDir, `${base}.aria.txt`);
+      try { await page.screenshot({ path: imgPath, fullPage: true }); } catch { /* silent */ }
+      try {
+        const tree = await captureAriaTree(page);
+        const text = ariaTreeToText(tree);
+        const inter = interactableNodes(tree).map(n => `${n.role} "${n.name || '(unnamed)'}"`);
+        const a11y = scoreAriaTree(tree);
+        const body = [
+          `# Aria snapshot — ${step.label || step.kind}`,
+          `# URL: ${page.url()}`,
+          `# Interactable count: ${inter.length}`,
+          `# A11y warnings: ${a11y.score}${a11y.flags.length ? ' (' + a11y.flags.slice(0, 8).join('; ') + ')' : ''}`,
+          '',
+          text,
+          '',
+          '# --- Interactable nodes (LLM-friendly flat list) ---',
+          ...inter,
+        ].join('\n');
+        writeFileSync(ariaPath, body);
+        // If we find accessibility violations, log them as diag events
+        // so the diff surfaces NEW a11y warnings across runs.
+        for (const f of a11y.flags.slice(0, 10)) {
+          log({ kind: 'a11y-violation', text: `${f} on step ${step.label || step.kind}`, impact: 'moderate' });
+        }
+      } catch { /* aria capture is best-effort */ }
+      stepResults.push({ step, index: i, ok: true, durationMs: 0, screenshot: imgPath });
       continue;
     }
 
