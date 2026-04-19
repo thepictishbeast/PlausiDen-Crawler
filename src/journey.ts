@@ -65,7 +65,12 @@ export async function runStep(page: Page, step: Step, timeout = 10_000): Promise
   try {
     switch (step.kind) {
       case 'goto':
-        await page.goto(step.url || '', { waitUntil: 'networkidle', timeout: step.timeout || timeout });
+        // PlausiDen's SPA keeps WebSocket reconnection attempts + long-
+        // polling open, so 'networkidle' never fires → 10s timeout on
+        // every goto. Use 'domcontentloaded' (fires when the HTML is
+        // parsed) which is what we actually want: the page is loaded,
+        // subsequent steps wait for specific selectors anyway.
+        await page.goto(step.url || '', { waitUntil: 'domcontentloaded', timeout: step.timeout || timeout });
         break;
       case 'click':
         if (!step.selector) throw new Error('click: missing selector');
@@ -105,7 +110,7 @@ export async function runStep(page: Page, step: Step, timeout = 10_000): Promise
         await page.evaluate((dy: number) => window.scrollBy(0, dy), step.dy ?? 500);
         break;
       case 'reload':
-        await page.reload({ waitUntil: 'networkidle' });
+        await page.reload({ waitUntil: 'domcontentloaded' });
         break;
     }
   } catch (e: any) {
