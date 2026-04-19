@@ -5,6 +5,10 @@
   "steps": [
     { "kind": "goto", "url": "http://10.99.0.3:3000/", "label": "landing" },
     { "kind": "wait", "ms": 2000, "label": "settle" },
+    { "kind": "click", "selector": "button:has-text('I accept')", "timeout": 4000, "label": "accept-tos" },
+    { "kind": "wait", "ms": 300 },
+    { "kind": "click", "selector": "button:has-text('Get started')", "timeout": 3000, "label": "dismiss-welcome-click" },
+    { "kind": "wait", "ms": 300 },
     { "kind": "press", "key": "Escape", "label": "dismiss-any-overlay" },
     { "kind": "wait", "ms": 200 },
     { "kind": "press", "key": "Escape", "label": "dismiss-welcome-too" },
