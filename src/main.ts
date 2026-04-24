@@ -85,8 +85,15 @@ async function main(args: string[]): Promise<number> {
   await installWebVitals(page);
   // Rich telemetry: all requests (not just failures), long JS tasks,
   // memory snapshots, broken images, CSP violations, unhandled rejections.
-  // Returns a bundle that accumulates as the journey runs.
-  const telemetry = await attachTelemetry(page, startEpoch);
+  // Gated behind CRAWLER_RICH_TELEMETRY=1 while we iron out any
+  // exposeFunction / init-script bugs; the addInitScript path has
+  // historically destabilized the browser context during the first
+  // page navigation on some Playwright versions.
+  const richTelemetry = process.env.CRAWLER_RICH_TELEMETRY === '1';
+  const { makeEmptyBundle } = await import('./telemetry.js');
+  const telemetry = richTelemetry
+    ? await attachTelemetry(page, startEpoch)
+    : makeEmptyBundle();
 
   page.on('console', (msg) => {
     log({ kind: 'console', level: msg.type(), text: msg.text(), url: msg.location().url });
