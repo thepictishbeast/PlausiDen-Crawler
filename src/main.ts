@@ -18,6 +18,8 @@ import { runStep, type Journey, type StepResult } from './journey.js';
 import { diffReports, findPriorRun, type CapturedEvent, type Report } from './report.js';
 import { captureAriaTree, ariaTreeToText, interactableNodes, scoreAriaTree } from './aria.js';
 import { installWebVitals, collectVitals } from './webVitals.js';
+import { attachTelemetry, snapshotMemory, captureServiceWorker } from './telemetry.js';
+import { aggregate, renderSummary } from './aggregates.js';
 
 interface Budget {
   newConsoleErrors: number;
@@ -81,6 +83,10 @@ async function main(args: string[]): Promise<number> {
   // Inject Google's web-vitals library before any navigation so LCP/CLS/
   // INP/TTFB/FCP are captured on every page the crawler visits.
   await installWebVitals(page);
+  // Rich telemetry: all requests (not just failures), long JS tasks,
+  // memory snapshots, broken images, CSP violations, unhandled rejections.
+  // Returns a bundle that accumulates as the journey runs.
+  const telemetry = await attachTelemetry(page, startEpoch);
 
   page.on('console', (msg) => {
     log({ kind: 'console', level: msg.type(), text: msg.text(), url: msg.location().url });
@@ -217,8 +223,13 @@ async function main(args: string[]): Promise<number> {
     await page.waitForTimeout(200);
     // Deep heuristics check — error copy, blank main, stuck loading.
     await checkUiHealth(step.label || step.kind);
+    // Memory snapshot at end of each step so the report shows heap growth
+    // across the journey. Cheap (one page.evaluate call).
+    await snapshotMemory(page, step.label || step.kind, startEpoch, telemetry);
   }
 
+  // Capture service-worker state once before close.
+  await captureServiceWorker(page, telemetry);
   await browser.close();
 
   // Walk through events and bucket them by step — answers the user's
@@ -243,7 +254,10 @@ async function main(args: string[]): Promise<number> {
     events: events.filter(e => e.t >= start && e.t <= end),
   })).filter(b => b.events.length > 0);
 
-  const report: Report = {
+  // Aggregate the rich telemetry bundle into actionable leaderboards.
+  const agg = aggregate(telemetry);
+
+  const report: Report & { telemetry?: typeof telemetry; aggregates?: typeof agg } = {
     target: targetUrl,
     journey: journey.name,
     viewport,
@@ -261,8 +275,12 @@ async function main(args: string[]): Promise<number> {
     events,
     steps: stepResults,
     eventsByStep,
+    telemetry,
+    aggregates: agg,
   };
   writeFileSync(join(outDir, 'report.json'), JSON.stringify(report, null, 2));
+  // Write a terminal-friendly summary too so CI output is useful at a glance.
+  writeFileSync(join(outDir, 'summary.txt'), renderSummary(agg));
 
   const prior = findPriorRun(runsDir, outDir);
   const diff = diffReports(report, prior);
