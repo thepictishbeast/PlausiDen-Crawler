@@ -47,7 +47,23 @@ async function main(args: string[]): Promise<number> {
   }
   const journey: Journey = JSON.parse(readFileSync(journeyPath, 'utf8'));
   const targetUrl = urlIdx >= 0 ? args[urlIdx + 1] : journey.baseUrl;
-  const viewport = { w: 1280, h: 900 };
+
+  // #crawler-v0.3 — viewport is now per-journey + CLI-overridable.
+  // Resolution order:
+  //   1. --viewport 375x667 flag
+  //   2. journey.viewport = { w, h } in the JSON
+  //   3. default 1280×900 (desktop)
+  // Mobile-variant journeys (plausiden-smoke-mobile.json) declare the small viewport;
+  // the same smoke journey can be re-run at different sizes by passing --viewport.
+  const vpArgIdx = args.indexOf('--viewport');
+  let viewport = { w: 1280, h: 900 };
+  if (vpArgIdx >= 0 && args[vpArgIdx + 1]) {
+    const m = /^(\d+)x(\d+)$/.exec(args[vpArgIdx + 1]);
+    if (m) viewport = { w: parseInt(m[1], 10), h: parseInt(m[2], 10) };
+  } else if ((journey as any).viewport) {
+    const jv = (journey as any).viewport;
+    if (typeof jv.w === 'number' && typeof jv.h === 'number') viewport = { w: jv.w, h: jv.h };
+  }
 
   const tsTag = new Date().toISOString().replace(/[:.]/g, '-');
   const runsDir = 'runs';

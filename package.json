@@ -6,6 +6,9 @@
   "type": "module",
   "scripts": {
     "audit": "node --loader ts-node/esm src/main.ts",
+    "audit:mobile": "node --loader ts-node/esm src/main.ts --journey journeys/plausiden-smoke-mobile.json",
+    "audit:tablet": "node --loader ts-node/esm src/main.ts --journey journeys/plausiden-smoke-tablet.json",
+    "audit:all": "npm run audit && npm run audit:tablet && npm run audit:mobile",
     "audit:ui": "npx playwright test --ui",
     "install:deps": "npm install && npx playwright install chromium"
   },
