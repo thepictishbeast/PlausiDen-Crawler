@@ -1,0 +1,36 @@
+{
+  "name": "sacred-vote",
+  "description": "Read-only crawl of sacred.vote anonymous (unauthenticated) surface. BFS through every same-origin page, capture aria + screenshot + interactables. Does NOT submit forms or click destructive buttons. Auth flows live in sacred-vote-admin.json + sacred-vote-voter.json.",
+  "baseUrl": "https://sacred.vote/",
+  "viewport": { "w": 1280, "h": 900 },
+  "steps": [
+    { "kind": "goto", "url": "https://sacred.vote/", "timeout": 30000, "label": "landing" },
+    { "kind": "wait", "ms": 1500, "label": "settle" },
+    { "kind": "screenshot", "label": "00-landing" },
+    {
+      "kind": "discover",
+      "label": "anonymous-bfs",
+      "url": "https://sacred.vote/",
+      "discover": {
+        "maxPages": 80,
+        "maxDepth": 4,
+        "sameOrigin": true,
+        "interactButtons": "never",
+        "settleMs": 800,
+        "navTimeoutMs": 25000,
+        "denyPatterns": [
+          "/api/",
+          "/csp-report",
+          "/logout",
+          "/sign-?out",
+          "/admin/(?!login|sign-in)",
+          "\\.json$",
+          "\\.xml$",
+          "/cast",
+          "/submit",
+          "/delete"
+        ]
+      }
+    }
+  ]
+}
