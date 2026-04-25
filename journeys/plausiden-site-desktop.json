@@ -1,0 +1,27 @@
+{
+  "name": "plausiden-site-desktop",
+  "description": "Smoke the Rust plausiden-site Axum+Maud rewrite on a desktop viewport. Lands on home, clicks each top nav, checks the contact form renders. Catches missing assets, broken routes, CSP violations.",
+  "baseUrl": "https://next.plausiden.com/",
+  "viewport": { "w": 1440, "h": 900 },
+  "steps": [
+    { "kind": "goto", "url": "https://next.plausiden.com/", "timeout": 15000, "label": "home" },
+    { "kind": "wait", "ms": 800, "label": "fonts-settle" },
+    { "kind": "screenshot", "label": "01-home" },
+
+    { "kind": "click", "selector": "nav a[href='/services']", "timeout": 5000, "label": "nav-services" },
+    { "kind": "wait", "ms": 600 },
+    { "kind": "screenshot", "label": "02-services" },
+
+    { "kind": "click", "selector": "nav a[href='/about']", "timeout": 5000, "label": "nav-about" },
+    { "kind": "wait", "ms": 600 },
+    { "kind": "screenshot", "label": "03-about" },
+
+    { "kind": "click", "selector": "nav a[href='/contact']", "timeout": 5000, "label": "nav-contact" },
+    { "kind": "wait", "ms": 600 },
+    { "kind": "screenshot", "label": "04-contact" },
+
+    { "kind": "click", "selector": "a[href='/']", "timeout": 5000, "label": "nav-home-back" },
+    { "kind": "wait", "ms": 600 },
+    { "kind": "screenshot", "label": "05-home-return" }
+  ]
+}

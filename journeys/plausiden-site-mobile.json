@@ -1,0 +1,25 @@
+{
+  "name": "plausiden-site-mobile",
+  "description": "Smoke the Rust plausiden-site at a mobile viewport. Specifically exercises the hamburger -> mobile menu drawer -> link tap flow that the user reported as broken.",
+  "baseUrl": "https://next.plausiden.com/",
+  "viewport": { "w": 390, "h": 844 },
+  "steps": [
+    { "kind": "goto", "url": "https://next.plausiden.com/", "timeout": 15000, "label": "home-mobile" },
+    { "kind": "wait", "ms": 800, "label": "fonts-settle" },
+    { "kind": "screenshot", "label": "01-mobile-home-closed" },
+
+    { "kind": "click", "selector": "#mobile-menu-toggle", "timeout": 5000, "label": "open-mobile-menu" },
+    { "kind": "wait", "ms": 400 },
+    { "kind": "screenshot", "label": "02-mobile-menu-open" },
+
+    { "kind": "click", "selector": "#mobile-menu a[href='/services']", "timeout": 5000, "label": "tap-services-in-drawer" },
+    { "kind": "wait", "ms": 800 },
+    { "kind": "screenshot", "label": "03-services-after-drawer-tap" },
+
+    { "kind": "click", "selector": "#mobile-menu-toggle", "timeout": 5000, "label": "open-mobile-menu-on-services" },
+    { "kind": "wait", "ms": 400 },
+    { "kind": "click", "selector": "#mobile-menu a[href='/contact']", "timeout": 5000, "label": "tap-contact-in-drawer" },
+    { "kind": "wait", "ms": 800 },
+    { "kind": "screenshot", "label": "04-contact-after-drawer-tap" }
+  ]
+}
