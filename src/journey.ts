@@ -20,7 +20,8 @@ export type StepKind =
   | 'screenshot'
   | 'assertText'
   | 'scroll'
-  | 'reload';
+  | 'reload'
+  | 'discover';
 
 export interface Step {
   kind: StepKind;
@@ -40,6 +41,22 @@ export interface Step {
   ms?: number;
   /** For scroll: vertical pixel delta (negative scrolls up). */
   dy?: number;
+  /**
+   * For discover: BFS configuration. The runner switches to autonomous
+   * mode and crawls same-origin links from the current URL (or step.url
+   * if provided), capturing aria + screenshot + interactables on every
+   * page reached. See src/discover.ts for the full DiscoverConfig shape.
+   */
+  discover?: {
+    maxPages?: number;
+    maxDepth?: number;
+    sameOrigin?: boolean;
+    includePatterns?: string[];
+    denyPatterns?: string[];
+    interactButtons?: 'never' | 'safe-buttons' | 'all-buttons';
+    settleMs?: number;
+    navTimeoutMs?: number;
+  };
 }
 
 export interface Journey {

@@ -20,6 +20,7 @@ import { captureAriaTree, ariaTreeToText, interactableNodes, scoreAriaTree } fro
 import { installWebVitals, collectVitals } from './webVitals.js';
 import { attachTelemetry, snapshotMemory, captureServiceWorker } from './telemetry.js';
 import { aggregate, renderSummary } from './aggregates.js';
+import { runDiscover, type DiscoveredPage } from './discover.js';
 
 interface Budget {
   newConsoleErrors: number;
@@ -40,14 +41,48 @@ const DEFAULT_BUDGET: Budget = {
 async function main(args: string[]): Promise<number> {
   const urlIdx = args.indexOf('--url');
   const journeyIdx = args.indexOf('--journey');
+  const autoIdx = args.indexOf('--auto');
 
-  // Resolve journey: explicit --journey path, or ./journeys/plausiden-smoke.json.
-  let journeyPath = journeyIdx >= 0 ? args[journeyIdx + 1] : 'journeys/plausiden-smoke.json';
-  if (!existsSync(journeyPath)) {
-    console.error(`[crawler] journey not found: ${journeyPath}`);
-    return 2;
+  // --auto <URL> mode: synthesize a one-step discover-only journey on the
+  // fly. Useful for "I just want to point this at a site and see what's
+  // there" without authoring a journey file.
+  let journey: Journey;
+  if (autoIdx >= 0 && args[autoIdx + 1]) {
+    const url = args[autoIdx + 1];
+    const slug = url.replace(/^https?:\/\//, '').replace(/[^A-Za-z0-9]/g, '-').slice(0, 60);
+    const maxPagesArg = args.indexOf('--max-pages');
+    const maxDepthArg = args.indexOf('--max-depth');
+    const interactArg = args.indexOf('--interact');
+    journey = {
+      name: `auto-${slug}`,
+      description: `Autonomous discovery sweep of ${url}`,
+      baseUrl: url,
+      steps: [
+        { kind: 'goto', url, label: 'auto-start', timeout: 30_000 },
+        { kind: 'wait', ms: 1_000 },
+        { kind: 'screenshot', label: '00-start' },
+        {
+          kind: 'discover',
+          label: 'auto-discover',
+          url,
+          discover: {
+            maxPages: maxPagesArg >= 0 ? parseInt(args[maxPagesArg + 1], 10) : 50,
+            maxDepth: maxDepthArg >= 0 ? parseInt(args[maxDepthArg + 1], 10) : 3,
+            sameOrigin: true,
+            interactButtons: (interactArg >= 0 ? args[interactArg + 1] : 'never') as any,
+          },
+        },
+      ],
+    };
+  } else {
+    // Resolve journey: explicit --journey path, or ./journeys/plausiden-smoke.json.
+    let journeyPath = journeyIdx >= 0 ? args[journeyIdx + 1] : 'journeys/plausiden-smoke.json';
+    if (!existsSync(journeyPath)) {
+      console.error(`[crawler] journey not found: ${journeyPath}`);
+      return 2;
+    }
+    journey = JSON.parse(readFileSync(journeyPath, 'utf8'));
   }
-  const journey: Journey = JSON.parse(readFileSync(journeyPath, 'utf8'));
   const targetUrl = urlIdx >= 0 ? args[urlIdx + 1] : journey.baseUrl;
 
   // #crawler-v0.3 — viewport is now per-journey + CLI-overridable.
@@ -217,6 +252,28 @@ async function main(args: string[]): Promise<number> {
         }
       } catch { /* aria capture is best-effort */ }
       stepResults.push({ step, index: i, ok: true, durationMs: 0, screenshot: imgPath });
+      continue;
+    }
+
+    // Discover steps switch the runner into autonomous BFS mode for the
+    // duration of the step. The discover module captures aria/screenshot/
+    // events itself and returns a DiscoverResult that we splice into the
+    // main report. Use the step.url as the start URL if provided, else
+    // whatever URL the page is currently on.
+    if (step.kind === 'discover') {
+      const startUrl = step.url || page.url();
+      console.log(`[crawler] discover starting at ${startUrl}`);
+      const cfg = step.discover || {};
+      const result = await runDiscover(page, startUrl, cfg, outDir, startEpoch, log);
+      // Splice virtual step results + events into the main run.
+      stepResults.push(...result.stepResults);
+      for (const ev of result.events) events.push(ev);
+      // Persist the per-page discovery details next to the report.
+      writeFileSync(
+        join(outDir, 'discover-pages.json'),
+        JSON.stringify(result.pages, null, 2),
+      );
+      console.log(`[crawler] discover complete: ${result.pages.length} pages, ${result.events.length} events`);
       continue;
     }
 
