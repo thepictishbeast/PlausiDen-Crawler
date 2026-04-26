@@ -21,6 +21,8 @@ import { installWebVitals, collectVitals } from './webVitals.js';
 import { attachTelemetry, snapshotMemory, captureServiceWorker } from './telemetry.js';
 import { aggregate, renderSummary } from './aggregates.js';
 import { runDiscover, type DiscoveredPage } from './discover.js';
+import { runProbe } from './probe.js';
+import { runAxe, axeEventsFor, renderAxeFindings, annotateViolations, type AxePageResult } from './audit.js';
 
 interface Budget {
   newConsoleErrors: number;
@@ -111,10 +113,215 @@ async function main(args: string[]): Promise<number> {
   const stepResults: StepResult[] = [];
   const log = (e: Omit<CapturedEvent, 't'>) => events.push({ ...e, t: Date.now() - startEpoch });
 
-  console.log(`[crawler] journey=${journey.name} target=${targetUrl}`);
-  const browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext({ viewport: { width: viewport.w, height: viewport.h } });
+  // --headful runs Chromium with a visible UI. Required for the one-time
+  // interactive login that produces a storageState file (admin/voter
+  // journeys). HEADFUL=1 env var is the equivalent shortcut.
+  const headfulIdx = args.indexOf('--headful');
+  const headful = headfulIdx >= 0 || process.env.HEADFUL === '1';
+
+  // --state <path>: load a Playwright storageState JSON (cookies +
+  // localStorage) captured from a prior interactive login. Falls back to
+  // journey.storageState if --state is not passed. Missing file = warn +
+  // continue (anonymous) so the same crawler invocation works whether the
+  // operator has captured credentials or not.
+  // --save-state <path>: dump the current context's storageState to disk
+  // at the end of the run. Used in conjunction with --headful + a manual
+  // login step to capture credentials for re-use.
+  const stateIdx = args.indexOf('--state');
+  const saveStateIdx = args.indexOf('--save-state');
+  const statePath = stateIdx >= 0 ? args[stateIdx + 1] : (journey as any).storageState;
+  const saveStatePath = saveStateIdx >= 0 ? args[saveStateIdx + 1] : undefined;
+
+  console.log(`[crawler] journey=${journey.name} target=${targetUrl}${headful ? ' [headful]' : ''}${statePath ? ' [state=' + statePath + ']' : ''}`);
+  const browser = await chromium.launch({ headless: !headful });
+  // bypassCSP only affects this headless test browser — real user
+  // browsers still receive the production CSP unchanged. Without this,
+  // strict-CSP sites (script-src 'self') reject our axe-core injection
+  // and every WCAG scan fails with an engine error.
+  const contextOpts: Parameters<typeof browser.newContext>[0] = {
+    viewport: { width: viewport.w, height: viewport.h },
+    bypassCSP: true,
+  };
+
+  // Two state-file formats are supported:
+  //   1. Playwright storageState — { cookies: [...], origins: [{...localStorage}] }.
+  //      Loaded by the context constructor; used by interactive logins captured
+  //      via scripts/capture-login.sh.
+  //   2. Sacred.Vote auth seed — { sessionStorage: {...}, autoGatekeeper, voterCode }.
+  //      Written by scripts/seed-auth.sh. We can't use context.storageState for this
+  //      because Playwright doesn't capture/restore sessionStorage. Instead we apply
+  //      it via addInitScript after the context is created.
+  let svSeed: { sessionStorage?: Record<string, string>; autoGatekeeper?: boolean; voterCode?: string; voterHash?: string } | null = null;
+  if (statePath && existsSync(statePath)) {
+    try {
+      const raw = JSON.parse(readFileSync(statePath, 'utf8'));
+      const isPwStorageState = Array.isArray(raw.cookies) || Array.isArray(raw.origins);
+      const isSvSeed = !!raw.sessionStorage || !!raw.autoGatekeeper || !!raw.voterCode;
+      if (isSvSeed && !isPwStorageState) {
+        svSeed = raw;
+        console.log(`[crawler] loaded sv-seed from ${statePath} (role=${raw.role || '?'})`);
+      } else {
+        contextOpts.storageState = statePath;
+        console.log(`[crawler] loaded storageState from ${statePath}`);
+      }
+    } catch (e) {
+      console.log(`[crawler] WARN failed to parse state file ${statePath}: ${(e as Error).message}`);
+    }
+  } else if (statePath) {
+    console.log(`[crawler] WARN state ${statePath} not found — continuing anonymous`);
+  }
+  const context = await browser.newContext(contextOpts);
+
+  // Seed sessionStorage on every page load. Runs before any of the SPA's
+  // own JS, so the SPA boots already authenticated and never shows the
+  // login form. Re-fires on every navigation within the context, which
+  // is exactly what discover needs.
+  if (svSeed?.sessionStorage) {
+    const seedScript = `(() => { try { const seed = ${JSON.stringify(svSeed.sessionStorage)}; for (const [k, v] of Object.entries(seed)) sessionStorage.setItem(k, v); } catch {} })();`;
+    await context.addInitScript({ content: seedScript });
+    console.log(`[crawler] sessionStorage seeded with ${Object.keys(svSeed.sessionStorage).length} entries`);
+  }
+
+  // Auto-gatekeeper: detects the voter-ID input and submits the TEST code
+  // automatically whenever the gatekeeper appears. /voting-app and
+  // /dashboard re-mount their gatekeeper on every page reload (voter
+  // session lives in React state only), so a one-shot fill+click step
+  // is not enough — discover would lose auth on the next navigation.
+  if (svSeed?.autoGatekeeper && svSeed?.voterCode) {
+    const code = svSeed.voterCode;
+    // Dismiss first-time popups that occlude the gatekeeper:
+    //   - "About Sacred Vote" modal (localStorage: sacred-vote-mission-seen)
+    //   - Disclaimer amber banner (sessionStorage: sv_disclaimer_dismissed)
+    //   - Voter-booth walkthrough (localStorage: sv_walkthrough_*)
+    // The "Before You Vote" legal modal is keyed by sv_legal_accepted_<first8>.
+    // For voterCode="TEST", first8 is "TEST". Pre-setting that key suppresses
+    // the modal so auto-fill flows straight to poll-select after submit.
+    const legalKey = `sv_legal_accepted_${code.trim().substring(0, 8)}`;
+    const dismiss = `
+      (function() {
+        try {
+          localStorage.setItem('sacred-vote-mission-seen', '1');
+          localStorage.setItem('sv_walkthrough_voterbooth_seen', '1');
+          localStorage.setItem('sv_walkthrough_voting_seen', '1');
+          localStorage.setItem(${JSON.stringify(legalKey)}, new Date().toISOString());
+          sessionStorage.setItem('sv_disclaimer_dismissed', 'true');
+        } catch (e) {}
+      })();
+    `;
+    await context.addInitScript({ content: dismiss });
+    const auto = `
+      (function() {
+        var voterCode = ${JSON.stringify(code)};
+        var attempts = 0;
+        // Pages this auto-filler should target. Anything else (registration,
+        // recover, public verify ballot lookup, etc.) is left alone — we
+        // don't want to type "TEST" into a registration form.
+        function isGatekeeperPage() {
+          var p = location.pathname;
+          return p === '/' || p === '/voting-app' || p === '/dashboard' || p === '/verify-identity';
+        }
+        function findVoterInput() {
+          var byId = document.querySelector('[data-testid="input-voter-id"]');
+          if (byId) return byId;
+          var inputs = document.querySelectorAll('input[type="text"], input:not([type])');
+          for (var i = 0; i < inputs.length; i++) {
+            var el = inputs[i];
+            var ph = (el.getAttribute('placeholder') || '').toLowerCase();
+            var name = (el.getAttribute('name') || '').toLowerCase();
+            var id = (el.getAttribute('id') || '').toLowerCase();
+            if (
+              ph.indexOf('voter') >= 0 ||
+              ph.indexOf('access code') >= 0 ||
+              ph.indexOf('id number') >= 0 ||
+              ph.indexOf('sv-') >= 0 ||
+              name === 'voter_id' || name === 'voter-code' || id === 'voter_id'
+            ) {
+              return el;
+            }
+          }
+          return null;
+        }
+        function findSubmitButton(input) {
+          // Prefer the input's own form submit button.
+          var form = input.closest('form');
+          if (form) {
+            var sub = form.querySelector('button[type="submit"], input[type="submit"]');
+            if (sub) return sub;
+          }
+          // Known testids first.
+          var byId = document.querySelector('[data-testid="button-proceed"]');
+          if (byId) return byId;
+          // Fallback: nearest enabled button labelled "Continue" / "Submit" /
+          // "Proceed" — verify-identity has no form, just <Button onClick=...>.
+          var btns = document.querySelectorAll('button');
+          for (var i = 0; i < btns.length; i++) {
+            var b = btns[i];
+            if (b.disabled) continue;
+            var t = (b.textContent || '').trim().toLowerCase();
+            if (t === 'continue' || t === 'submit' || t === 'proceed' || t.indexOf('access dashboard') >= 0) return b;
+          }
+          return null;
+        }
+        function setNativeValue(el, value) {
+          var desc = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+          if (desc && desc.set) desc.set.call(el, value);
+          else el.value = value;
+          el.dispatchEvent(new Event('input', { bubbles: true }));
+          el.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        function pressEnter(el) {
+          // verify-identity wires onKeyDown=Enter→handleCodeSubmit on the
+          // input itself (no <form>), so an Enter keydown is the most
+          // reliable submit trigger when the button isn't easy to find.
+          var ev = new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true });
+          el.dispatchEvent(ev);
+        }
+        function tryFill() {
+          if (!isGatekeeperPage()) return true; // nothing to do here
+          var input = findVoterInput();
+          if (!input) return false;
+          if (input.value === voterCode) return true; // already filled
+          if (input.value && input.value !== voterCode) return true; // user typed something else, leave alone
+          setNativeValue(input, voterCode);
+          // After React reconciles the controlled value, click the submit
+          // button if we can find one; otherwise dispatch Enter on the
+          // input (verify-identity uses onKeyDown=Enter → handleCodeSubmit).
+          setTimeout(function() {
+            try {
+              var btn = findSubmitButton(input);
+              if (btn && !btn.disabled) {
+                btn.click();
+                return;
+              }
+              var form = input.closest('form');
+              if (form) {
+                form.requestSubmit ? form.requestSubmit() : form.submit();
+                return;
+              }
+              pressEnter(input);
+            } catch (e) {}
+          }, 120);
+          return true;
+        }
+        function tick() {
+          if (attempts++ > 30) return;
+          if (!tryFill()) setTimeout(tick, 400);
+        }
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', function() { setTimeout(tick, 200); });
+        } else {
+          setTimeout(tick, 200);
+        }
+      })();
+    `;
+    await context.addInitScript({ content: auto });
+    console.log(`[crawler] auto-gatekeeper enabled (voter=${code})`);
+  }
+
   const page: Page = await context.newPage();
+  // Per-screenshot axe results — written to findings.txt at end of run
+  // so the user can triage WCAG violations alongside the JSON report.
+  const screenshotAxe: Array<{ url: string; result: AxePageResult; annotated?: string }> = [];
   // Inject Google's web-vitals library before any navigation so LCP/CLS/
   // INP/TTFB/FCP are captured on every page the crawler visits.
   await installWebVitals(page);
@@ -251,6 +458,19 @@ async function main(args: string[]): Promise<number> {
           log({ kind: 'a11y-violation', text: `${f} on step ${step.label || step.kind}`, impact: 'moderate' });
         }
       } catch { /* aria capture is best-effort */ }
+      // Real axe-core scan — picks up contrast, ARIA misuse, missing
+      // labels, etc. that the aria-tree heuristic can't see. Annotated
+      // screenshot per-step has red outlines on every flagged element.
+      try {
+        const axeResult = await runAxe(page);
+        let annotated: string | undefined;
+        if (axeResult.ok && axeResult.violations.length > 0) {
+          const annPath = join(outDir, `${base}.annotated.png`);
+          annotated = await annotateViolations(page, axeResult, annPath);
+        }
+        screenshotAxe.push({ url: axeResult.url, result: axeResult, annotated });
+        for (const ev of axeEventsFor(axeResult, startEpoch)) events.push(ev);
+      } catch { /* axe is best-effort */ }
       stepResults.push({ step, index: i, ok: true, durationMs: 0, screenshot: imgPath });
       continue;
     }
@@ -277,6 +497,22 @@ async function main(args: string[]): Promise<number> {
       continue;
     }
 
+    // Probe steps fire malformed-URL fuzz against int/hex/UUID-shaped
+    // path segments harvested from prior discover output (or listed
+    // explicitly in the journey). 5xx, body echoes, hash-prefix leaks,
+    // and unexpected 200s on garbage input become CapturedEvents so the
+    // diff/budget logic catches regressions across runs.
+    if (step.kind === 'probe') {
+      const cfg = step.probe || {};
+      const explicitUrls = cfg.urls || (step.url ? [step.url] : []);
+      console.log(`[crawler] probe starting (explicit=${explicitUrls.length}, inheritDiscover=${cfg.inheritDiscoverUrls !== false})`);
+      const result = await runProbe(page, explicitUrls, cfg, outDir, startEpoch, log);
+      stepResults.push(...result.stepResults);
+      for (const ev of result.events) events.push(ev);
+      console.log(`[crawler] probe complete: ${result.findings.length} findings, ${result.totalRequests} requests, ${result.templatesProbed} templates`);
+      continue;
+    }
+
     const result = await runStep(page, step);
     result.index = i;
     stepResults.push(result);
@@ -294,6 +530,17 @@ async function main(args: string[]): Promise<number> {
 
   // Capture service-worker state once before close.
   await captureServiceWorker(page, telemetry);
+  // Save current cookies + localStorage so a subsequent run can re-enter
+  // the authenticated session without another manual login. Done before
+  // browser.close() so the context is still alive.
+  if (saveStatePath) {
+    try {
+      await context.storageState({ path: saveStatePath });
+      console.log(`[crawler] storageState saved to ${saveStatePath}`);
+    } catch (e) {
+      console.error(`[crawler] failed to save storageState: ${(e as Error).message}`);
+    }
+  }
   await browser.close();
 
   // Walk through events and bucket them by step — answers the user's
@@ -345,6 +592,13 @@ async function main(args: string[]): Promise<number> {
   writeFileSync(join(outDir, 'report.json'), JSON.stringify(report, null, 2));
   // Write a terminal-friendly summary too so CI output is useful at a glance.
   writeFileSync(join(outDir, 'summary.txt'), renderSummary(agg));
+
+  // Per-screenshot WCAG findings (axe-core), separate from discover sweep
+  // findings. Both files share the same `renderAxeFindings` shape so a
+  // human can read either without learning a second format.
+  if (screenshotAxe.length > 0) {
+    writeFileSync(join(outDir, 'findings.txt'), renderAxeFindings(screenshotAxe));
+  }
 
   const prior = findPriorRun(runsDir, outDir);
   const diff = diffReports(report, prior);

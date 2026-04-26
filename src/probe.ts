@@ -1,0 +1,346 @@
+/**
+ * Adversarial URL-parameter probe.
+ *
+ * The discover module exhaustively walks a site read-only — every link,
+ * every safe button, full aria + screenshot per page. That catches
+ * regressions in what's REACHABLE. It does not catch what happens when
+ * a parameter the server expects is malformed: the canonical Bug #33
+ * shape was `/api/verify/:hash` accepting any 16-128 char string and
+ * passing a null-byte payload straight to Postgres, which threw a 500.
+ *
+ * runProbe takes the URLs the discover step already harvested (read
+ * from `${outDir}/discover-pages.json`) plus any explicitly listed in
+ * the journey, classifies their path segments as int/hex/UUID, and
+ * fires a small fixed set of malformed variants per template:
+ *
+ *   int  → -1, 0, INT32_OVERFLOW, BIGNUM, abc, null-byte, traversal, …
+ *   hex  → empty, non-hex same-length, null-byte mid/suffix, under-min,
+ *          over-max, oversize 10k, uppercase non-hex, traversal
+ *   uuid → all-zero, all-f, no-hyphens, non-uuid, null-byte boundaries
+ *
+ * Findings:
+ *   - 5xx response (server-side fault — Bug #33 class)
+ *   - 200 on plainly malformed input (acceptance signal — auth bypass risk)
+ *   - request error / timeout (DOS surface, slow-pole)
+ *   - body echoes the injected variant verbatim (XSS / log-injection seed)
+ *   - body contains a known hash prefix (Bug #28/#30/#32 class — partial
+ *     entropy leak from a different audit surface)
+ *
+ * Read-only by default — only fires GETs, never submits. Operator must
+ * still scope this away from production: a single 5xx-on-fuzz can mask
+ * itself in audit logs at scale, and even GETs against rate-limited
+ * endpoints can trip lockouts. The recommended pattern is a separate
+ * journey that targets http://localhost:5000/ with explicit URLs.
+ */
+import type { Page } from 'playwright';
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
+import type { CapturedEvent } from './report.js';
+import type { StepResult } from './journey.js';
+
+export interface ProbeConfig {
+  /** Explicit URLs to probe. Combined with URLs from prior discover. */
+  urls?: string[];
+  /** Which segment classes to mutate. Default: int + hex + uuid. */
+  mutators?: Array<'int' | 'hex' | 'uuid' | 'string'>;
+  /** Cap requests per *template* (URL with one segment masked). Default 12. */
+  maxRequestsPerUrl?: number;
+  /** Global cap. Default 500. */
+  maxRequestsTotal?: number;
+  /** Per-request timeout (ms). Default 8000. */
+  timeoutMs?: number;
+  /** Status codes that count as findings. Default 500-599. */
+  failStatuses?: number[];
+  /** Status codes that are explicitly fine. Default sensible 4xx + 2xx + redirects. */
+  okStatuses?: number[];
+  /**
+   * Known hash prefixes to scan response bodies for (Bug #28/#30/#32 leak
+   * detection). Operator passes prefixes captured from log streams; if
+   * any appear in a probe response body, that's cross-surface bleed.
+   */
+  hashLeakPrefixes?: string[];
+  /** Allowlist regex on the *original* URL. */
+  includePatterns?: string[];
+  /** Denylist regex on the *original* URL. */
+  denyPatterns?: string[];
+  /** Read URLs from `${outDir}/discover-pages.json`. Default true. */
+  inheritDiscoverUrls?: boolean;
+}
+
+export interface ProbeFinding {
+  url: string;
+  template: string;
+  variant: string;
+  segment: string;
+  segmentIndex: number;
+  mutator: string;
+  status?: number;
+  durationMs: number;
+  bodyPreview?: string;
+  errorText?: string;
+  reason: string;
+}
+
+export interface ProbeResult {
+  findings: ProbeFinding[];
+  stepResults: StepResult[];
+  events: CapturedEvent[];
+  totalRequests: number;
+  templatesProbed: number;
+}
+
+const HEX_RE = /^[a-fA-F0-9]+$/;
+const INT_RE = /^-?\d+$/;
+const UUID_RE = /^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$/;
+
+type MutatorKind = 'int' | 'hex' | 'uuid' | 'string';
+
+function classify(seg: string): MutatorKind | null {
+  if (!seg) return null;
+  if (UUID_RE.test(seg)) return 'uuid';
+  // Hex must look hash-y — skip 1-byte words that happen to be hex like "abc".
+  if (HEX_RE.test(seg) && seg.length >= 16) return 'hex';
+  if (INT_RE.test(seg)) return 'int';
+  return null;
+}
+
+function variantsFor(seg: string, kind: MutatorKind): Array<{ variant: string; label: string }> {
+  switch (kind) {
+    case 'int':
+      return [
+        { variant: '-1', label: 'negative' },
+        { variant: '0', label: 'zero' },
+        { variant: '2147483648', label: 'int32-overflow' },
+        { variant: '99999999999999999999', label: 'bignum' },
+        { variant: 'abc', label: 'non-numeric' },
+        { variant: '%00', label: 'null-byte-only' },
+        { variant: `${seg}%00`, label: 'null-byte-suffix' },
+        { variant: '../etc/passwd', label: 'path-traversal' },
+        { variant: '<script>alert(1)</script>', label: 'xss-tag' },
+        { variant: "' OR 1=1--", label: 'sql-meta' },
+      ];
+    case 'hex': {
+      const half = Math.floor(seg.length / 2);
+      const half1 = seg.slice(0, half);
+      const half2 = seg.slice(half + 1);
+      return [
+        { variant: '', label: 'empty' },
+        { variant: 'z'.repeat(seg.length), label: 'non-hex-same-length' },
+        { variant: `${half1}%00${half2}`, label: 'null-byte-mid' },
+        { variant: `${seg}%00`, label: 'null-byte-suffix' },
+        { variant: seg.slice(0, 15), label: 'under-minimum-15' },
+        { variant: 'a'.repeat(129), label: 'over-maximum-129' },
+        { variant: 'a'.repeat(10000), label: 'huge-10k' },
+        { variant: 'G'.repeat(seg.length), label: 'uppercase-non-hex' },
+        { variant: '../etc/passwd', label: 'path-traversal' },
+        { variant: `${seg}/extra`, label: 'segment-injection' },
+      ];
+    }
+    case 'uuid':
+      return [
+        { variant: '00000000-0000-0000-0000-000000000000', label: 'zero-uuid' },
+        { variant: 'ffffffff-ffff-ffff-ffff-ffffffffffff', label: 'all-f-uuid' },
+        { variant: 'not-a-uuid', label: 'non-uuid' },
+        { variant: seg.replace(/-/g, ''), label: 'no-hyphens' },
+        { variant: `${seg}%00`, label: 'null-byte-suffix' },
+        { variant: `%00${seg}`, label: 'null-byte-prefix' },
+        { variant: '../etc/passwd', label: 'path-traversal' },
+      ];
+    case 'string':
+      return [
+        { variant: '', label: 'empty' },
+        { variant: '%00', label: 'null-byte' },
+        { variant: '../etc/passwd', label: 'path-traversal' },
+        { variant: '<script>alert(1)</script>', label: 'xss-tag' },
+      ];
+  }
+}
+
+export async function runProbe(
+  page: Page,
+  startUrls: string[],
+  cfg: ProbeConfig,
+  outDir: string,
+  startEpoch: number,
+  log: (e: Omit<CapturedEvent, 't'>) => void,
+): Promise<ProbeResult> {
+  const ctx = page.context();
+  const timeout = cfg.timeoutMs ?? 8_000;
+  const maxPerUrl = cfg.maxRequestsPerUrl ?? 12;
+  const maxTotal = cfg.maxRequestsTotal ?? 500;
+  const failStatuses = cfg.failStatuses ?? Array.from({ length: 100 }, (_, i) => 500 + i);
+  const okStatuses = cfg.okStatuses ?? [200, 204, 301, 302, 303, 307, 308, 400, 401, 403, 404, 405, 409, 410, 413, 415, 422, 429];
+  const enabledMutators = cfg.mutators ?? ['int', 'hex', 'uuid'];
+  const inheritDiscover = cfg.inheritDiscoverUrls !== false;
+
+  const findings: ProbeFinding[] = [];
+  const stepResults: StepResult[] = [];
+  const events: CapturedEvent[] = [];
+  let totalRequests = 0;
+
+  const targetSet = new Set<string>();
+  for (const u of startUrls) targetSet.add(u);
+  if (inheritDiscover) {
+    const path = join(outDir, 'discover-pages.json');
+    if (existsSync(path)) {
+      try {
+        const raw = readFileSync(path, 'utf8');
+        const pages = JSON.parse(raw) as Array<{ url?: string }>;
+        for (const p of pages) if (p.url) targetSet.add(p.url);
+      } catch (e: any) {
+        log({ kind: 'pageerror', text: `probe: failed to read discover-pages.json: ${e?.message || e}` });
+      }
+    }
+  }
+
+  // Collapse to templates: any URL where one path segment is fuzz-able
+  // gets its own template. Multiple URLs sharing the same template (only
+  // differ in that segment) are deduplicated so we don't re-probe the
+  // same shape 50 times.
+  const seenTemplates = new Set<string>();
+
+  outer: for (const url of targetSet) {
+    let parsed: URL;
+    try { parsed = new URL(url); } catch { continue; }
+    if (cfg.denyPatterns?.some(p => safeMatch(p, url))) continue;
+    if (cfg.includePatterns && !cfg.includePatterns.some(p => safeMatch(p, url))) continue;
+    const segments = parsed.pathname.split('/').filter(Boolean);
+    if (segments.length === 0) continue;
+
+    for (let i = 0; i < segments.length; i++) {
+      const seg = segments[i];
+      const kind = classify(seg);
+      if (!kind || !enabledMutators.includes(kind)) continue;
+
+      const tmpl = parsed.origin + '/' + segments.map((s, j) => j === i ? `<${kind}>` : s).join('/');
+      if (seenTemplates.has(tmpl)) continue;
+      seenTemplates.add(tmpl);
+
+      const variants = variantsFor(seg, kind);
+      let perUrlBudget = maxPerUrl;
+
+      for (const v of variants) {
+        if (perUrlBudget <= 0) break;
+        if (totalRequests >= maxTotal) break outer;
+        perUrlBudget--;
+        totalRequests++;
+
+        const probedSegments = segments.slice();
+        probedSegments[i] = v.variant;
+        const probedUrl = parsed.origin + '/' + probedSegments.join('/') + parsed.search;
+
+        const t0 = Date.now();
+        let status: number | undefined;
+        let bodyPreview: string | undefined;
+        let errorText: string | undefined;
+
+        try {
+          const resp = await ctx.request.get(probedUrl, { timeout, failOnStatusCode: false, maxRedirects: 0 });
+          status = resp.status();
+          try {
+            const txt = await resp.text();
+            bodyPreview = txt.slice(0, 2048);
+          } catch { /* binary or empty */ }
+        } catch (e: any) {
+          errorText = String(e?.message || e).slice(0, 200);
+        }
+
+        const durationMs = Date.now() - t0;
+        const isFail = status !== undefined && failStatuses.includes(status);
+        const isUnexpectedOk = status === 200 && (kind === 'hex' || kind === 'uuid' || kind === 'int') &&
+          (v.label === 'null-byte-mid' || v.label === 'null-byte-suffix' || v.label === 'null-byte-prefix' ||
+           v.label === 'non-hex-same-length' || v.label === 'non-uuid' || v.label === 'non-numeric' ||
+           v.label === 'huge-10k' || v.label === 'over-maximum-129' || v.label === 'path-traversal');
+        const echoesInput = !!(bodyPreview && v.variant.length > 6 && bodyPreview.includes(v.variant));
+        const leaksHashPrefix = !!(bodyPreview && cfg.hashLeakPrefixes &&
+          cfg.hashLeakPrefixes.some(prefix => prefix.length >= 4 && bodyPreview!.includes(prefix)));
+        const isUnexpectedStatus = status !== undefined && !okStatuses.includes(status) && !isFail;
+
+        const reasonParts: string[] = [];
+        if (isFail) reasonParts.push(`5xx=${status}`);
+        if (errorText) reasonParts.push(`err=${errorText.slice(0, 60)}`);
+        if (leaksHashPrefix) reasonParts.push('hash-leak');
+        if (isUnexpectedOk) reasonParts.push('unexpected-200');
+        if (echoesInput) reasonParts.push('echoes-input');
+        if (isUnexpectedStatus) reasonParts.push(`unexpected-${status}`);
+
+        const isFinding = reasonParts.length > 0;
+
+        if (isFinding) {
+          const finding: ProbeFinding = {
+            url: probedUrl,
+            template: tmpl,
+            variant: v.variant.length > 80 ? v.variant.slice(0, 80) + '...' : v.variant,
+            segment: seg.length > 40 ? seg.slice(0, 40) + '...' : seg,
+            segmentIndex: i,
+            mutator: `${kind}:${v.label}`,
+            status,
+            durationMs,
+            bodyPreview: bodyPreview?.slice(0, 240),
+            errorText,
+            reason: reasonParts.join(', '),
+          };
+          findings.push(finding);
+          events.push({
+            kind: isFail ? 'response-error' : 'pageerror',
+            text: `probe: ${tmpl} segment[${i}] ${kind}:${v.label} → ${finding.reason}`,
+            url: probedUrl,
+            status,
+            t: Date.now() - startEpoch,
+          });
+          log({
+            kind: isFail ? 'response-error' : 'pageerror',
+            text: `probe finding: ${kind}:${v.label} on ${tmpl} → ${finding.reason}`,
+            url: probedUrl,
+            status,
+          });
+        }
+
+        stepResults.push({
+          step: { kind: 'goto', url: probedUrl, label: `probe ${kind}:${v.label}` },
+          index: 2000 + totalRequests,
+          ok: !isFinding,
+          durationMs,
+          error: isFinding ? reasonParts.join(', ') : undefined,
+        });
+      }
+
+      if (totalRequests >= maxTotal) break outer;
+    }
+  }
+
+  // Persist the findings. probe-findings.json is the machine-readable
+  // form; probe-summary.txt is the at-a-glance triage view.
+  try {
+    writeFileSync(
+      join(outDir, 'probe-findings.json'),
+      JSON.stringify({ totalRequests, templatesProbed: seenTemplates.size, findings }, null, 2),
+    );
+  } catch { /* ignore */ }
+
+  try {
+    const lines = [
+      `# Adversarial URL-param probe`,
+      `# Targets:    ${targetSet.size}`,
+      `# Templates:  ${seenTemplates.size}`,
+      `# Requests:   ${totalRequests}`,
+      `# Findings:   ${findings.length}`,
+      ``,
+      ...findings.map(f =>
+        `[${f.status ?? 'ERR'}] ${f.mutator} ${f.template}\n` +
+        `  url=${f.url}\n` +
+        `  variant=${JSON.stringify(f.variant)}\n` +
+        `  reason=${f.reason}\n` +
+        `  preview=${(f.bodyPreview || '').replace(/\s+/g, ' ').slice(0, 160)}`
+      ),
+    ].join('\n');
+    writeFileSync(join(outDir, 'probe-summary.txt'), lines);
+  } catch { /* ignore */ }
+
+  console.log(`[crawler] probe complete: ${findings.length} findings in ${totalRequests} requests across ${seenTemplates.size} templates`);
+  return { findings, stepResults, events, totalRequests, templatesProbed: seenTemplates.size };
+}
+
+function safeMatch(pattern: string, s: string): boolean {
+  try { return new RegExp(pattern).test(s); } catch { return false; }
+}
