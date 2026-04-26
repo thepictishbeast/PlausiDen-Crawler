@@ -79,6 +79,8 @@ export interface Step {
     includePatterns?: string[];
     denyPatterns?: string[];
     inheritDiscoverUrls?: boolean;
+    headerSmuggling?: boolean;
+    methodFuzz?: boolean;
   };
 }
 
