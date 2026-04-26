@@ -65,6 +65,20 @@ export interface ProbeConfig {
   denyPatterns?: string[];
   /** Read URLs from `${outDir}/discover-pages.json`. Default true. */
   inheritDiscoverUrls?: boolean;
+  /**
+   * Header-smuggling pass: after URL-mutation, replay each unique URL
+   * with a spoofed client-IP / host / rewrite header and flag any
+   * response that differs from the baseline (suggests the header was
+   * honored, e.g., the route trusts X-Forwarded-For instead of
+   * CF-Connecting-IP, allowing per-IP rate-limit bypass). Default off.
+   */
+  headerSmuggling?: boolean;
+  /**
+   * Method-fuzz pass: after URL-mutation, replay each unique URL with
+   * OPTIONS/HEAD/PUT/DELETE/PATCH and flag any 5xx (should be 405).
+   * Catches unhandled method dispatch in middleware. Default off.
+   */
+  methodFuzz?: boolean;
 }
 
 export interface ProbeFinding {
@@ -306,6 +320,173 @@ export async function runProbe(
       }
 
       if (totalRequests >= maxTotal) break outer;
+    }
+  }
+
+  // Optional pass 2: header smuggling. For each unique URL we already
+  // probed, fire one baseline GET (no spoofed headers) and one GET per
+  // spoofed-header variant, then flag any variant whose status differs
+  // from baseline. Differing status = the header was honored, which on
+  // a CF-Connecting-IP-only server would be a per-IP rate-limit bypass
+  // / audit-log-evasion bug.
+  if (cfg.headerSmuggling) {
+    const headerVariants: Array<{ name: string; headers: Record<string, string> }> = [
+      { name: 'xff-localhost', headers: { 'X-Forwarded-For': '127.0.0.1' } },
+      { name: 'xff-rfc1918', headers: { 'X-Forwarded-For': '10.0.0.1' } },
+      { name: 'xri-localhost', headers: { 'X-Real-IP': '127.0.0.1' } },
+      { name: 'xff-multi', headers: { 'X-Forwarded-For': '127.0.0.1, 10.0.0.1, 1.1.1.1' } },
+      { name: 'host-evil', headers: { 'Host': 'evil.example.com' } },
+      { name: 'x-original-url', headers: { 'X-Original-URL': '/admin' } },
+      { name: 'x-rewrite-url', headers: { 'X-Rewrite-URL': '/admin' } },
+      { name: 'cf-spoof', headers: { 'CF-Connecting-IP': '127.0.0.1' } },
+    ];
+    const baselineUrls = Array.from(seenTemplates).slice(0, 20).map(t => t.replace(/<int>|<hex>|<uuid>/, 'baseline'));
+    // Add explicit URLs too, since some may not have a fuzzable segment.
+    for (const u of cfg.urls || []) baselineUrls.push(u);
+    const uniqueBaselines = Array.from(new Set(baselineUrls));
+
+    for (const url of uniqueBaselines) {
+      if (totalRequests >= maxTotal) break;
+      let baseStatus: number | undefined;
+      try {
+        const resp = await ctx.request.get(url, { timeout, failOnStatusCode: false, maxRedirects: 0 });
+        baseStatus = resp.status();
+      } catch { continue; }
+      totalRequests++;
+      if (baseStatus === undefined) continue;
+
+      for (const v of headerVariants) {
+        if (totalRequests >= maxTotal) break;
+        totalRequests++;
+        const t0 = Date.now();
+        let status: number | undefined;
+        let errorText: string | undefined;
+        let bodyPreview: string | undefined;
+        try {
+          const resp = await ctx.request.get(url, { timeout, failOnStatusCode: false, maxRedirects: 0, headers: v.headers });
+          status = resp.status();
+          try { bodyPreview = (await resp.text()).slice(0, 240); } catch { /* binary */ }
+        } catch (e: any) {
+          errorText = String(e?.message || e).slice(0, 200);
+        }
+        const durationMs = Date.now() - t0;
+        const isFail = status !== undefined && failStatuses.includes(status);
+        const statusDiff = status !== undefined && status !== baseStatus;
+        const reasonParts: string[] = [];
+        if (isFail) reasonParts.push(`5xx=${status}`);
+        if (statusDiff && !isFail) reasonParts.push(`status-diff: baseline=${baseStatus} spoofed=${status}`);
+        if (errorText) reasonParts.push(`err=${errorText.slice(0, 60)}`);
+
+        if (reasonParts.length > 0) {
+          const finding: ProbeFinding = {
+            url,
+            template: url,
+            variant: JSON.stringify(v.headers),
+            segment: '',
+            segmentIndex: -1,
+            mutator: `header:${v.name}`,
+            status,
+            durationMs,
+            bodyPreview,
+            errorText,
+            reason: reasonParts.join(', '),
+          };
+          findings.push(finding);
+          events.push({
+            kind: isFail ? 'response-error' : 'pageerror',
+            text: `probe header: ${url} ${v.name} → ${finding.reason}`,
+            url,
+            status,
+            t: Date.now() - startEpoch,
+          });
+          log({
+            kind: isFail ? 'response-error' : 'pageerror',
+            text: `probe header finding: ${v.name} on ${url} → ${finding.reason}`,
+            url,
+            status,
+          });
+        }
+        stepResults.push({
+          step: { kind: 'goto', url, label: `probe header:${v.name}` },
+          index: 2000 + totalRequests,
+          ok: reasonParts.length === 0,
+          durationMs,
+          error: reasonParts.join(', ') || undefined,
+        });
+      }
+    }
+  }
+
+  // Optional pass 3: method-fuzz. Replay each URL with OPTIONS/HEAD/
+  // PUT/DELETE/PATCH and flag any 5xx — the server should respond with
+  // 405 Method Not Allowed, not crash. Some Express handlers register
+  // only `app.get(...)` and the framework's default fall-through can
+  // surface unhandled exceptions on PATCH/PUT to read-only endpoints.
+  if (cfg.methodFuzz) {
+    const methods: Array<'OPTIONS' | 'HEAD' | 'PUT' | 'DELETE' | 'PATCH'> = ['OPTIONS', 'HEAD', 'PUT', 'DELETE', 'PATCH'];
+    const targets = Array.from(seenTemplates).slice(0, 20).map(t => t.replace(/<int>|<hex>|<uuid>/, 'baseline'));
+    for (const u of cfg.urls || []) targets.push(u);
+    const unique = Array.from(new Set(targets));
+
+    for (const url of unique) {
+      if (totalRequests >= maxTotal) break;
+      for (const m of methods) {
+        if (totalRequests >= maxTotal) break;
+        totalRequests++;
+        const t0 = Date.now();
+        let status: number | undefined;
+        let errorText: string | undefined;
+        let bodyPreview: string | undefined;
+        try {
+          const resp = await ctx.request.fetch(url, { method: m, timeout, failOnStatusCode: false, maxRedirects: 0 });
+          status = resp.status();
+          try { bodyPreview = (await resp.text()).slice(0, 240); } catch { /* binary */ }
+        } catch (e: any) {
+          errorText = String(e?.message || e).slice(0, 200);
+        }
+        const durationMs = Date.now() - t0;
+        const isFail = status !== undefined && failStatuses.includes(status);
+        const reasonParts: string[] = [];
+        if (isFail) reasonParts.push(`5xx=${status}`);
+        if (errorText) reasonParts.push(`err=${errorText.slice(0, 60)}`);
+
+        if (reasonParts.length > 0) {
+          const finding: ProbeFinding = {
+            url,
+            template: url,
+            variant: m,
+            segment: '',
+            segmentIndex: -1,
+            mutator: `method:${m}`,
+            status,
+            durationMs,
+            bodyPreview,
+            errorText,
+            reason: reasonParts.join(', '),
+          };
+          findings.push(finding);
+          events.push({
+            kind: isFail ? 'response-error' : 'pageerror',
+            text: `probe method: ${m} ${url} → ${finding.reason}`,
+            url,
+            status,
+            t: Date.now() - startEpoch,
+          });
+          log({
+            kind: isFail ? 'response-error' : 'pageerror',
+            text: `probe method finding: ${m} on ${url} → ${finding.reason}`,
+            url,
+            status,
+          });
+        }
+        stepResults.push({
+          step: { kind: 'goto', url, label: `probe method:${m}` },
+          index: 2000 + totalRequests,
+          ok: reasonParts.length === 0,
+          durationMs,
+          error: reasonParts.join(', ') || undefined,
+        });
+      }
     }
   }
 
