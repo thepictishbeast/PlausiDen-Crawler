@@ -1,0 +1,11 @@
+{
+  "name": "sacred-vote-verify",
+  "description": "Anonymous ballot-verification portal sweep. /verify is a public verifier — no auth needed. Crawls the verification-portal flow (verify-identity step, hash-chain page, results audit links) without any credentials. Run this whenever the verifier UI changes to catch regressions before a real voter hits them.",
+  "baseUrl": "https://sacred.vote",
+  "steps": [
+    { "kind": "goto", "url": "https://sacred.vote/verify", "timeout": 30000, "label": "verify-landing" },
+    { "kind": "wait", "ms": 1500, "label": "settle" },
+    { "kind": "screenshot", "label": "01-verify-home" },
+    { "kind": "discover", "label": "verify-discover", "url": "https://sacred.vote/verify", "discover": { "maxPages": 30, "maxDepth": 3, "sameOrigin": true, "interactButtons": "safe-buttons", "includePatterns": ["/verify", "/results"] } }
+  ]
+}
