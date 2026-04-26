@@ -21,7 +21,8 @@ export type StepKind =
   | 'assertText'
   | 'scroll'
   | 'reload'
-  | 'discover';
+  | 'discover'
+  | 'probe';
 
 export interface Step {
   kind: StepKind;
@@ -57,6 +58,28 @@ export interface Step {
     settleMs?: number;
     navTimeoutMs?: number;
   };
+  /**
+   * For probe: adversarial URL-parameter mutation. Takes URLs (explicit
+   * + harvested from a prior discover step's discover-pages.json) and
+   * rewrites int/hex/UUID-shaped path segments into malformed variants
+   * (null bytes, oversize, traversal, type-confusion). 5xx responses,
+   * unexpected 200s on garbage input, body echoes of injected payloads,
+   * and partial-entropy hash leaks become CapturedEvent findings. See
+   * src/probe.ts for the full ProbeConfig shape.
+   */
+  probe?: {
+    urls?: string[];
+    mutators?: Array<'int' | 'hex' | 'uuid' | 'string'>;
+    maxRequestsPerUrl?: number;
+    maxRequestsTotal?: number;
+    timeoutMs?: number;
+    failStatuses?: number[];
+    okStatuses?: number[];
+    hashLeakPrefixes?: string[];
+    includePatterns?: string[];
+    denyPatterns?: string[];
+    inheritDiscoverUrls?: boolean;
+  };
 }
 
 export interface Journey {
@@ -65,6 +88,13 @@ export interface Journey {
   /** Baseline URL — goto steps without a url prefix use this. */
   baseUrl: string;
   steps: Step[];
+  /**
+   * Path to a Playwright storageState JSON (cookies + localStorage) captured
+   * from a prior interactive login. Loaded into the browser context before
+   * any step runs, so authenticated journeys can crawl admin/voter views
+   * without ever inserting fake credentials into the prod database.
+   */
+  storageState?: string;
 }
 
 export interface StepResult {

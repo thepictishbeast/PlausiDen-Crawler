@@ -24,6 +24,7 @@ import { join } from 'node:path';
 import { captureAriaTree, ariaTreeToText, interactableNodes, scoreAriaTree, type AriaNode } from './aria.js';
 import type { CapturedEvent } from './report.js';
 import type { StepResult } from './journey.js';
+import { runAxe, axeEventsFor, renderAxeFindings, annotateViolations, type AxePageResult } from './audit.js';
 
 export interface DiscoverConfig {
   /** Max pages to visit total. Hard cap to bound runtime + report size. */
@@ -76,6 +77,8 @@ export interface DiscoveredPage {
   clickedButtons: string[];
   /** Errors encountered during discovery of this page. */
   errors: string[];
+  /** axe-core scan result (full violation list + per-node selectors). */
+  axe?: AxePageResult;
 }
 
 export interface DiscoverResult {
@@ -280,6 +283,25 @@ export async function runDiscover(
       snap = await snapshotPage(page);
       outgoing = await collectLinks(page, url);
 
+      // Real WCAG checks via axe-core. This is in addition to the
+      // homegrown scoreAriaTree heuristic — axe catches contrast,
+      // ARIA misuse, label/name mismatches, etc. that the aria walk
+      // can't see. We also write an annotated screenshot per page
+      // (red outlines on every flagged element) so the user can see
+      // *where* each issue is at a glance.
+      try {
+        const axeResult = await runAxe(page);
+        (snap as any).__axe = axeResult;
+        for (const ev of axeEventsFor(axeResult, startEpoch)) events.push(ev);
+        if (!axeResult.ok) errors.push(`axe: ${axeResult.error}`);
+        if (axeResult.ok && axeResult.violations.length > 0) {
+          const annPath = join(outDir, `discover-${String(pages.length + 1).padStart(3, '0')}-${url.replace(/^https?:\/\//, '').replace(/[^A-Za-z0-9]/g, '_').slice(0, 80)}.annotated.png`);
+          (snap as any).__annotated = await annotateViolations(page, axeResult, annPath);
+        }
+      } catch (e: any) {
+        errors.push(`axe: ${e?.message || e}`);
+      }
+
       // Optional: click read-only-safe buttons (stay on the same URL).
       if (interactPolicy !== 'never') {
         for (const b of snap.buttonsToClick) {
@@ -318,7 +340,9 @@ export async function runDiscover(
       a11yFlags: snap.a11yFlags,
       clickedButtons,
       errors,
-    });
+      axe: (snap as any).__axe as AxePageResult | undefined,
+      annotated: (snap as any).__annotated as string | undefined,
+    } as DiscoveredPage & { annotated?: string });
 
     stepResults.push({
       step: { kind: 'goto', url, label: `discover[d=${depth}] ${url}` },
@@ -369,6 +393,20 @@ export async function runDiscover(
     ),
   ].join('\n');
   try { writeFileSync(join(outDir, 'discover-summary.txt'), summary); } catch { /* ignore */ }
+
+  // Per-page axe findings, one block per URL. This is what the user
+  // triages: rule id, impact, selector, failure summary. Cheap to read,
+  // cheap to skim, cheap to diff between runs.
+  try {
+    const findings = renderAxeFindings(
+      pages.filter(p => p.axe).map(p => ({
+        url: p.url,
+        result: p.axe!,
+        annotated: (p as any).annotated,
+      }))
+    );
+    writeFileSync(join(outDir, 'discover-findings.txt'), findings);
+  } catch { /* ignore */ }
 
   return { pages, stepResults, events };
 }

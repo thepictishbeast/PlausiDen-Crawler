@@ -1,0 +1,12 @@
+{
+  "name": "sacred-vote-admin",
+  "description": "Authenticated admin sweep — uses an auth-seed produced by scripts/seed-auth.sh admin. The seed contains a fresh CSRF token and the prod ADMIN_CODE; the crawler injects it into sessionStorage on every page load via addInitScript so the admin SPA boots already authenticated and skips the login form (and 2FA prompt) entirely. The seed file lives at ~/.secure/sacred-vote-admin-state.json mode 600. No fake credentials are inserted into the prod database — we use the existing ADMIN_CODE from .env.",
+  "baseUrl": "https://sacred.vote",
+  "storageState": "/home/admin/.secure/sacred-vote-admin-state.json",
+  "steps": [
+    { "kind": "goto", "url": "https://sacred.vote/admin", "timeout": 30000, "label": "admin-landing" },
+    { "kind": "wait", "ms": 3000, "label": "admin-mount-settle" },
+    { "kind": "screenshot", "label": "01-admin-home" },
+    { "kind": "discover", "label": "admin-discover", "url": "https://sacred.vote/admin", "discover": { "maxPages": 60, "maxDepth": 4, "sameOrigin": true, "interactButtons": "safe-buttons", "includePatterns": ["/admin"], "settleMs": 1800 } }
+  ]
+}

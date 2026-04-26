@@ -1,0 +1,62 @@
+{
+  "name": "sacred-vote-probe",
+  "description": "Adversarial URL-parameter probe against localhost dev server. Fuzz int/hex/UUID-shaped path segments with null bytes, oversize, traversal, type-confusion. Catches the Bug #33 class (param reaches DB unfiltered → 500). Localhost-only: explicit /api/ URLs would trip prod rate limits and audit alerts at scale.",
+  "baseUrl": "http://localhost:5000/",
+  "viewport": { "w": 1280, "h": 900 },
+  "steps": [
+    { "kind": "goto", "url": "http://localhost:5000/", "timeout": 30000, "label": "landing" },
+    { "kind": "wait", "ms": 1500, "label": "settle" },
+    { "kind": "screenshot", "label": "00-landing" },
+    {
+      "kind": "discover",
+      "label": "anonymous-bfs",
+      "url": "http://localhost:5000/",
+      "discover": {
+        "maxPages": 30,
+        "maxDepth": 3,
+        "sameOrigin": true,
+        "interactButtons": "never",
+        "settleMs": 600,
+        "navTimeoutMs": 20000,
+        "denyPatterns": [
+          "/api/",
+          "/csp-report",
+          "/logout",
+          "/sign-?out",
+          "\\.json$",
+          "\\.xml$",
+          "/cast",
+          "/submit",
+          "/delete"
+        ]
+      }
+    },
+    {
+      "kind": "probe",
+      "label": "param-fuzz",
+      "probe": {
+        "urls": [
+          "http://localhost:5000/api/verify/abcdef0123456789abcdef0123456789",
+          "http://localhost:5000/api/verify/abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+          "http://localhost:5000/api/proof-of-belief/abcdef0123456789abcdef0123456789",
+          "http://localhost:5000/api/voter/abcdef0123456789abcdef0123456789",
+          "http://localhost:5000/api/bulletin-board/abcdef0123456789abcdef0123456789"
+        ],
+        "mutators": ["int", "hex", "uuid"],
+        "maxRequestsPerUrl": 12,
+        "maxRequestsTotal": 200,
+        "timeoutMs": 8000,
+        "inheritDiscoverUrls": true,
+        "denyPatterns": [
+          "/cast",
+          "/submit",
+          "/delete",
+          "/admin/(?!login|sign-in)",
+          "/logout",
+          "/csp-report"
+        ],
+        "okStatuses": [200, 204, 301, 302, 303, 307, 308, 400, 401, 403, 404, 405, 409, 410, 413, 415, 422, 429]
+      }
+    }
+  ]
+}
