@@ -1,0 +1,24 @@
+{
+  "name": "plausiden-site-contact-form",
+  "description": "End-to-end contact form smoke. Lands on /contact, fills every form field with a synthetic-but-deliverable payload, submits, and asserts the acknowledgement page renders with the expected confirmation copy. Catches three failure modes the unit tests can't see: client-side script errors that block submit, server-side rate-limit / SMTP failure that surfaces as a non-2xx, and acknowledgement-page rendering regressions.",
+  "baseUrl": "https://next.plausiden.com/",
+  "viewport": { "w": 1440, "h": 900 },
+  "steps": [
+    { "kind": "goto", "url": "https://next.plausiden.com/contact", "timeout": 15000, "label": "load-contact" },
+    { "kind": "wait", "ms": 600 },
+    { "kind": "screenshot", "label": "01-contact-form" },
+
+    { "kind": "fill", "selector": "input[name='name']", "value": "PlausiDen Crawler", "label": "fill-name" },
+    { "kind": "fill", "selector": "input[name='email']", "value": "crawler-smoke@plausiden.com", "label": "fill-email" },
+    { "kind": "fill", "selector": "input[name='phone']", "value": "555-0000", "label": "fill-phone" },
+    { "kind": "fill", "selector": "input[name='company']", "value": "Crawler Test Co", "label": "fill-company" },
+    { "kind": "fill", "selector": "textarea[name='message']", "value": "Synthetic submission from PlausiDen-Crawler smoke journey. If you receive this, the contact form is working end-to-end. Safe to ignore.", "label": "fill-message" },
+    { "kind": "screenshot", "label": "02-contact-filled" },
+
+    { "kind": "click", "selector": "button[type='submit']", "timeout": 8000, "label": "submit" },
+    { "kind": "wait", "ms": 2000, "label": "wait-for-ack" },
+    { "kind": "screenshot", "label": "03-contact-ack" },
+
+    { "kind": "assertText", "selector": "body", "text": "delivered" }
+  ]
+}
