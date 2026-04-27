@@ -110,11 +110,59 @@ export async function captureAriaTree(page: Page): Promise<AriaNode | null> {
       };
       const textOf = function(el, cap) {
         if (cap === undefined) cap = 120;
-        const raw = (el.getAttribute("aria-label")
-          || el.getAttribute("alt")
-          || el.getAttribute("title")
-          || el.innerText
-          || el.textContent || "").toString();
+        // Order matches the W3C HTML Accessible Name & Description
+        // computation: aria-labelledby, aria-label, host-language label
+        // associations (label[for=], wrapping <label>, alt, title), then
+        // text content as a last resort.
+        let raw = "";
+        const tag = el.tagName;
+        const isFormControl = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+
+        const aliBy = el.getAttribute && el.getAttribute("aria-labelledby");
+        if (aliBy) {
+          const ids = aliBy.split(/\\s+/).filter(Boolean);
+          const parts = [];
+          for (let i = 0; i < ids.length; i++) {
+            const ref = document.getElementById(ids[i]);
+            if (ref) parts.push((ref.innerText || ref.textContent || "").trim());
+          }
+          if (parts.length) raw = parts.join(" ");
+        }
+
+        if (!raw) raw = el.getAttribute("aria-label") || "";
+
+        if (!raw && isFormControl) {
+          // <label for="x"> association — the spec way to name a form
+          // control. Also handle <label><input/></label> wrapping.
+          const id = el.getAttribute("id");
+          if (id) {
+            try {
+              const sel = 'label[for="' + id.replace(/"/g, '\\\\"') + '"]';
+              const lbl = document.querySelector(sel);
+              if (lbl) raw = (lbl.innerText || lbl.textContent || "").toString();
+            } catch (e) { /* invalid selector — fall through */ }
+          }
+          if (!raw) {
+            // Wrapping label: walk up looking for an ancestor <label>.
+            let p = el.parentElement;
+            for (let depth = 0; p && depth < 4; depth++) {
+              if (p.tagName === "LABEL") {
+                raw = (p.innerText || p.textContent || "").toString();
+                break;
+              }
+              p = p.parentElement;
+            }
+          }
+          if (!raw) raw = el.getAttribute("placeholder") || "";
+        }
+
+        if (!raw) {
+          raw = (el.getAttribute("alt")
+            || el.getAttribute("title")
+            || el.innerText
+            || el.textContent || "").toString();
+        }
+
         return raw.replace(/\\s+/g, " ").trim().slice(0, cap);
       };
       const collect = function(el) {
