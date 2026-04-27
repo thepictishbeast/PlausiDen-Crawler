@@ -81,6 +81,8 @@ export interface Step {
     inheritDiscoverUrls?: boolean;
     headerSmuggling?: boolean;
     methodFuzz?: boolean;
+    statelessGet?: boolean;
+    statelessGetFields?: string[];
   };
 }
 
