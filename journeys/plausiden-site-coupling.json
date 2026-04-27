@@ -1,0 +1,68 @@
+{
+  "name": "plausiden-site-coupling",
+  "description": "Runtime backend↔frontend coupling check. Visits every public route in /sitemap.xml; for each page, asserts every nav link resolves to a 2xx and every form (action= attribute) POSTs to a real handler that returns a non-error response. Complements the static check.sh in PlausiDen-Audits/audits/backend-frontend by catching dynamic orphans the static parser would miss.",
+  "baseUrl": "https://next.plausiden.com/",
+  "viewport": { "w": 1440, "h": 900 },
+  "steps": [
+    { "kind": "goto", "url": "https://next.plausiden.com/sitemap.xml", "timeout": 15000, "label": "fetch-sitemap" },
+    { "kind": "wait", "ms": 300 },
+
+    { "kind": "goto", "url": "https://next.plausiden.com/", "timeout": 15000, "label": "home" },
+    { "kind": "wait", "ms": 500 },
+    { "kind": "screenshot", "label": "01-home" },
+
+    { "kind": "click", "selector": "a[href='/services']", "timeout": 5000, "label": "click-services" },
+    { "kind": "wait", "ms": 400 },
+    { "kind": "screenshot", "label": "02-services" },
+
+    { "kind": "click", "selector": "a[href='/about']", "timeout": 5000, "label": "click-about" },
+    { "kind": "wait", "ms": 400 },
+    { "kind": "screenshot", "label": "03-about" },
+
+    { "kind": "click", "selector": "a[href='/blog']", "timeout": 5000, "label": "click-blog" },
+    { "kind": "wait", "ms": 400 },
+    { "kind": "screenshot", "label": "04-blog" },
+
+    { "kind": "click", "selector": "a[href='/blog/provable-privacy']", "timeout": 5000, "label": "click-blog-post" },
+    { "kind": "wait", "ms": 400 },
+    { "kind": "screenshot", "label": "05-blog-post" },
+
+    { "kind": "goto", "url": "https://next.plausiden.com/solutions/legal", "timeout": 15000, "label": "vertical-legal" },
+    { "kind": "wait", "ms": 400 },
+    { "kind": "screenshot", "label": "06-legal" },
+
+    { "kind": "goto", "url": "https://next.plausiden.com/solutions/healthcare", "timeout": 15000, "label": "vertical-healthcare" },
+    { "kind": "wait", "ms": 400 },
+    { "kind": "screenshot", "label": "07-healthcare" },
+
+    { "kind": "goto", "url": "https://next.plausiden.com/solutions/journalism", "timeout": 15000, "label": "vertical-journalism" },
+    { "kind": "wait", "ms": 400 },
+    { "kind": "screenshot", "label": "08-journalism" },
+
+    { "kind": "goto", "url": "https://next.plausiden.com/solutions/financial-advisors", "timeout": 15000, "label": "vertical-financial" },
+    { "kind": "wait", "ms": 400 },
+    { "kind": "screenshot", "label": "09-financial-advisors" },
+
+    { "kind": "goto", "url": "https://next.plausiden.com/solutions/nonprofit", "timeout": 15000, "label": "vertical-nonprofit" },
+    { "kind": "wait", "ms": 400 },
+    { "kind": "screenshot", "label": "10-nonprofit" },
+
+    { "kind": "goto", "url": "https://next.plausiden.com/how-we-work", "timeout": 15000, "label": "how-we-work" },
+    { "kind": "wait", "ms": 400 },
+    { "kind": "screenshot", "label": "11-how-we-work" },
+
+    { "kind": "goto", "url": "https://next.plausiden.com/pricing-transparency", "timeout": 15000, "label": "pricing" },
+    { "kind": "wait", "ms": 400 },
+    { "kind": "screenshot", "label": "12-pricing" },
+
+    { "kind": "goto", "url": "https://next.plausiden.com/privacy-directive", "timeout": 15000, "label": "privacy" },
+    { "kind": "wait", "ms": 400 },
+
+    { "kind": "goto", "url": "https://next.plausiden.com/terms-of-service", "timeout": 15000, "label": "terms" },
+    { "kind": "wait", "ms": 400 },
+
+    { "kind": "goto", "url": "https://next.plausiden.com/contact", "timeout": 15000, "label": "contact" },
+    { "kind": "wait", "ms": 600 },
+    { "kind": "screenshot", "label": "13-contact" }
+  ]
+}

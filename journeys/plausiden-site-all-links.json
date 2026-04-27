@@ -1,0 +1,54 @@
+{
+  "name": "plausiden-site-all-links",
+  "description": "Exhaustive click-through of every visible link/CTA on plausiden-site. Catches any href that 404s or routes to the wrong place.",
+  "baseUrl": "https://next.plausiden.com/",
+  "viewport": { "w": 1440, "h": 900 },
+  "steps": [
+    { "kind": "goto", "url": "https://next.plausiden.com/", "timeout": 15000, "label": "home" },
+    { "kind": "wait", "ms": 600 },
+
+    { "kind": "click", "selector": "a[href='/services'] button", "timeout": 5000, "label": "hero-cta-explore-services" },
+    { "kind": "wait", "ms": 500 },
+    { "kind": "goto", "url": "https://next.plausiden.com/", "timeout": 10000, "label": "back-home-1" },
+    { "kind": "wait", "ms": 400 },
+
+    { "kind": "click", "selector": "a[href='/contact']:has(button:has-text('Get a Free Consultation'))", "timeout": 5000, "label": "hero-cta-free-consultation" },
+    { "kind": "wait", "ms": 500 },
+    { "kind": "goto", "url": "https://next.plausiden.com/", "timeout": 10000, "label": "back-home-2" },
+    { "kind": "wait", "ms": 400 },
+
+    { "kind": "click", "selector": "a[href='/about']:has(button:has-text('Learn About Our Mission'))", "timeout": 5000, "label": "dark-section-cta-learn-mission" },
+    { "kind": "wait", "ms": 500 },
+    { "kind": "goto", "url": "https://next.plausiden.com/", "timeout": 10000, "label": "back-home-3" },
+    { "kind": "wait", "ms": 400 },
+
+    { "kind": "click", "selector": "a[href='/contact']:has(button:has-text('Start Your Journey'))", "timeout": 5000, "label": "final-cta-start-journey" },
+    { "kind": "wait", "ms": 500 },
+    { "kind": "goto", "url": "https://next.plausiden.com/", "timeout": 10000, "label": "back-home-4" },
+    { "kind": "wait", "ms": 400 },
+
+    { "kind": "click", "selector": "nav a[href='/contact']:has(button:has-text('Get a Quote'))", "timeout": 5000, "label": "nav-cta-get-quote" },
+    { "kind": "wait", "ms": 500 },
+    { "kind": "goto", "url": "https://next.plausiden.com/", "timeout": 10000, "label": "back-home-5" },
+    { "kind": "wait", "ms": 400 },
+
+    { "kind": "click", "selector": "nav a[href='/contact']:has(button:has-text('Encrypted Inquiry'))", "timeout": 5000, "label": "nav-cta-encrypted-inquiry" },
+    { "kind": "wait", "ms": 500 },
+    { "kind": "goto", "url": "https://next.plausiden.com/", "timeout": 10000, "label": "back-home-6" },
+    { "kind": "wait", "ms": 400 },
+
+    { "kind": "click", "selector": "footer a[href='/']", "timeout": 5000, "label": "footer-home" },
+    { "kind": "wait", "ms": 400 },
+    { "kind": "click", "selector": "footer a[href='/about']", "timeout": 5000, "label": "footer-about-us" },
+    { "kind": "wait", "ms": 400 },
+    { "kind": "click", "selector": "footer a[href='/services']", "timeout": 5000, "label": "footer-services" },
+    { "kind": "wait", "ms": 400 },
+    { "kind": "click", "selector": "footer a[href='/contact']", "timeout": 5000, "label": "footer-contact" },
+    { "kind": "wait", "ms": 400 },
+    { "kind": "click", "selector": "footer a[href='/privacy-directive']", "timeout": 5000, "label": "footer-privacy" },
+    { "kind": "wait", "ms": 400 },
+    { "kind": "click", "selector": "footer a[href='/terms-of-service']", "timeout": 5000, "label": "footer-terms" },
+    { "kind": "wait", "ms": 400 },
+    { "kind": "screenshot", "label": "final" }
+  ]
+}
