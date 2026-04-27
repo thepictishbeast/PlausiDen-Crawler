@@ -79,6 +79,34 @@ export interface ProbeConfig {
    * Catches unhandled method dispatch in middleware. Default off.
    */
   methodFuzz?: boolean;
+  /**
+   * Stateless-GET pass: for each unique baseline URL, fetch twice with a
+   * short gap and compare specific JSON fields whose values reflect
+   * PERSISTED state (lastVerifiedAt, lastUpdatedAt, modifiedAt, etc.).
+   * Any field whose value changes between two consecutive idempotent GETs
+   * is a probable state-changing GET — the response from call 2 is showing
+   * the mutation that call 1 produced.
+   *
+   * This catches the Bug #34 class: a GET handler that runs a mutating
+   * action (DB write, phase transition, subprocess spawn) on every hit.
+   * Email scanners pre-fetching such URLs silently mutate state per
+   * inbound link. The natural defense is to factor the mutation into a
+   * recordResult parameter that defaults false on the public path.
+   *
+   * Default off. Filtering: ONLY persisted-state field names match;
+   * "now", "timestamp", "serverTime" are NOT compared (those are
+   * legitimately query-time values). Override the field set via
+   * `statelessGetFields` if a project uses different names.
+   */
+  statelessGet?: boolean;
+  /**
+   * Field-name allowlist for the stateless-GET comparator. Each name is
+   * a JSON property key that, if present in BOTH responses, is checked
+   * for equality. Non-matching field names are ignored. Default:
+   * lastVerifiedAt, lastUpdatedAt, lastModifiedAt, lastAccessedAt,
+   * verifiedAt, updatedAt, modifiedAt, accessedAt.
+   */
+  statelessGetFields?: string[];
 }
 
 export interface ProbeFinding {
@@ -487,6 +515,118 @@ export async function runProbe(
           error: reasonParts.join(', ') || undefined,
         });
       }
+    }
+  }
+
+  // Optional pass 4: stateless-GET. For each unique baseline URL, fetch
+  // twice with a 250ms gap, parse JSON, and compare any field whose name
+  // is in the persisted-state allowlist (lastVerifiedAt, lastUpdatedAt,
+  // …). If any such field's value differs between the two calls, the
+  // GET handler is mutating that field on every hit — the Bug #34 class.
+  // Email scanners pre-fetching the URL would silently mutate state per
+  // inbound link. False-positive shape: an endpoint that legitimately
+  // returns a current-time field whose name happens to match the
+  // allowlist; tune via cfg.statelessGetFields to remove the noise.
+  if (cfg.statelessGet) {
+    const persistedFields = new Set(
+      cfg.statelessGetFields && cfg.statelessGetFields.length > 0
+        ? cfg.statelessGetFields
+        : ['lastVerifiedAt', 'lastUpdatedAt', 'lastModifiedAt', 'lastAccessedAt',
+           'verifiedAt', 'updatedAt', 'modifiedAt', 'accessedAt'],
+    );
+    const targets = Array.from(seenTemplates).slice(0, 20).map(t => t.replace(/<int>|<hex>|<uuid>/, 'baseline'));
+    for (const u of cfg.urls || []) targets.push(u);
+    const unique = Array.from(new Set(targets));
+
+    for (const url of unique) {
+      if (totalRequests >= maxTotal) break;
+      let bodyA: string | undefined;
+      let bodyB: string | undefined;
+      let statusA: number | undefined;
+      let statusB: number | undefined;
+      try {
+        const respA = await ctx.request.get(url, { timeout, failOnStatusCode: false, maxRedirects: 0 });
+        statusA = respA.status();
+        bodyA = await respA.text();
+      } catch { continue; }
+      totalRequests++;
+      // Small gap so the second call isn't deduped at any caching layer.
+      await new Promise(r => setTimeout(r, 250));
+      try {
+        const respB = await ctx.request.get(url, { timeout, failOnStatusCode: false, maxRedirects: 0 });
+        statusB = respB.status();
+        bodyB = await respB.text();
+      } catch { continue; }
+      totalRequests++;
+
+      if (statusA !== 200 || statusB !== 200 || !bodyA || !bodyB) continue;
+
+      let jsonA: unknown, jsonB: unknown;
+      try { jsonA = JSON.parse(bodyA); } catch { continue; }
+      try { jsonB = JSON.parse(bodyB); } catch { continue; }
+
+      // Walk both responses in parallel; on every key whose name is in
+      // the persisted-state allowlist AND whose value differs between
+      // calls, record a finding. JSON values can nest; recurse with a
+      // small depth cap.
+      const drift: Array<{ path: string; a: unknown; b: unknown }> = [];
+      const walk = (a: unknown, b: unknown, path: string, depth: number): void => {
+        if (depth > 6) return;
+        if (a == null || b == null) return;
+        if (typeof a !== typeof b) return;
+        if (typeof a !== 'object') return;
+        const ao = a as Record<string, unknown>;
+        const bo = b as Record<string, unknown>;
+        for (const key of Object.keys(ao)) {
+          const next = path ? `${path}.${key}` : key;
+          if (persistedFields.has(key)) {
+            if (ao[key] !== undefined && bo[key] !== undefined && JSON.stringify(ao[key]) !== JSON.stringify(bo[key])) {
+              drift.push({ path: next, a: ao[key], b: bo[key] });
+            }
+          }
+          if (ao[key] && bo[key] && typeof ao[key] === 'object' && typeof bo[key] === 'object') {
+            walk(ao[key], bo[key], next, depth + 1);
+          }
+        }
+      };
+      walk(jsonA, jsonB, '', 0);
+
+      if (drift.length > 0) {
+        const reason = `stateless-get violation: ${drift.map(d => `${d.path}: ${JSON.stringify(d.a)}→${JSON.stringify(d.b)}`).join('; ')}`;
+        const finding: ProbeFinding = {
+          url,
+          template: url,
+          variant: 'baseline+baseline',
+          segment: '',
+          segmentIndex: -1,
+          mutator: 'stateless-get',
+          status: statusA,
+          durationMs: 0,
+          bodyPreview: bodyA.slice(0, 240),
+          reason,
+        };
+        findings.push(finding);
+        events.push({
+          kind: 'pageerror',
+          text: `probe stateless-get: ${url} → ${reason}`,
+          url,
+          status: statusA,
+          t: Date.now() - startEpoch,
+        });
+        log({
+          kind: 'pageerror',
+          text: `probe stateless-get finding: ${url} → ${reason}`,
+          url,
+          status: statusA,
+        });
+      }
+      stepResults.push({
+        step: { kind: 'goto', url, label: 'probe stateless-get' },
+        index: 2000 + totalRequests,
+        ok: drift.length === 0,
+        durationMs: 0,
+        error: drift.length > 0 ? `${drift.length} field(s) drifted` : undefined,
+      });
     }
   }
 
