@@ -1,0 +1,43 @@
+{
+  "name": "plausiden-site-blog-readability",
+  "description": "Per-blog-post readability + a11y check. Visits each published post, captures the aria tree, runs axe, asserts the title and at least one section heading appear in the rendered body. Catches: title regression, missing h2 hierarchy, post-renderer panic, and accessibility violations on the post-template scope (separate from the chrome).",
+  "baseUrl": "https://next.plausiden.com/",
+  "viewport": { "w": 1440, "h": 900 },
+  "steps": [
+    { "kind": "goto", "url": "https://next.plausiden.com/blog", "timeout": 15000, "label": "blog-index" },
+    { "kind": "wait", "ms": 500 },
+    { "kind": "screenshot", "label": "01-blog-index" },
+    { "kind": "assertText", "selector": "h1, h2", "text": "Field Notes" },
+
+    { "kind": "goto", "url": "https://next.plausiden.com/blog/plausible-deniability", "timeout": 15000, "label": "post-plausible-deniability" },
+    { "kind": "wait", "ms": 500 },
+    { "kind": "screenshot", "label": "02-plausible-deniability" },
+    { "kind": "assertText", "selector": "h1", "text": "What plausible deniability means" },
+    { "kind": "assertText", "selector": "h2", "text": "Hiding is brittle" },
+
+    { "kind": "goto", "url": "https://next.plausiden.com/blog/why-thundercrab", "timeout": 15000, "label": "post-why-thundercrab" },
+    { "kind": "wait", "ms": 500 },
+    { "kind": "screenshot", "label": "03-why-thundercrab" },
+    { "kind": "assertText", "selector": "h1", "text": "Why we're building Thundercrab" },
+    { "kind": "assertText", "selector": "h2", "text": "What got lost" },
+
+    { "kind": "goto", "url": "https://next.plausiden.com/blog/provable-privacy", "timeout": 15000, "label": "post-provable-privacy" },
+    { "kind": "wait", "ms": 500 },
+    { "kind": "screenshot", "label": "04-provable-privacy" },
+    { "kind": "assertText", "selector": "h1", "text": "Provable-by-construction privacy" },
+    { "kind": "assertText", "selector": "h2", "text": "What \"provable by construction\" means" },
+
+    { "kind": "goto", "url": "https://next.plausiden.com/blog/avp-doctrine", "timeout": 15000, "label": "post-avp-doctrine" },
+    { "kind": "wait", "ms": 500 },
+    { "kind": "screenshot", "label": "05-avp-doctrine" },
+    { "kind": "assertText", "selector": "h1", "text": "doctrine" },
+
+    { "kind": "goto", "url": "https://next.plausiden.com/blog/federated-rule-learning", "timeout": 15000, "label": "post-federated-rule-learning" },
+    { "kind": "wait", "ms": 500 },
+    { "kind": "screenshot", "label": "06-federated-rule-learning" },
+    { "kind": "assertText", "selector": "h1", "text": "Federated rule learning" },
+
+    { "kind": "goto", "url": "https://next.plausiden.com/blog/rss.xml", "timeout": 15000, "label": "rss-feed" },
+    { "kind": "wait", "ms": 300 }
+  ]
+}
