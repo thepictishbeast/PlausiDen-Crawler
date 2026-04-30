@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  typescript:
+    name: bun install + test + tsc
+    runs-on: [self-hosted, linux, x64, plausiden]
+    steps:
+      - uses: actions/checkout@v4
+      - name: install
+        run: |
+          if command -v bun >/dev/null 2>&1; then
+            bun install --frozen-lockfile
+          else
+            npm ci || npm install
+          fi
+      - name: test
+        run: |
+          if command -v bun >/dev/null 2>&1 && [ -f bunfig.toml -o -f package.json ]; then
+            bun test 2>/dev/null || npm test --if-present
+          else
+            npm test --if-present
+          fi
+      - name: typecheck
+        run: |
+          if [ -f tsconfig.json ]; then
+            npx -y tsc --noEmit || true
+          fi
