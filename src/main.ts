@@ -575,6 +575,12 @@ async function main(args: string[]): Promise<number> {
     });
   } catch { /* CDP unavailable on some platforms */ }
 
+  // Per-journey variable map for assertCount step's `recordAs` /
+  // `count: "<name>+1"` cross-step bindings. Lives only for this run;
+  // discover/probe sub-runs don't see it (they don't author assertions
+  // that share a base count with the parent journey).
+  const journeyVars = new Map<string, number>();
+
   // Execute each step sequentially. Screenshot steps are handled inline
   // (runStep is a no-op for them) so we can track the filename.
   for (let i = 0; i < journey.steps.length; i++) {
@@ -712,7 +718,7 @@ async function main(args: string[]): Promise<number> {
       continue;
     }
 
-    const result = await runStep(page, step);
+    const result = await runStep(page, step, undefined, journeyVars);
     result.index = i;
     stepResults.push(result);
     if (!result.ok) {
