@@ -1,0 +1,13 @@
+{
+  "name": "lfi-meta-chart",
+  "description": "Smoke-audit the LFI meta_chart binary's HTML output (Phase A.4). Loads a pre-generated chart HTML file (produced by `meta_chart --format html --out lfi-meta-chart.html`) and verifies it renders without console errors / failed assets / CSP violations. Run after any change to src/bin/meta_chart.rs or src/intelligence/meta_measurements.rs.",
+  "baseUrl": "http://127.0.0.1:8766/",
+  "steps": [
+    { "kind": "goto", "url": "http://127.0.0.1:8766/lfi-meta-chart.html", "timeout": 10000, "label": "load-chart" },
+    { "kind": "wait", "ms": 1200, "label": "settle-canvas-render" },
+    { "kind": "screenshot", "label": "01-chart-loaded" },
+    { "kind": "press", "key": "End", "label": "scroll-to-bottom-of-table" },
+    { "kind": "wait", "ms": 400 },
+    { "kind": "screenshot", "label": "02-chart-table-bottom" }
+  ]
+}

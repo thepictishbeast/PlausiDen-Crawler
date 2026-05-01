@@ -1,0 +1,16 @@
+{
+  "name": "lfi-landing-smoke",
+  "description": "Smoke-audit LFI's landing page (web/landing/index.html). Catches console errors, failed network requests, CSP violations, and missing assets. Run via: lfi-landing.html served on a local file:// or via `python3 -m http.server` from web/landing/.",
+  "baseUrl": "http://127.0.0.1:8765/",
+  "steps": [
+    { "kind": "goto", "url": "http://127.0.0.1:8765/", "timeout": 10000, "label": "landing" },
+    { "kind": "wait", "ms": 1500, "label": "settle-fonts" },
+    { "kind": "screenshot", "label": "01-landing-above-fold" },
+    { "kind": "press", "key": "End", "label": "scroll-to-bottom" },
+    { "kind": "wait", "ms": 800 },
+    { "kind": "screenshot", "label": "02-landing-bottom" },
+    { "kind": "press", "key": "Home", "label": "scroll-to-top" },
+    { "kind": "wait", "ms": 400 },
+    { "kind": "screenshot", "label": "03-landing-top-second-pass" }
+  ]
+}
