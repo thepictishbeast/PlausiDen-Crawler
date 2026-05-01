@@ -22,13 +22,16 @@ import { attachTelemetry, snapshotMemory, captureServiceWorker } from './telemet
 import { aggregate, renderSummary } from './aggregates.js';
 import { runDiscover, type DiscoveredPage } from './discover.js';
 import { runProbe } from './probe.js';
+import { runStress } from './stress.js';
 import { runAxe, axeEventsFor, renderAxeFindings, annotateViolations, type AxePageResult } from './audit.js';
+import { runD0Audit, d0EventsFor, renderD0Findings, type D0PageResult } from './d0Audit.js';
 
 interface Budget {
   newConsoleErrors: number;
   newPageErrors: number;
   newFailedRequests: number;
   newA11yViolations: number;
+  newD0Violations: number;
   newlyBrokenSteps: number;
 }
 
@@ -37,6 +40,7 @@ const DEFAULT_BUDGET: Budget = {
   newPageErrors: 0,
   newFailedRequests: 0,
   newA11yViolations: 0,
+  newD0Violations: 0,
   newlyBrokenSteps: 0,
 };
 
@@ -84,6 +88,18 @@ async function main(args: string[]): Promise<number> {
       return 2;
     }
     journey = JSON.parse(readFileSync(journeyPath, 'utf8'));
+    // Env-var substitution. Any string containing ${ENV.NAME} is replaced
+    // with process.env.NAME at load time. Lets a journey reference a
+    // secret (e.g. ADMIN_CODE) without checking it into the repo. Missing
+    // env vars expand to '' and the step typically fails informatively
+    // (e.g. "admin-code rejected") rather than crashing the run.
+    const subEnv = (v: any): any => {
+      if (typeof v === 'string') return v.replace(/\$\{ENV\.([A-Z0-9_]+)\}/g, (_m, k) => process.env[k] ?? '');
+      if (Array.isArray(v)) return v.map(subEnv);
+      if (v && typeof v === 'object') { const o: any = {}; for (const [k, val] of Object.entries(v)) o[k] = subEnv(val); return o; }
+      return v;
+    };
+    journey = subEnv(journey);
   }
   const targetUrl = urlIdx >= 0 ? args[urlIdx + 1] : journey.baseUrl;
 
@@ -133,6 +149,40 @@ async function main(args: string[]): Promise<number> {
   const saveStatePath = saveStateIdx >= 0 ? args[saveStateIdx + 1] : undefined;
 
   console.log(`[crawler] journey=${journey.name} target=${targetUrl}${headful ? ' [headful]' : ''}${statePath ? ' [state=' + statePath + ']' : ''}`);
+
+  // Preflight /health gate. If a journey declares a preflight list, hit
+  // every URL once before launching Chromium. Bail with exit code 3 on
+  // any failure — diagnoses "the sidecar is dead" in <500ms instead of
+  // running the entire journey and swallowing the failure as opaque
+  // network errors (AppArmor denials, systemd-down, port conflicts).
+  if (Array.isArray((journey as any).preflight) && (journey as any).preflight.length > 0) {
+    const pf = (journey as any).preflight as { name: string; url: string; expectStatus?: number }[];
+    console.log(`[crawler] preflight: checking ${pf.length} health endpoints`);
+    const failures: string[] = [];
+    for (const entry of pf) {
+      const expect = entry.expectStatus ?? 200;
+      try {
+        const ac = new AbortController();
+        const t = setTimeout(() => ac.abort(), 5_000);
+        const resp = await fetch(entry.url, { signal: ac.signal, redirect: 'manual' });
+        clearTimeout(t);
+        const ok = resp.status === expect;
+        console.log(`  [${ok ? 'ok' : 'FAIL'}] ${entry.name.padEnd(28)} ${entry.url} → ${resp.status}`);
+        if (!ok) failures.push(`${entry.name} (${entry.url}): expected ${expect}, got ${resp.status}`);
+      } catch (e: any) {
+        console.log(`  [FAIL] ${entry.name.padEnd(28)} ${entry.url} → ${e?.message || e}`);
+        failures.push(`${entry.name} (${entry.url}): ${e?.message || e}`);
+      }
+    }
+    if (failures.length > 0) {
+      console.error(`[crawler] PREFLIGHT FAILED — ${failures.length} of ${pf.length} endpoints unhealthy`);
+      for (const f of failures) console.error(`  - ${f}`);
+      console.error('[crawler] aborting journey before browser launch — fix the unhealthy services and re-run');
+      return 3;
+    }
+    console.log(`[crawler] preflight: all ${pf.length} endpoints healthy`);
+  }
+
   const browser = await chromium.launch({ headless: !headful });
   // bypassCSP only affects this headless test browser — real user
   // browsers still receive the production CSP unchanged. Without this,
@@ -172,6 +222,67 @@ async function main(args: string[]): Promise<number> {
   }
   const context = await browser.newContext(contextOpts);
 
+  // tsx/esbuild compiles `const fn = () => {}` and similar named function
+  // expressions in this codebase by wrapping them with the `__name(fn, name)`
+  // helper to preserve the function's displayed name. When such a function
+  // body ships into the browser via `page.evaluate(...)`, the page-side
+  // execution context has no `__name` in scope and throws
+  // `ReferenceError: __name is not defined`, which then surfaces as a
+  // pageerror and pollutes every journey's diff/budget. Define a no-op
+  // pass-through globally on every page so esbuild's wrapping is harmless
+  // in evaluate bodies. Must be a context-level addInitScript (not per-page)
+  // so it runs before any first navigation triggers our axe scan.
+  await context.addInitScript({
+    content: 'window.__name = window.__name || function (fn) { return fn; };',
+  });
+
+  // WebAuthn virtual authenticator. When enabled, the runner attaches a
+  // CDP virtual authenticator to the context; from that point on, any
+  // navigator.credentials.create()/get() call goes through the virtual
+  // authenticator instead of the (non-existent in headless Chromium)
+  // platform authenticator. Required to test passkey enroll/login flows
+  // — without this, the SPA's navigator.credentials.create() rejects
+  // immediately with NotAllowedError.
+  const wa = (journey as any).webauthn as Journey['webauthn'];
+  if (wa?.enabled) {
+    try {
+      const cdpPage = await context.newPage();
+      const client = await context.newCDPSession(cdpPage);
+      await client.send('WebAuthn.enable', { enableUI: false } as any);
+      const addRes: any = await client.send('WebAuthn.addVirtualAuthenticator' as any, {
+        options: {
+          protocol: wa.protocol || 'ctap2',
+          transport: wa.transport || 'internal',
+          hasResidentKey: wa.hasResidentKey ?? true,
+          hasUserVerification: wa.hasUserVerification ?? true,
+          automaticPresenceSimulation: wa.automaticPresenceSimulation ?? true,
+          isUserVerified: wa.isUserVerified ?? true,
+        },
+      } as any);
+      console.log(`[crawler] webauthn virtual authenticator attached (id=${addRes?.authenticatorId || '?'}, transport=${wa.transport || 'internal'})`);
+      await cdpPage.close();
+    } catch (e) {
+      console.error(`[crawler] failed to attach virtual authenticator: ${(e as Error).message}`);
+    }
+  }
+
+  // jsqr injection. assertQR steps run an in-page script that decodes
+  // the QR <svg>; jsqr is read from node_modules and concatenated into
+  // an addInitScript so window.__jsqr is available before the SPA's own
+  // scripts. Keeps assertQR a pure JSON step — no per-test setup.
+  try {
+    // ESM has no require.resolve; the crawler is always run with cwd at
+    // PlausiDen-Crawler/ root (npm script + run script), so node_modules
+    // is reliable here.
+    const jsqrPath = join(process.cwd(), 'node_modules', 'jsqr', 'dist', 'jsQR.js');
+    const jsqrSrc = readFileSync(jsqrPath, 'utf8');
+    await context.addInitScript({
+      content: `${jsqrSrc}\n;try{window.__jsqr=window.jsQR||(window.module&&module.exports)||window.default;}catch(e){}`,
+    });
+  } catch (e) {
+    console.log(`[crawler] WARN jsqr injection skipped: ${(e as Error).message}`);
+  }
+
   // Seed sessionStorage on every page load. Runs before any of the SPA's
   // own JS, so the SPA boots already authenticated and never shows the
   // login form. Re-fires on every navigation within the context, which
@@ -180,6 +291,24 @@ async function main(args: string[]): Promise<number> {
     const seedScript = `(() => { try { const seed = ${JSON.stringify(svSeed.sessionStorage)}; for (const [k, v] of Object.entries(seed)) sessionStorage.setItem(k, v); } catch {} })();`;
     await context.addInitScript({ content: seedScript });
     console.log(`[crawler] sessionStorage seeded with ${Object.keys(svSeed.sessionStorage).length} entries`);
+  }
+
+  // Journey-level seedStorage: pre-seed localStorage / sessionStorage with
+  // arbitrary keys before navigation. Needed for cold-login journeys that
+  // would otherwise be blocked by first-time popups (mission modal,
+  // walkthrough overlay) — same mechanism the SPA uses to remember "user
+  // already saw this," just primed before the SPA boots.
+  if (journey.seedStorage?.localStorage) {
+    const ls = journey.seedStorage.localStorage;
+    const lsScript = `(() => { try { const seed = ${JSON.stringify(ls)}; for (const [k, v] of Object.entries(seed)) localStorage.setItem(k, v); } catch {} })();`;
+    await context.addInitScript({ content: lsScript });
+    console.log(`[crawler] journey localStorage seeded with ${Object.keys(ls).length} entries`);
+  }
+  if (journey.seedStorage?.sessionStorage) {
+    const ss = journey.seedStorage.sessionStorage;
+    const ssScript = `(() => { try { const seed = ${JSON.stringify(ss)}; for (const [k, v] of Object.entries(seed)) sessionStorage.setItem(k, v); } catch {} })();`;
+    await context.addInitScript({ content: ssScript });
+    console.log(`[crawler] journey sessionStorage seeded with ${Object.keys(ss).length} entries`);
   }
 
   // Auto-gatekeeper: detects the voter-ID input and submits the TEST code
@@ -290,14 +419,19 @@ async function main(args: string[]): Promise<number> {
             try {
               var btn = findSubmitButton(input);
               if (btn && !btn.disabled) {
+                // Forcibly downgrade type=submit → type=button to suppress
+                // the native form POST. React's onClick handler still fires
+                // first, so SPA state still updates; we just refuse to let
+                // the browser do a hard navigation if the form lacks an
+                // onSubmit preventDefault.
+                try { if (btn.type === 'submit') btn.type = 'button'; } catch (e2) {}
                 btn.click();
                 return;
               }
-              var form = input.closest('form');
-              if (form) {
-                form.requestSubmit ? form.requestSubmit() : form.submit();
-                return;
-              }
+              // No fallback to form.submit()/requestSubmit() — those do a
+              // hard navigation if React hasn't claimed onSubmit, and the
+              // browser ends up on a raw JSON response. Always prefer the
+              // SPA's keydown handler.
               pressEnter(input);
             } catch (e) {}
           }, 120);
@@ -322,6 +456,11 @@ async function main(args: string[]): Promise<number> {
   // Per-screenshot axe results — written to findings.txt at end of run
   // so the user can triage WCAG violations alongside the JSON report.
   const screenshotAxe: Array<{ url: string; result: AxePageResult; annotated?: string }> = [];
+  // Per-screenshot D₀ runtime audit results — PlausiDen-specific design-
+  // system enforcement (44×44 touch targets, 36px control min-height, etc.).
+  // Complements axe-core (looser WCAG floor) and the build-time audits
+  // (source-only) by checking actual rendered geometry.
+  const screenshotD0: Array<{ url: string; result: D0PageResult }> = [];
   // Inject Google's web-vitals library before any navigation so LCP/CLS/
   // INP/TTFB/FCP are captured on every page the crawler visits.
   await installWebVitals(page);
@@ -343,11 +482,26 @@ async function main(args: string[]): Promise<number> {
   page.on('pageerror', (err) => {
     log({ kind: 'pageerror', text: err.message, stack: err.stack });
   });
+  // Third-party noise we never control and that adds nothing to the audit:
+  //   - Cloudflare RUM / NEL beacons (/cdn-cgi/rum, /cdn-cgi/beacon, etc.)
+  //     get injected at the edge when RUM is enabled in the CF dashboard;
+  //     they fail (request-failed with no status) on every page in headless
+  //     Chromium because the beacon protocol expects a sendBeacon endpoint
+  //     that the dashboard, not the origin, controls.
+  //   - Cloudflare email-decode shim (/cdn-cgi/scripts/...email-decode.min.js)
+  //     can fail in headless, same root cause.
+  // Filtering at log-time (not by aborting the request) is the conservative
+  // choice — the page still sees the same network behavior it would in a
+  // real browser; we just don't count the failures against budget.
+  const isThirdPartyEdgeNoise = (url: string): boolean =>
+    /\/cdn-cgi\//.test(url);
   page.on('requestfailed', (req) => {
+    if (isThirdPartyEdgeNoise(req.url())) return;
     log({ kind: 'request-failed', text: req.failure()?.errorText || 'unknown', url: req.url() });
   });
   page.on('response', (res) => {
     if (res.status() >= 400) {
+      if (isThirdPartyEdgeNoise(res.url())) return;
       log({ kind: 'response-error', text: res.statusText(), url: res.url(), status: res.status() });
     }
   });
@@ -471,6 +625,14 @@ async function main(args: string[]): Promise<number> {
         screenshotAxe.push({ url: axeResult.url, result: axeResult, annotated });
         for (const ev of axeEventsFor(axeResult, startEpoch)) events.push(ev);
       } catch { /* axe is best-effort */ }
+      // D₀ runtime audit — PlausiDen design-system enforcement on the
+      // rendered page. Pure DOM/computed-style inspection; no script
+      // injection, no CSP risk. Best-effort like axe.
+      try {
+        const d0Result = await runD0Audit(page);
+        screenshotD0.push({ url: d0Result.url, result: d0Result });
+        for (const ev of d0EventsFor(d0Result, startEpoch)) events.push(ev);
+      } catch { /* d0 audit is best-effort */ }
       stepResults.push({ step, index: i, ok: true, durationMs: 0, screenshot: imgPath });
       continue;
     }
@@ -510,6 +672,43 @@ async function main(args: string[]): Promise<number> {
       stepResults.push(...result.stepResults);
       for (const ev of result.events) events.push(ev);
       console.log(`[crawler] probe complete: ${result.findings.length} findings, ${result.totalRequests} requests, ${result.templatesProbed} templates`);
+      continue;
+    }
+
+    // Stress steps hammer the current page: random clicks, edge-case form
+    // fills (XSS / SQLi / unicode / max-length / etc.), keyboard fuzz,
+    // viewport thrash, optional network chaos. The runner sees every
+    // surfaced console error / page error / failed fetch through the same
+    // CapturedEvent stream, so the diff/budget logic catches regressions.
+    if (step.kind === 'stress') {
+      const cfg = step.stress || {};
+      const stressStart = Date.now();
+      console.log(`[crawler] stress starting (intensity=${cfg.intensity || 'high'} duration=${cfg.durationMs ?? 60_000}ms)`);
+      const ctx = {
+        outDir,
+        startEpoch,
+        log,
+        takeScreenshot: async (label: string): Promise<string | null> => {
+          const safe = label.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 60);
+          const p = join(outDir, `stress-${safe}-${Date.now()}.png`);
+          try { await page.screenshot({ path: p, fullPage: false }); return p; } catch { return null; }
+        },
+      };
+      try {
+        const result = await runStress(page, cfg, ctx);
+        // Persist the stress summary alongside the report.
+        writeFileSync(join(outDir, `stress-${step.label || 'run'}-${stressStart}.json`), JSON.stringify(result, null, 2));
+        const summary = `clicks=${result.clicks.ok}/${result.clicks.attempted}(failed=${result.clicks.failed}) fills=${result.fills.ok}/${result.fills.attempted}(failed=${result.fills.failed}) keys=${result.keyboards.attempted} resizes=${result.resizes.attempted} chaos=${result.networkChaosTrips} dur=${result.durationMs}ms domNodes=${result.finalDom.nodes} errorRoles=${result.finalDom.errorRoles}`;
+        stepResults.push({ step, index: i, ok: !result.abortReason, durationMs: result.durationMs, error: result.abortReason });
+        console.log(`[crawler] stress complete: ${summary}`);
+      } catch (e: any) {
+        log({ kind: 'pageerror', text: `stress threw: ${String(e?.message || e).slice(0, 200)}` });
+        stepResults.push({ step, index: i, ok: false, durationMs: Date.now() - stressStart, error: String(e?.message || e) });
+      }
+      // Settle after stress and re-check UI health before moving on.
+      await page.waitForTimeout(500);
+      await checkUiHealth(`after-stress:${step.label || ''}`);
+      await snapshotMemory(page, `after-stress:${step.label || ''}`, startEpoch, telemetry);
       continue;
     }
 
@@ -579,6 +778,7 @@ async function main(args: string[]): Promise<number> {
       pageErrors: events.filter(e => e.kind === 'pageerror').length,
       failedRequests: events.filter(e => e.kind === 'request-failed' || e.kind === 'response-error').length,
       a11yViolations: events.filter(e => e.kind === 'a11y-violation').length,
+      d0Violations: events.filter(e => e.kind === 'd0-violation').length,
       total: events.length,
       stepsOk: stepResults.filter(s => s.ok).length,
       stepsFailed: stepResults.filter(s => !s.ok).length,
@@ -599,9 +799,17 @@ async function main(args: string[]): Promise<number> {
   if (screenshotAxe.length > 0) {
     writeFileSync(join(outDir, 'findings.txt'), renderAxeFindings(screenshotAxe));
   }
+  // Per-screenshot D₀ runtime audit findings — PlausiDen-specific design
+  // system invariants (44×44 touch targets, 36px control min-height).
+  // Lives in its own file so a triager can answer "did this run regress
+  // the design system?" without scrolling through axe noise.
+  if (screenshotD0.length > 0) {
+    writeFileSync(join(outDir, 'd0-findings.txt'), renderD0Findings(screenshotD0));
+  }
 
-  const prior = findPriorRun(runsDir, outDir);
-  const diff = diffReports(report, prior);
+  const prior = findPriorRun(runsDir, outDir, journey.name);
+  const allowedErrors = (journey as any).expectedErrors || [];
+  const diff = diffReports(report, prior, allowedErrors);
   writeFileSync(join(outDir, 'diff.json'), JSON.stringify(diff, null, 2));
 
   // Summary to stdout.
@@ -610,6 +818,7 @@ async function main(args: string[]): Promise<number> {
   console.log(`  page errors:       ${report.counts.pageErrors}`);
   console.log(`  failed fetches:    ${report.counts.failedRequests}`);
   console.log(`  a11y violations:   ${report.counts.a11yViolations}`);
+  console.log(`  D₀ violations:     ${report.counts.d0Violations}`);
   console.log(`  steps ok/failed:   ${report.counts.stepsOk}/${report.counts.stepsFailed}`);
   if (prior) {
     console.log(`  diff vs prior run (${prior.journey}):`);
@@ -617,18 +826,35 @@ async function main(args: string[]): Promise<number> {
     console.log(`    NEW page errors:      ${diff.newPageErrors.length}`);
     console.log(`    NEW failed fetches:   ${diff.newFailedRequests.length}`);
     console.log(`    NEW a11y violations:  ${diff.newA11yViolations.length}`);
+    console.log(`    NEW D₀ violations:    ${diff.newD0Violations.length}`);
     console.log(`    newly broken steps:   ${diff.newlyBrokenSteps.length}`);
     console.log(`    fixed steps:          ${diff.fixedSteps.length}`);
   } else {
     console.log(`  (no prior run to diff against)`);
   }
 
+  // Per-journey budget override merges over DEFAULT_BUDGET. Used when a
+  // journey legitimately surfaces a known-tolerated noise event (e.g.,
+  // third-party CSP warnings outside our control).
+  const jb = (journey as any).budget || {};
+  const budget: Budget = {
+    newConsoleErrors: jb.newConsoleErrors ?? DEFAULT_BUDGET.newConsoleErrors,
+    newPageErrors: jb.newPageErrors ?? DEFAULT_BUDGET.newPageErrors,
+    newFailedRequests: jb.newFailedRequests ?? DEFAULT_BUDGET.newFailedRequests,
+    newA11yViolations: jb.newA11yViolations ?? DEFAULT_BUDGET.newA11yViolations,
+    // D₀ has a separate budget knob so existing journeys don't all
+    // immediately fail when this audit lands. Per-journey override lets
+    // legacy pages opt in gradually as they migrate to kit primitives.
+    newD0Violations: jb.newD0Violations ?? DEFAULT_BUDGET.newD0Violations,
+    newlyBrokenSteps: jb.newlyBrokenSteps ?? DEFAULT_BUDGET.newlyBrokenSteps,
+  };
   const overBudget =
-    diff.newConsoleErrors.length > DEFAULT_BUDGET.newConsoleErrors
-    || diff.newPageErrors.length > DEFAULT_BUDGET.newPageErrors
-    || diff.newFailedRequests.length > DEFAULT_BUDGET.newFailedRequests
-    || diff.newA11yViolations.length > DEFAULT_BUDGET.newA11yViolations
-    || diff.newlyBrokenSteps.length > DEFAULT_BUDGET.newlyBrokenSteps;
+    diff.newConsoleErrors.length > budget.newConsoleErrors
+    || diff.newPageErrors.length > budget.newPageErrors
+    || diff.newFailedRequests.length > budget.newFailedRequests
+    || diff.newA11yViolations.length > budget.newA11yViolations
+    || diff.newD0Violations.length > budget.newD0Violations
+    || diff.newlyBrokenSteps.length > budget.newlyBrokenSteps;
 
   if (overBudget) {
     console.log('\n[crawler] FAIL — new regressions exceed budget.');

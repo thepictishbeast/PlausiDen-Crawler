@@ -1,0 +1,18 @@
+{
+  "name": "sacred-vote-preflight",
+  "description": "Tier-zero gate. Hits /health on every Sacred.Vote sidecar + the main app before any UI work runs. Exits 3 on the first 5xx/connection failure so we never waste a full crawl when a service is down. Re-run this first whenever the user reports 'something is broken' — it pinpoints which layer.",
+  "baseUrl": "https://sacred.vote",
+  "preflight": [
+    { "name": "main-app",            "url": "http://127.0.0.1:5000/health" },
+    { "name": "sacredvote-crypto",   "url": "http://127.0.0.1:3001/health" },
+    { "name": "sacredvote-analytics","url": "http://127.0.0.1:3002/health" },
+    { "name": "sacredvote-webauthn", "url": "http://127.0.0.1:3003/health" },
+    { "name": "sacredvote-identity", "url": "http://127.0.0.1:3004/health" },
+    { "name": "public-https-landing","url": "https://sacred.vote/" }
+  ],
+  "steps": [
+    { "kind": "goto", "url": "https://sacred.vote/", "timeout": 30000, "label": "preflight-landing" },
+    { "kind": "wait", "ms": 1000, "label": "settle" },
+    { "kind": "screenshot", "label": "01-landing-200-confirmed" }
+  ]
+}

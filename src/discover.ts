@@ -25,6 +25,7 @@ import { captureAriaTree, ariaTreeToText, interactableNodes, scoreAriaTree, type
 import type { CapturedEvent } from './report.js';
 import type { StepResult } from './journey.js';
 import { runAxe, axeEventsFor, renderAxeFindings, annotateViolations, type AxePageResult } from './audit.js';
+import { runD0Audit, d0EventsFor, type D0PageResult } from './d0Audit.js';
 
 export interface DiscoverConfig {
   /** Max pages to visit total. Hard cap to bound runtime + report size. */
@@ -79,6 +80,8 @@ export interface DiscoveredPage {
   errors: string[];
   /** axe-core scan result (full violation list + per-node selectors). */
   axe?: AxePageResult;
+  /** D₀ runtime audit result (PlausiDen design-system invariants). */
+  d0?: D0PageResult;
 }
 
 export interface DiscoverResult {
@@ -162,11 +165,18 @@ async function snapshotPage(page: Page): Promise<{
       if (!e.offsetParent && e.tagName !== 'BODY') return; // not visible
       const name = (e.getAttribute('aria-label') || e.innerText || '').trim();
       if (!name) return;
-      // Build a stable selector preference: id > data-testid > aria-label > role+name
+      // Build a stable selector preference: data-testid > id > aria-label > role+name.
+      // data-testid wins because authors give it stable values; auto-generated
+      // ids (e.g. radix-ui's `radix-:r7:`) break Playwright's `#…` parser
+      // because the colons aren't valid CSS without escaping. We use the
+      // attribute-selector form `[id="…"]` which sidesteps the colon issue
+      // entirely and is just as fast for Playwright.
       let sel = '';
-      if (e.id) sel = `#${e.id}`;
-      else if (e.getAttribute('data-testid')) sel = `[data-testid='${cssEscape(e.getAttribute('data-testid')!)}']`;
-      else if (e.getAttribute('aria-label')) sel = `[aria-label='${cssEscape(e.getAttribute('aria-label')!)}']`;
+      const tid = e.getAttribute('data-testid');
+      const al = e.getAttribute('aria-label');
+      if (tid) sel = `[data-testid='${cssEscape(tid)}']`;
+      else if (e.id) sel = `[id='${cssEscape(e.id)}']`;
+      else if (al) sel = `[aria-label='${cssEscape(al)}']`;
       else sel = `${e.tagName.toLowerCase()}:has-text('${cssEscape(name.slice(0, 60))}')`;
       buttons.push(`${sel}|${name.slice(0, 80)}`);
     });
@@ -302,6 +312,19 @@ export async function runDiscover(
         errors.push(`axe: ${e?.message || e}`);
       }
 
+      // D₀ runtime audit — PlausiDen design-system invariants
+      // (44×44 touch targets, 36px control min-height) on rendered geometry.
+      // Same best-effort pattern as axe; failures recorded as errors but
+      // don't abort the discover walk.
+      try {
+        const d0Result = await runD0Audit(page);
+        (snap as any).__d0 = d0Result;
+        for (const ev of d0EventsFor(d0Result, startEpoch)) events.push(ev);
+        if (!d0Result.ok) errors.push(`d0: ${d0Result.error}`);
+      } catch (e: any) {
+        errors.push(`d0: ${e?.message || e}`);
+      }
+
       // Optional: click read-only-safe buttons (stay on the same URL).
       if (interactPolicy !== 'never') {
         for (const b of snap.buttonsToClick) {
@@ -341,6 +364,7 @@ export async function runDiscover(
       clickedButtons,
       errors,
       axe: (snap as any).__axe as AxePageResult | undefined,
+      d0: (snap as any).__d0 as D0PageResult | undefined,
       annotated: (snap as any).__annotated as string | undefined,
     } as DiscoveredPage & { annotated?: string });
 

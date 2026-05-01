@@ -1,0 +1,139 @@
+{
+  "name": "sacred-vote-stress-voter",
+  "description": "Aggressive UI-stress for voter pages — landing + dashboard + verify-identity. Random clicks, edge-case form fuzz, keyboard chaos, viewport thrash, and tab rotation across every voter-side surface. Surfaces console errors, page errors, layout shift, focus-trap leaks, and any selector that breaks Playwright.",
+  "baseUrl": "https://sacred.vote",
+  "storageState": "/home/admin/.secure/sacred-vote-voter-state.json",
+  "preflight": [
+    { "name": "main", "url": "https://sacred.vote/api/health" },
+    { "name": "voter-passkey-flag", "url": "https://sacred.vote/api/voter/passkey/available" }
+  ],
+  "seedStorage": {
+    "sessionStorage": {
+      "sv-seed": "{\"role\":\"voter\",\"voterCode\":\"TEST\"}"
+    }
+  },
+  "expectedErrors": [
+    { "kind": "console", "level": "error", "urlIncludes": "/api/voter/dashboard", "status": 400, "reason": "TEST seed has no voter row" },
+    { "kind": "console", "level": "error", "urlIncludes": "/api/voter/verification-status", "status": 400, "reason": "TEST seed has no voter row" },
+    { "kind": "console", "level": "error", "urlIncludes": "/api/auth/login", "status": 403, "reason": "stale or forced admin login attempt" },
+    { "kind": "request-failed", "urlIncludes": "/api/stats", "reason": "occasional XHR drop during stress fuzz" }
+  ],
+  "steps": [
+    { "kind": "goto", "url": "https://sacred.vote/", "label": "voter-landing" },
+    { "kind": "wait", "ms": 1500, "label": "landing-settle" },
+    { "kind": "screenshot", "label": "00-voter-landing-pre-stress" },
+    {
+      "kind": "stress",
+      "label": "voter-landing-stress",
+      "stress": {
+        "intensity": "high",
+        "durationMs": 45000,
+        "clickCount": 60,
+        "fillCount": 30,
+        "keyboardCount": 30,
+        "resizeCount": 8,
+        "screenshotEveryN": 15,
+        "networkChaos": false,
+        "finalScreenshot": true,
+        "avoidSelectors": [
+          "Sign out",
+          "Logout",
+          "Delete account",
+          "logout",
+          "/admin"
+        ]
+      }
+    },
+
+    { "kind": "goto", "url": "https://sacred.vote/dashboard", "label": "dashboard" },
+    { "kind": "wait", "ms": 2000, "label": "dashboard-settle" },
+    { "kind": "screenshot", "label": "01-dashboard-pre-stress" },
+    {
+      "kind": "stress",
+      "label": "dashboard-stress",
+      "stress": {
+        "intensity": "high",
+        "durationMs": 60000,
+        "clickCount": 100,
+        "fillCount": 40,
+        "keyboardCount": 40,
+        "resizeCount": 10,
+        "screenshotEveryN": 20,
+        "networkChaos": false,
+        "finalScreenshot": true,
+        "avoidSelectors": [
+          "Sign out",
+          "Logout",
+          "Delete passkey",
+          "Remove",
+          "Delete account"
+        ],
+        "rotateTabs": [
+          "[role='tab']:has-text('Overview')",
+          "[role='tab']:has-text('Polls')",
+          "[role='tab']:has-text('Security')",
+          "[role='tab']:has-text('Passkeys')",
+          "[role='tab']:has-text('History')",
+          "[role='tab']:has-text('Settings')"
+        ],
+        "extraPayloads": [
+          "TEST",
+          "DEMO",
+          "ABCDEFGH",
+          "12345678",
+          "voter-?-code",
+          "; DROP TABLE voter_codes;",
+          "../../../etc/voter",
+          "<iframe src=javascript:alert(1)>"
+        ]
+      }
+    },
+    { "kind": "screenshot", "label": "02-dashboard-post-stress" },
+
+    { "kind": "goto", "url": "https://sacred.vote/verify-identity", "label": "verify-identity" },
+    { "kind": "wait", "ms": 2000, "label": "verify-settle" },
+    { "kind": "screenshot", "label": "03-verify-pre-stress" },
+    {
+      "kind": "stress",
+      "label": "verify-identity-stress",
+      "stress": {
+        "intensity": "extreme",
+        "durationMs": 75000,
+        "clickCount": 120,
+        "fillCount": 80,
+        "keyboardCount": 60,
+        "resizeCount": 15,
+        "screenshotEveryN": 25,
+        "networkChaos": true,
+        "finalScreenshot": true,
+        "avoidSelectors": [
+          "Sign out",
+          "Logout",
+          "Delete account",
+          "Cancel verification"
+        ],
+        "extraPayloads": [
+          "TEST",
+          "DEMO",
+          "VOTER12",
+          "AAAAAAAA",
+          "00000000",
+          "voter-code-with-too-many-chars-to-be-real-and-this-should-be-rejected-server-side",
+          "᠀᠁᠂᠃",
+          "🔥🔥🔥",
+          "'-- voter dump",
+          "<svg/onload=fetch('/api/admin/voters')>"
+        ]
+      }
+    },
+    { "kind": "screenshot", "label": "04-verify-post-stress" },
+    { "kind": "discover", "label": "voter-discover", "discover": { "maxPages": 12, "maxDepth": 2, "interactButtons": "safe-buttons" } }
+  ],
+  "budget": {
+    "newConsoleErrors": 0,
+    "newPageErrors": 0,
+    "newFailedRequests": 0,
+    "newA11yViolations": 0,
+    "newlyBrokenSteps": 0
+  }
+}
