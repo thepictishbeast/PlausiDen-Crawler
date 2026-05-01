@@ -19,10 +19,13 @@ export type StepKind =
   | 'waitForSelector'
   | 'screenshot'
   | 'assertText'
+  | 'assertUrl'
+  | 'assertQR'
   | 'scroll'
   | 'reload'
   | 'discover'
-  | 'probe';
+  | 'probe'
+  | 'stress';
 
 export interface Step {
   kind: StepKind;
@@ -84,6 +87,70 @@ export interface Step {
     statelessGet?: boolean;
     statelessGetFields?: string[];
   };
+  /**
+   * For stress: aggressive UI-fuzz on the current page. Hammers every
+   * visible interactable from many angles: random-order clicks, edge-case
+   * form fills (empty / max-length / unicode / XSS / SQLi / control
+   * chars), keyboard fuzz (Tab cycle, Escape spam, Enter, arrow keys),
+   * viewport thrash (random resizes during interaction), rapid back/
+   * forward, and (optionally) network chaos (random throttle / fail).
+   *
+   * Designed to surface: layout shift, focus traps that don't trap,
+   * unguarded XSS sinks, double-submit handlers that race, modal close
+   * leaks, useEffect cleanups that don't, and any selector that breaks
+   * Playwright's CSS parser. The full event stream still flows through
+   * the standard report so any console error / page error / failed fetch
+   * surfaced under stress is diffed against the baseline.
+   *
+   * Defaults are aggressive on purpose. Tune `intensity` down for slow
+   * pages or up for "really stress the UI" runs.
+   */
+  stress?: {
+    /** "low" / "medium" / "high" / "extreme" — scales every count below. Default: "high". */
+    intensity?: 'low' | 'medium' | 'high' | 'extreme';
+    /** Total wall-clock budget in ms. Stress loops abort when this is hit. Default: 60_000. */
+    durationMs?: number;
+    /** How many random clicks to fire across the page. Scales with intensity. Default: 80. */
+    clickCount?: number;
+    /** How many form fills to perform. Each picks a random input + random edge-case payload. Default: 60. */
+    fillCount?: number;
+    /** How many keyboard-fuzz bursts (Tab/Escape/Enter/arrow). Default: 40. */
+    keyboardCount?: number;
+    /** How many viewport resize thrashes (random within sane bounds). Default: 12. */
+    resizeCount?: number;
+    /** Take a screenshot every N stress actions for visual diff. 0 = no screenshots. Default: 20. */
+    screenshotEveryN?: number;
+    /** Trigger network chaos (random throttle / abort / 500). Default: false. */
+    networkChaos?: boolean;
+    /**
+     * Selectors to AVOID clicking — destructive UI like "Delete account"
+     * buttons. Matched as Playwright selectors. Default: nav-away-from-test.
+     */
+    avoidSelectors?: string[];
+    /**
+     * Selectors of TABS / accordions to deliberately rotate through during
+     * stress (so the crawler exercises the full tab strip, not just the
+     * default tab). Each is clicked between fuzz bursts.
+     */
+    rotateTabs?: string[];
+    /**
+     * Custom edge-case payloads to mix into the form-fuzz pool. Defaults
+     * cover the OWASP top hits (XSS / SQLi / NULL byte / RTL / surrogate
+     * pair / max-length). Adding domain-specific payloads tightens the
+     * crawl for project-specific input handlers.
+     */
+    extraPayloads?: string[];
+    /** Skip click-fuzz (e.g. when you only want form-fuzz). Default: false. */
+    skipClicks?: boolean;
+    /** Skip form-fuzz. Default: false. */
+    skipFills?: boolean;
+    /** Skip keyboard-fuzz. Default: false. */
+    skipKeyboard?: boolean;
+    /** Skip viewport-fuzz. Default: false. */
+    skipResize?: boolean;
+    /** Take a final full-page screenshot at end. Default: true. */
+    finalScreenshot?: boolean;
+  };
 }
 
 export interface Journey {
@@ -99,6 +166,73 @@ export interface Journey {
    * without ever inserting fake credentials into the prod database.
    */
   storageState?: string;
+  /**
+   * Preflight `/health` check. The runner hits each URL once before any
+   * step runs and aborts with exit code 3 if any returns non-2xx or fails
+   * to connect. Catches "service is down" before we waste a full crawl
+   * on opaque downstream failures (e.g. AppArmor denial in #279).
+   */
+  preflight?: { name: string; url: string; expectStatus?: number }[];
+  /**
+   * WebAuthn virtual authenticator. When set, the runner attaches a CDP
+   * virtual authenticator to the context before steps run, so passkey
+   * registrations/assertions go through the crawler's in-memory key
+   * material instead of failing with NotAllowedError. See
+   * https://chromedevtools.github.io/devtools-protocol/tot/WebAuthn/.
+   */
+  webauthn?: {
+    enabled: boolean;
+    protocol?: 'ctap2' | 'u2f';
+    transport?: 'usb' | 'nfc' | 'ble' | 'internal';
+    hasResidentKey?: boolean;
+    hasUserVerification?: boolean;
+    automaticPresenceSimulation?: boolean;
+    isUserVerified?: boolean;
+  };
+  /**
+   * Per-journey budget overrides. Default is "0 new console errors / 0 new
+   * page errors / 0 new failed fetches / 0 new a11y / 0 newly broken
+   * steps." Set to a non-zero value if a journey is expected to surface
+   * a known-tolerated error (e.g., known third-party CSP warning).
+   */
+  budget?: {
+    newConsoleErrors?: number;
+    newPageErrors?: number;
+    newFailedRequests?: number;
+    newA11yViolations?: number;
+    newlyBrokenSteps?: number;
+  };
+  /**
+   * Allowlist for events that are EXPECTED on this journey and should
+   * NOT trigger the regression budget. Each entry pins by kind / URL
+   * substring / status / regex on text — preferring narrow matches so
+   * you can't accidentally hide a real error class. Each entry should
+   * include a `reason` so an operator reviewing this file later
+   * understands why the noise was suppressed.
+   *
+   * Example: a TEST-seeded voter session has no voter row, so
+   * `/api/voter/dashboard` returns 400 by design — that's not a bug,
+   * but the crawler can't tell without an explicit allow.
+   */
+  expectedErrors?: Array<{
+    kind?: 'console' | 'pageerror' | 'request-failed' | 'response-error' | 'csp-violation' | 'a11y-violation';
+    level?: string;
+    urlIncludes?: string;
+    status?: number;
+    textMatches?: string;
+    reason?: string;
+  }>;
+  /**
+   * localStorage / sessionStorage entries to seed before navigation. Uses
+   * Playwright's `addInitScript` so the values are present on every page
+   * load, not just the first navigation. Useful for dismissing first-time
+   * popups (mission modal, walkthrough overlay) that gate access to the
+   * UI under test. Keys are origin-scoped — same as a real browser visit.
+   */
+  seedStorage?: {
+    localStorage?: Record<string, string>;
+    sessionStorage?: Record<string, string>;
+  };
 }
 
 export interface StepResult {
@@ -157,6 +291,100 @@ export async function runStep(page: Page, step: Step, timeout = 10_000): Promise
           throw new Error(`assertText: "${step.text}" not found in ${step.selector}`);
         }
         break;
+      case 'assertUrl': {
+        // Pin "I got past the login form" by URL match. step.text is a
+        // regex source string (anchor it with ^ / $ if you mean exact).
+        if (!step.text) throw new Error('assertUrl: missing text (regex)');
+        const re = new RegExp(step.text);
+        // Wait briefly for client-side router transitions.
+        const deadline = Date.now() + (step.timeout || timeout);
+        let last = page.url();
+        while (Date.now() < deadline) {
+          last = page.url();
+          if (re.test(last)) break;
+          await page.waitForTimeout(150);
+        }
+        if (!re.test(last)) {
+          throw new Error(`assertUrl: ${last} does not match /${step.text}/`);
+        }
+        break;
+      }
+      case 'assertQR': {
+        // Find an <svg> matching the selector (qrcode.react renders one),
+        // rasterize to canvas, decode with jsqr (injected from the runner),
+        // and match the decoded payload against step.text (regex).
+        // Catches the #268-class regression where the QR encoded raw
+        // request_uri JSON instead of the openid4vp:// deep link.
+        if (!step.selector) throw new Error('assertQR: missing selector');
+        if (!step.text) throw new Error('assertQR: missing text (regex)');
+        // jsqr is injected by main.ts into page context as window.__jsqr.
+        // Step body runs in-page: serialize SVG → image → canvas → ImageData → jsqr.
+        // Rasterize at 1024px so dense QR payloads (long openid4vp:// URIs ≈ 300-500 chars
+        // encoded at ECC level M) decode reliably; 256px loses too many module pixels.
+        const decoded: { ok: boolean; value?: string; error?: string } = await page.evaluate(
+          async ([sel]: [string]) => {
+            const svg = document.querySelector(sel) as SVGElement | null;
+            if (!svg) return { ok: false, error: `no element matched ${sel}` };
+            const clone = svg.cloneNode(true) as SVGElement;
+            clone.setAttribute('width', '1024');
+            clone.setAttribute('height', '1024');
+            const xml = new XMLSerializer().serializeToString(clone);
+            // Blob URL avoids long-data-URL parsing issues some renderers hit.
+            const blob = new Blob([xml], { type: 'image/svg+xml' });
+            const blobUrl = URL.createObjectURL(blob);
+            const img = new Image();
+            try {
+              await new Promise<void>((resolve, reject) => {
+                img.onload = () => resolve();
+                img.onerror = () => reject(new Error('svg→img load failed'));
+                img.src = blobUrl;
+              });
+            } finally {
+              // free the blob URL whether load succeeded or failed
+              try { URL.revokeObjectURL(blobUrl); } catch {}
+            }
+            const w = 1024, h = 1024;
+            const c = document.createElement('canvas');
+            c.width = w; c.height = h;
+            const ctx = c.getContext('2d');
+            if (!ctx) return { ok: false, error: 'canvas 2d unavailable' };
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(0, 0, w, h);
+            ctx.imageSmoothingEnabled = false;
+            ctx.drawImage(img, 0, 0, w, h);
+            const data = ctx.getImageData(0, 0, w, h);
+            const jsqr = (window as any).__jsqr;
+            if (!jsqr) return { ok: false, error: 'jsqr not injected' };
+            // Attempt several scales — jsqr is sometimes finicky about module size.
+            for (const size of [1024, 512, 768, 256]) {
+              if (size === 1024) {
+                const out = jsqr(data.data, w, h);
+                if (out) return { ok: true, value: out.data };
+                continue;
+              }
+              const c2 = document.createElement('canvas');
+              c2.width = size; c2.height = size;
+              const ctx2 = c2.getContext('2d');
+              if (!ctx2) continue;
+              ctx2.fillStyle = '#fff';
+              ctx2.fillRect(0, 0, size, size);
+              ctx2.imageSmoothingEnabled = false;
+              ctx2.drawImage(c, 0, 0, size, size);
+              const d2 = ctx2.getImageData(0, 0, size, size);
+              const out = jsqr(d2.data, size, size);
+              if (out) return { ok: true, value: out.data };
+            }
+            return { ok: false, error: 'jsqr decoded null at all tried sizes' };
+          },
+          [step.selector],
+        );
+        if (!decoded.ok) throw new Error(`assertQR: decode failed — ${decoded.error}`);
+        const re = new RegExp(step.text);
+        if (!re.test(decoded.value || '')) {
+          throw new Error(`assertQR: decoded "${(decoded.value || '').slice(0, 80)}…" does not match /${step.text}/`);
+        }
+        break;
+      }
       case 'scroll':
         await page.evaluate((dy: number) => window.scrollBy(0, dy), step.dy ?? 500);
         break;
