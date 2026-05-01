@@ -1,0 +1,38 @@
+{
+  "name": "sacred-vote-voter-passkey-register",
+  "description": "#314 regression journey — assert the voter Security panel reflects a freshly-registered passkey. Pre: count [data-testid^=voter-passkey-row-] = N. Action: click voter-passkey-register-button. Post: count = N+1 AND credentialName visible in the new row. BLOCKED on #304 (Playwright virtual authenticator); without it the WebAuthn ceremony fails NotAllowedError. Once #304 lands the journey activates as-is. Catches the user-facing regression hit on 2026-04-30 ('I have a key registered, no indication it exists, no delete button').",
+  "baseUrl": "https://sacred.vote",
+  "storageState": "/home/admin/.secure/sacred-vote-voter-state.json",
+  "webauthn": {
+    "enabled": true,
+    "protocol": "ctap2",
+    "transport": "internal",
+    "hasResidentKey": true,
+    "hasUserVerification": true,
+    "automaticPresenceSimulation": true,
+    "isUserVerified": true
+  },
+  "steps": [
+    { "kind": "goto", "url": "https://sacred.vote/dashboard", "timeout": 30000, "label": "voter-dashboard" },
+    { "kind": "wait", "ms": 3000, "label": "auto-gatekeeper-settle" },
+    { "kind": "waitForSelector", "selector": "[data-testid=voter-passkey-panel]", "timeout": 15000, "label": "panel-mounted" },
+    { "kind": "screenshot", "label": "01-pre-register" },
+    { "kind": "assertCount", "selector": "[data-testid^=voter-passkey-row-]", "min": 0, "recordAs": "preCount", "label": "pre-count" },
+    { "kind": "fill", "selector": "[data-testid=voter-passkey-name-input]", "text": "crawler-#314-key", "label": "name-fill" },
+    { "kind": "click", "selector": "[data-testid=voter-passkey-register-button]", "label": "register-click" },
+    { "kind": "wait", "ms": 4000, "label": "ceremony-settle" },
+    { "kind": "waitForSelector", "selector": "[data-testid=voter-passkey-result-dialog]", "timeout": 8000, "label": "result-dialog" },
+    { "kind": "click", "selector": "[data-testid=voter-passkey-result-ok]", "label": "dismiss-result" },
+    { "kind": "wait", "ms": 2000, "label": "list-refresh-settle" },
+    { "kind": "assertCount", "selector": "[data-testid^=voter-passkey-row-]", "count": "preCount+1", "label": "post-count-incremented" },
+    { "kind": "assertText", "selector": "[data-testid=voter-passkey-panel]", "text": "crawler-#314-key", "label": "credential-name-visible" },
+    { "kind": "screenshot", "label": "02-post-register" }
+  ],
+  "budget": {
+    "newConsoleErrors": 0,
+    "newPageErrors": 0,
+    "newFailedRequests": 0,
+    "newA11yViolations": 0,
+    "newlyBrokenSteps": 0
+  }
+}

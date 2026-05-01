@@ -21,6 +21,7 @@ export type StepKind =
   | 'assertText'
   | 'assertUrl'
   | 'assertQR'
+  | 'assertCount'
   | 'scroll'
   | 'reload'
   | 'discover'
@@ -45,6 +46,28 @@ export interface Step {
   ms?: number;
   /** For scroll: vertical pixel delta (negative scrolls up). */
   dy?: number;
+  /**
+   * For assertCount: the expected number of elements matching `selector`.
+   * Either a literal number, or a string referencing a previously-recorded
+   * variable: `"<name>"` / `"<name>+<n>"` / `"<name>-<n>"`. The variable
+   * binding comes from a prior assertCount step's `recordAs`. Combined
+   * with `min` / `max` (any subset) — at least one must be present.
+   *
+   * Catches the #314-class regression: register-passkey fires, the row
+   * count post-register must equal pre + 1 AND the credentialName must
+   * be visible (the latter via a paired assertText step).
+   */
+  count?: number | string;
+  /** For assertCount: lower bound (inclusive). */
+  min?: number;
+  /** For assertCount: upper bound (inclusive). */
+  max?: number;
+  /**
+   * For assertCount: bind the resolved count to this name in the runner's
+   * variable map so a later assertCount step can reference it via
+   * `count: "<name>+1"`. Names are lowercase ASCII identifiers.
+   */
+  recordAs?: string;
   /**
    * For discover: BFS configuration. The runner switches to autonomous
    * mode and crawls same-origin links from the current URL (or step.url
@@ -244,7 +267,70 @@ export interface StepResult {
   screenshot?: string;
 }
 
-export async function runStep(page: Page, step: Step, timeout = 10_000): Promise<StepResult> {
+/**
+ * Resolve an assertCount `count` expression against the runner's variable
+ * map. Accepts a literal number, a numeric string, a bare variable name,
+ * or `<name>+<n>` / `<name>-<n>`. Throws if the variable is unbound or
+ * the expression is malformed — those are journey-author errors that
+ * should fail loudly rather than silently match the wrong count.
+ */
+function resolveCountExpr(expr: number | string, vars: Map<string, number>): number {
+  if (typeof expr === 'number') return expr;
+  const direct = expr.trim();
+  if (/^-?\d+$/.test(direct)) return parseInt(direct, 10);
+  const m = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?:([+-])\s*(\d+))?\s*$/.exec(expr);
+  if (!m) {
+    throw new Error(`assertCount: cannot parse count expression "${expr}"`);
+  }
+  const name = m[1];
+  const op = m[2];
+  const n = m[3];
+  if (!vars.has(name)) {
+    throw new Error(`assertCount: variable "${name}" not bound (use recordAs in an earlier step)`);
+  }
+  const base = vars.get(name) ?? 0;
+  if (!op) return base;
+  const delta = parseInt(n, 10);
+  return op === '+' ? base + delta : base - delta;
+}
+
+function matchesAssertCount(step: Step, actual: number, vars: Map<string, number>): boolean {
+  let hasExpectation = false;
+  if (step.count !== undefined) {
+    hasExpectation = true;
+    if (resolveCountExpr(step.count, vars) !== actual) return false;
+  }
+  if (step.min !== undefined) {
+    hasExpectation = true;
+    if (actual < step.min) return false;
+  }
+  if (step.max !== undefined) {
+    hasExpectation = true;
+    if (actual > step.max) return false;
+  }
+  return hasExpectation;
+}
+
+function describeAssertCount(step: Step, vars: Map<string, number>): string {
+  const parts: string[] = [];
+  if (step.count !== undefined) {
+    try {
+      parts.push(`count=${resolveCountExpr(step.count, vars)}`);
+    } catch {
+      parts.push(`count="${step.count}"`);
+    }
+  }
+  if (step.min !== undefined) parts.push(`min=${step.min}`);
+  if (step.max !== undefined) parts.push(`max=${step.max}`);
+  return parts.length ? parts.join(', ') : '(no expectation — author bug)';
+}
+
+export async function runStep(
+  page: Page,
+  step: Step,
+  timeout = 10_000,
+  vars: Map<string, number> = new Map(),
+): Promise<StepResult> {
   const start = Date.now();
   const out: StepResult = { step, index: 0, ok: true, durationMs: 0 };
   try {
@@ -382,6 +468,35 @@ export async function runStep(page: Page, step: Step, timeout = 10_000): Promise
         const re = new RegExp(step.text);
         if (!re.test(decoded.value || '')) {
           throw new Error(`assertQR: decoded "${(decoded.value || '').slice(0, 80)}…" does not match /${step.text}/`);
+        }
+        break;
+      }
+      case 'assertCount': {
+        if (!step.selector) throw new Error('assertCount: missing selector');
+        if (step.count === undefined && step.min === undefined && step.max === undefined) {
+          throw new Error('assertCount: missing expectation (set count, min, or max)');
+        }
+        // Poll: client-side updates (TanStack invalidation, fetch settle)
+        // are async, so the post-register count won't be correct on the
+        // first frame. Loop until the expectation is met or the deadline
+        // expires; only the FINAL read is recorded / asserted against.
+        const deadline = Date.now() + (step.timeout || timeout);
+        let actual = await page.locator(step.selector).count();
+        while (Date.now() < deadline) {
+          if (matchesAssertCount(step, actual, vars)) break;
+          await page.waitForTimeout(150);
+          actual = await page.locator(step.selector).count();
+        }
+        if (step.recordAs) {
+          if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(step.recordAs)) {
+            throw new Error(`assertCount: recordAs "${step.recordAs}" is not a valid identifier`);
+          }
+          vars.set(step.recordAs, actual);
+        }
+        if (!matchesAssertCount(step, actual, vars)) {
+          throw new Error(
+            `assertCount: ${step.selector} count=${actual} did not satisfy ${describeAssertCount(step, vars)}`,
+          );
         }
         break;
       }
