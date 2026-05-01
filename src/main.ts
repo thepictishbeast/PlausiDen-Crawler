@@ -236,35 +236,15 @@ async function main(args: string[]): Promise<number> {
     content: 'window.__name = window.__name || function (fn) { return fn; };',
   });
 
-  // WebAuthn virtual authenticator. When enabled, the runner attaches a
-  // CDP virtual authenticator to the context; from that point on, any
-  // navigator.credentials.create()/get() call goes through the virtual
-  // authenticator instead of the (non-existent in headless Chromium)
-  // platform authenticator. Required to test passkey enroll/login flows
-  // — without this, the SPA's navigator.credentials.create() rejects
-  // immediately with NotAllowedError.
+  // WebAuthn virtual authenticator config — actual attach happens after
+  // the journey's main `page` is created, because Chrome DevTools Protocol's
+  // WebAuthn.addVirtualAuthenticator scopes the authenticator to the target
+  // the CDP session is bound to. Attaching it here (on a throwaway page)
+  // and then closing that page would leave the journey's real page with
+  // no virtual authenticator, so navigator.credentials.create() would still
+  // reject with NotAllowedError. We capture the journey's request now and
+  // perform the attach on the journey-page CDP session below.
   const wa = (journey as any).webauthn as Journey['webauthn'];
-  if (wa?.enabled) {
-    try {
-      const cdpPage = await context.newPage();
-      const client = await context.newCDPSession(cdpPage);
-      await client.send('WebAuthn.enable', { enableUI: false } as any);
-      const addRes: any = await client.send('WebAuthn.addVirtualAuthenticator' as any, {
-        options: {
-          protocol: wa.protocol || 'ctap2',
-          transport: wa.transport || 'internal',
-          hasResidentKey: wa.hasResidentKey ?? true,
-          hasUserVerification: wa.hasUserVerification ?? true,
-          automaticPresenceSimulation: wa.automaticPresenceSimulation ?? true,
-          isUserVerified: wa.isUserVerified ?? true,
-        },
-      } as any);
-      console.log(`[crawler] webauthn virtual authenticator attached (id=${addRes?.authenticatorId || '?'}, transport=${wa.transport || 'internal'})`);
-      await cdpPage.close();
-    } catch (e) {
-      console.error(`[crawler] failed to attach virtual authenticator: ${(e as Error).message}`);
-    }
-  }
 
   // jsqr injection. assertQR steps run an in-page script that decodes
   // the QR <svg>; jsqr is read from node_modules and concatenated into
@@ -453,6 +433,40 @@ async function main(args: string[]): Promise<number> {
   }
 
   const page: Page = await context.newPage();
+
+  // WebAuthn virtual authenticator. CDP scopes the authenticator to the
+  // target the session is attached to, so the attach must happen on
+  // *this* page's CDP session before the journey's first navigation.
+  // Without this, navigator.credentials.create() in the SPA rejects
+  // immediately with NotAllowedError (no platform authenticator is
+  // available in headless Chromium). Pre-fix the attach was on a
+  // throwaway page that got closed before the journey ran — the
+  // authenticator was gone by the time it was needed. This is the
+  // correctness fix for #304.
+  if (wa?.enabled) {
+    try {
+      const waClient = await context.newCDPSession(page);
+      await waClient.send('WebAuthn.enable', { enableUI: false } as any);
+      const addRes: any = await waClient.send('WebAuthn.addVirtualAuthenticator' as any, {
+        options: {
+          protocol: wa.protocol || 'ctap2',
+          transport: wa.transport || 'internal',
+          hasResidentKey: wa.hasResidentKey ?? true,
+          hasUserVerification: wa.hasUserVerification ?? true,
+          automaticPresenceSimulation: wa.automaticPresenceSimulation ?? true,
+          isUserVerified: wa.isUserVerified ?? true,
+        },
+      } as any);
+      console.log(`[crawler] webauthn virtual authenticator attached to journey page (id=${addRes?.authenticatorId || '?'}, transport=${wa.transport || 'internal'})`);
+      // We deliberately DO NOT detach the CDP session — it must stay
+      // alive for the lifetime of the journey so the authenticator
+      // remains scoped to the page. The session is garbage-collected
+      // when the page closes.
+    } catch (e) {
+      console.error(`[crawler] failed to attach virtual authenticator: ${(e as Error).message}`);
+    }
+  }
+
   // Per-screenshot axe results — written to findings.txt at end of run
   // so the user can triage WCAG violations alongside the JSON report.
   const screenshotAxe: Array<{ url: string; result: AxePageResult; annotated?: string }> = [];
