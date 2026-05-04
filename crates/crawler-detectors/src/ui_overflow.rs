@@ -212,9 +212,7 @@ pub fn detect_ui_overflow_issues(snap: &UiOverflowSnapshot) -> Vec<UiOverflowFin
     // 1. Page-level horizontal scroll.
     let page_h_scroll = snap.doc_scroll_width > snap.doc_client_width + 2;
     if page_h_scroll {
-        let delta = snap
-            .doc_scroll_width
-            .saturating_sub(snap.doc_client_width);
+        let delta = snap.doc_scroll_width.saturating_sub(snap.doc_client_width);
         out.push(UiOverflowFinding {
             severity: Severity::Strict,
             kind: "overflow.page-horizontal-scroll".to_owned(),

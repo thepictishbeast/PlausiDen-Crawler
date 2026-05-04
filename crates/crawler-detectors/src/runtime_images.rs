@@ -159,9 +159,7 @@ pub struct RuntimeImagesSnapshot {
 /// Apply detection rules to a runtime-images snapshot. Pure function.
 /// Mirrors the TS `detectRuntimeImageIssues`.
 #[must_use]
-pub fn detect_runtime_image_issues(
-    snap: &RuntimeImagesSnapshot,
-) -> Vec<crate::AxisFinding> {
+pub fn detect_runtime_image_issues(snap: &RuntimeImagesSnapshot) -> Vec<crate::AxisFinding> {
     let mut out = Vec::new();
     if !snap.broken.is_empty() {
         out.push(crate::AxisFinding {

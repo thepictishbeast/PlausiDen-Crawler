@@ -169,9 +169,7 @@ pub struct RuntimeFocusSnapshot {
 /// Apply detection rules to a runtime-focus snapshot. Pure function.
 /// Mirrors the TS `detectRuntimeFocusIssues`.
 #[must_use]
-pub fn detect_runtime_focus_issues(
-    snap: &RuntimeFocusSnapshot,
-) -> Vec<crate::AxisFinding> {
+pub fn detect_runtime_focus_issues(snap: &RuntimeFocusSnapshot) -> Vec<crate::AxisFinding> {
     let mut out = Vec::new();
     if !snap.invisible_focus.is_empty() {
         out.push(crate::AxisFinding {
