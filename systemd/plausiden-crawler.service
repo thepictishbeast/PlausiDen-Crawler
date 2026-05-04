@@ -1,0 +1,37 @@
+[Unit]
+Description=PlausiDen-Crawler nightly run against next.plausiden.com
+Documentation=https://github.com/thepictishbeast/PlausiDen-Crawler
+Wants=network-online.target
+After=network-online.target plausiden-site.service
+
+[Service]
+Type=oneshot
+User=admin
+Group=admin
+WorkingDirectory=/home/admin/PlausiDen-Crawler
+ExecStart=/usr/bin/node --loader ts-node/esm src/main.ts --journey journeys/plausiden-site-coupling.json
+ExecStart=/usr/bin/node --loader ts-node/esm src/main.ts --journey journeys/plausiden-site-all-links.json
+ExecStart=/usr/bin/node --loader ts-node/esm src/main.ts --journey journeys/plausiden-site-blog-readability.json
+SuccessExitStatus=0 1
+TimeoutStartSec=15min
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/admin/PlausiDen-Crawler/runs
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=false
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources @mount
+
+[Install]
+WantedBy=multi-user.target

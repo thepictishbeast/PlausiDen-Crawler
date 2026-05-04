@@ -1,0 +1,16 @@
+[Unit]
+Description=Nightly PlausiDen-Crawler audit run
+Documentation=https://github.com/thepictishbeast/PlausiDen-Crawler
+
+[Timer]
+# Every night at 02:00 UTC, with a 15-minute random offset so the
+# run doesn't pile up against other 02:00 cron jobs on the host.
+OnCalendar=*-*-* 02:00:00 UTC
+RandomizedDelaySec=15min
+# If the system was off when the timer should have fired, run on
+# next boot. Better a stale audit than no audit.
+Persistent=true
+Unit=plausiden-crawler.service
+
+[Install]
+WantedBy=timers.target

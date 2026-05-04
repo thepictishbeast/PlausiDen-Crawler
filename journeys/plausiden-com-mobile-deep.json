@@ -1,0 +1,69 @@
+{
+  "name": "plausiden-com-mobile-deep",
+  "description": "Mobile-viewport (390x844 = iPhone 14 Pro) deep audit of the live production site at plausiden.com. Visits every public route, opens the mobile drawer, taps every CTA, scrolls each page to bottom, fills + submits the contact + feedback forms, and screenshots every step. Designed to surface mobile-specific layout bugs, touch-target issues, drawer/menu interaction failures, and form usability problems that the desktop journey misses.",
+  "baseUrl": "https://plausiden.com/",
+  "viewport": { "w": 390, "h": 844 },
+  "steps": [
+    { "kind": "goto", "url": "https://plausiden.com/", "timeout": 15000, "label": "home" },
+    { "kind": "wait", "ms": 800 },
+    { "kind": "screenshot", "label": "01-home-mobile" },
+
+    { "kind": "click", "selector": "#mobile-menu-toggle", "timeout": 5000, "label": "open-drawer" },
+    { "kind": "wait", "ms": 500 },
+    { "kind": "screenshot", "label": "02-drawer-open" },
+
+    { "kind": "goto", "url": "https://plausiden.com/services", "timeout": 15000, "label": "services" },
+    { "kind": "wait", "ms": 600 },
+    { "kind": "scroll", "selector": "footer", "label": "scroll-to-bottom-services" },
+    { "kind": "wait", "ms": 400 },
+    { "kind": "screenshot", "label": "03-services-bottom" },
+
+    { "kind": "goto", "url": "https://plausiden.com/capabilities", "timeout": 15000, "label": "capabilities" },
+    { "kind": "wait", "ms": 600 },
+    { "kind": "screenshot", "label": "04-capabilities-top" },
+    { "kind": "scroll", "selector": "footer", "label": "scroll-capabilities" },
+    { "kind": "wait", "ms": 400 },
+    { "kind": "screenshot", "label": "05-capabilities-bottom" },
+
+    { "kind": "goto", "url": "https://plausiden.com/case-studies", "timeout": 15000, "label": "case-studies" },
+    { "kind": "wait", "ms": 600 },
+    { "kind": "screenshot", "label": "06-case-studies" },
+
+    { "kind": "goto", "url": "https://plausiden.com/about", "timeout": 15000, "label": "about" },
+    { "kind": "wait", "ms": 600 },
+    { "kind": "screenshot", "label": "07-about" },
+
+    { "kind": "goto", "url": "https://plausiden.com/blog", "timeout": 15000, "label": "blog" },
+    { "kind": "wait", "ms": 600 },
+    { "kind": "screenshot", "label": "08-blog-index" },
+
+    { "kind": "goto", "url": "https://plausiden.com/blog/plausible-deniability", "timeout": 15000, "label": "blog-post" },
+    { "kind": "wait", "ms": 600 },
+    { "kind": "scroll", "selector": "footer", "label": "scroll-post" },
+    { "kind": "wait", "ms": 400 },
+    { "kind": "screenshot", "label": "09-blog-post-bottom" },
+
+    { "kind": "goto", "url": "https://plausiden.com/how-we-work", "timeout": 15000, "label": "how-we-work" },
+    { "kind": "wait", "ms": 600 },
+    { "kind": "screenshot", "label": "10-how-we-work" },
+
+    { "kind": "goto", "url": "https://plausiden.com/pricing-transparency", "timeout": 15000, "label": "pricing" },
+    { "kind": "wait", "ms": 600 },
+    { "kind": "screenshot", "label": "11-pricing" },
+
+    { "kind": "goto", "url": "https://plausiden.com/solutions/legal", "timeout": 15000, "label": "vertical-legal" },
+    { "kind": "wait", "ms": 600 },
+    { "kind": "screenshot", "label": "12-vertical-legal" },
+
+    { "kind": "goto", "url": "https://plausiden.com/contact", "timeout": 15000, "label": "contact" },
+    { "kind": "wait", "ms": 600 },
+    { "kind": "screenshot", "label": "13-contact-mobile" },
+
+    { "kind": "goto", "url": "https://plausiden.com/feedback", "timeout": 15000, "label": "feedback" },
+    { "kind": "wait", "ms": 600 },
+    { "kind": "screenshot", "label": "14-feedback-mobile" },
+    { "kind": "scroll", "selector": "button[type='submit']", "label": "scroll-feedback" },
+    { "kind": "wait", "ms": 400 },
+    { "kind": "screenshot", "label": "15-feedback-bottom" }
+  ]
+}
