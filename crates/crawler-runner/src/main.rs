@@ -56,6 +56,9 @@ use crawler_detectors::css_health::{
     BODY_VISIBLE_TEXT_LENGTH_JS, COMPUTED_STYLES_JS, DECLARED_HREFS_JS,
     INLINE_STYLE_BLOCK_COUNT_JS,
 };
+use crawler_detectors::heading_order::{
+    detect_heading_order_issues, HeadingOrderSnapshot, HEADING_ORDER_JS,
+};
 use crawler_detectors::runtime_contrast::{
     detect_runtime_contrast_issues, RuntimeContrastSnapshot, RUNTIME_CONTRAST_JS,
 };
@@ -393,6 +396,9 @@ async fn run() -> Result<ExitCode> {
             if let Err(e) = capture_runtime_focus(&page, &events, started_at).await {
                 tracing::debug!("runtime_focus snapshot failed: {e}");
             }
+            if let Err(e) = capture_heading_order(&page, &events, started_at).await {
+                tracing::debug!("heading_order snapshot failed: {e}");
+            }
             if let Err(e) = capture_css_health(&page, &events, &network, started_at).await {
                 tracing::debug!("css_health snapshot failed: {e}");
             }
@@ -577,6 +583,29 @@ async fn capture_runtime_images(
         events,
         findings,
         EventKind::RuntimeImages,
+        started_at.elapsed().as_millis() as u64,
+    )
+    .await;
+    Ok(())
+}
+
+/// T104: capture heading-order snapshot. Pure DOM walk (no
+/// computed styles, no focus interactions) — cheap, runs on
+/// every Wait step.
+async fn capture_heading_order(
+    page: &chromiumoxide::Page,
+    events: &Arc<Mutex<Vec<CapturedEvent>>>,
+    started_at: Instant,
+) -> Result<()> {
+    let result = page.evaluate(HEADING_ORDER_JS).await?;
+    let snap: HeadingOrderSnapshot = result
+        .into_value()
+        .context("deserialize headingOrder snapshot")?;
+    let findings = detect_heading_order_issues(&snap);
+    push_axis_findings(
+        events,
+        findings,
+        EventKind::HeadingOrder,
         started_at.elapsed().as_millis() as u64,
     )
     .await;

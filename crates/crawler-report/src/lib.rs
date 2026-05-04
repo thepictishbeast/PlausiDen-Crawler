@@ -66,6 +66,8 @@ pub enum EventKind {
     WebVitals,
     /// aria-tree drift between consecutive runs.
     AriaDrift,
+    /// headingOrder detector — h1 count + level skips.
+    HeadingOrder,
 }
 
 /// Severity of a finding-bucketed event (cssHealth / uiOverflow
