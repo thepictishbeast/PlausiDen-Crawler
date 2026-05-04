@@ -22,8 +22,10 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-uti
 futures = "0.3"
 
 # CDP-based Chromium driver — see CRAWLER_STACK_AUDIT.md for the
-# port decision. Pinned to 0.7 (current major as of 2026-Q1).
-chromiumoxide = { version = "0.7", default-features = false, features = ["tokio-runtime"] }
+# port decision. Bumped to 0.9 in T102.2 — Chromium 147 ships
+# CDP messages 0.7's Message enum couldn't deserialize.
+# 0.9 dropped the `tokio-runtime` feature (now default); use defaults.
+chromiumoxide = "0.9"
 
 # CLI + serialization.
 clap = { version = "4", features = ["derive"] }

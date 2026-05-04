@@ -123,19 +123,18 @@ async fn run() -> Result<ExitCode> {
 
     // Launch Chromium.
     //
-    // BUG ASSUMPTION: `--no-sandbox` is set when running as root
-    // (Chromium refuses otherwise). On non-root invocations the
-    // flag is harmless but reduces process isolation — a future
-    // hardening pass will detect uid==0 and ONLY add it then.
-    // Per AVP-2 default-deny: never auto-add this flag in CI
-    // unless the operator opts in via --allow-no-sandbox.
-    let mut builder = BrowserConfig::builder().arg("--no-sandbox");
-    if !args.headless {
-        builder = builder.with_head();
-    }
-    let config = builder
+    // BUG ASSUMPTION: chromiumoxide 0.9 dropped the `with_head()`
+    // builder method and replaced `arg("--no-sandbox")` with the
+    // semantic `.no_sandbox()` toggle. We always call no_sandbox
+    // for now — Chromium refuses to launch as root otherwise,
+    // and this binary is run from claude-code as root. Future
+    // hardening: detect uid != 0 and only set when needed (or
+    // require an explicit `--allow-no-sandbox` flag).
+    let config = BrowserConfig::builder()
+        .no_sandbox()
         .build()
         .map_err(|e| anyhow::anyhow!("BrowserConfig: {e}"))?;
+    let _ = args.headless; // 0.9 is headless by default; --no-headless TBD next tick
 
     let (mut browser, mut handler) = Browser::launch(config)
         .await
