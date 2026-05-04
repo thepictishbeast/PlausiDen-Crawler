@@ -14,6 +14,7 @@ path = "src/main.rs"
 [dependencies]
 crawler-journey = { path = "../crawler-journey" }
 crawler-report = { path = "../crawler-report" }
+crawler-detectors = { path = "../crawler-detectors" }
 
 # Async runtime + HTTP/IO. tokio's `rt-multi-thread` for the
 # chromiumoxide async-stream model; `macros` for #[tokio::main];

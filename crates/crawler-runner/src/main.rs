@@ -50,8 +50,13 @@ use chromiumoxide::cdp::js_protocol::runtime::{
     EnableParams as RuntimeEnable, EventConsoleApiCalled, EventExceptionThrown,
 };
 use clap::Parser;
+use crawler_detectors::ui_overflow::{
+    detect_ui_overflow_issues, Severity as UiSeverity, UiOverflowSnapshot, UI_OVERFLOW_JS,
+};
 use crawler_journey::Step;
-use crawler_report::{CapturedEvent, EventKind, Report, ReportCounts, Viewport};
+use crawler_report::{
+    CapturedEvent, EventKind, Report, ReportCounts, Severity as ReportSeverity, Viewport,
+};
 use futures::StreamExt;
 use serde_json::json;
 use tokio::sync::Mutex;
@@ -302,7 +307,11 @@ async fn run() -> Result<ExitCode> {
         });
     }
 
-    // Run journey steps.
+    // Run journey steps. After each `wait` step (or directly
+    // after a `goto` if no following wait), run the detector
+    // axes — same cadence as the TS Crawler. Snapshot points
+    // are explicit so we capture exactly what the operator
+    // intended (the wait gives JS time to settle).
     let mut steps_ok = 0u32;
     let mut steps_failed = 0u32;
     for (i, step) in journey.steps.iter().enumerate() {
@@ -319,6 +328,14 @@ async fn run() -> Result<ExitCode> {
             Err(e) => {
                 warn!("step {} failed: {e}", i + 1);
                 steps_failed += 1;
+            }
+        }
+        // T103.2: run uiOverflow detector after every `wait` step
+        // (best snapshot moment — DOM has settled). Best-effort:
+        // detector failure does not fail the run.
+        if matches!(step, Step::Wait { .. }) {
+            if let Err(e) = capture_ui_overflow(&page, &events, started_at).await {
+                tracing::debug!("ui_overflow snapshot failed: {e}");
             }
         }
     }
@@ -376,6 +393,50 @@ async fn run() -> Result<ExitCode> {
     } else {
         Ok(ExitCode::SUCCESS)
     }
+}
+
+/// T103.2: capture a uiOverflow snapshot via raw page.evaluate,
+/// run the pure detection logic, push CapturedEvents.
+///
+/// BUG ASSUMPTION: page.evaluate runs in the page's main world.
+/// If a journey injects `addInitScript` that hijacks
+/// `window.getBoundingClientRect` etc., the snapshot will be
+/// corrupted. Today no journey does that; the detector trusts
+/// the page-side measurements.
+async fn capture_ui_overflow(
+    page: &chromiumoxide::Page,
+    events: &Arc<Mutex<Vec<CapturedEvent>>>,
+    started_at: Instant,
+) -> Result<()> {
+    let result = page.evaluate(UI_OVERFLOW_JS).await?;
+    let snap: UiOverflowSnapshot = result
+        .into_value()
+        .context("deserialize uiOverflow snapshot")?;
+    let findings = detect_ui_overflow_issues(&snap);
+    if findings.is_empty() {
+        return Ok(());
+    }
+    let t = started_at.elapsed().as_millis() as u64;
+    let mut g = events.lock().await;
+    for f in findings {
+        let severity = match f.severity {
+            UiSeverity::Strict => ReportSeverity::Strict,
+            UiSeverity::Warn => ReportSeverity::Warn,
+        };
+        g.push(CapturedEvent {
+            t,
+            kind: EventKind::UiOverflow,
+            level: None,
+            text: format!("[{}] {}", f.kind, f.detail),
+            url: None,
+            status: None,
+            stack: None,
+            impact: None,
+            rule_id: Some(f.kind),
+            severity: Some(severity),
+        });
+    }
+    Ok(())
 }
 
 async fn run_step(

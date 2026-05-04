@@ -286,6 +286,7 @@ dependencies = [
  "anyhow",
  "chromiumoxide",
  "clap",
+ "crawler-detectors",
  "crawler-journey",
  "crawler-report",
  "futures",
