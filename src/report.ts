@@ -302,10 +302,26 @@ export function compareAriaTrees(
   return out;
 }
 
-export function findPriorRun(runsDir: string, exceptPath?: string): Report | null {
+export function findPriorRun(
+  runsDir: string,
+  exceptPath?: string,
+  journeyName?: string,
+): Report | null {
   if (!existsSync(runsDir)) return null;
+  // Journey-name filter: run dirs are "<journey>-<ISO timestamp>".
+  // Without this, mobile/tablet/themes/etc runs cross-pollute each
+  // other's diff baselines. Pattern requires a digit (year) right
+  // after the prefix dash so `skillshots-poc` doesn't also match
+  // `skillshots-poc-mobile-...`. Same root cause as T16 fix —
+  // broadened from aria-tree comparison to ALL diff-axis events.
+  const journeyPattern = journeyName
+    ? new RegExp('^' + journeyName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '-\\d')
+    : null;
   const entries = readdirSync(runsDir).filter(n => !n.startsWith('.')).sort();
-  const candidates = entries.filter(n => !exceptPath || !exceptPath.endsWith(n));
+  const candidates = entries.filter(n =>
+    (!exceptPath || !exceptPath.endsWith(n))
+    && (!journeyPattern || journeyPattern.test(n)),
+  );
   const prior = candidates[candidates.length - 1];
   if (!prior) return null;
   const path = join(runsDir, prior, 'report.json');

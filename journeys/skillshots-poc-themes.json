@@ -1,0 +1,23 @@
+{
+  "name": "skillshots-poc-themes",
+  "description": "Theme-variant matrix audit — visits the index page once per Loom theme via the ?theme= URL param (added 2026-05-04 to aesthetic.js for crawler test ergonomics). Catches theme-specific contrast / overflow / focus regressions that the default-theme journey misses.",
+  "baseUrl": "http://127.0.0.1:8123",
+  "viewport": { "w": 375, "h": 812 },
+  "steps": [
+    { "kind": "goto", "url": "http://127.0.0.1:8123/?theme=dark", "label": "01-theme-dark", "timeout": 8000 },
+    { "kind": "wait", "ms": 400 },
+    { "kind": "screenshot", "label": "01-theme-dark" },
+    { "kind": "goto", "url": "http://127.0.0.1:8123/?theme=light", "label": "02-theme-light" },
+    { "kind": "wait", "ms": 400 },
+    { "kind": "screenshot", "label": "02-theme-light" },
+    { "kind": "goto", "url": "http://127.0.0.1:8123/?theme=hc-dark", "label": "03-theme-hc-dark" },
+    { "kind": "wait", "ms": 400 },
+    { "kind": "screenshot", "label": "03-theme-hc-dark" },
+    { "kind": "goto", "url": "http://127.0.0.1:8123/?theme=hc-light", "label": "04-theme-hc-light" },
+    { "kind": "wait", "ms": 400 },
+    { "kind": "screenshot", "label": "04-theme-hc-light" },
+    { "kind": "goto", "url": "http://127.0.0.1:8123/?theme=sepia", "label": "05-theme-sepia" },
+    { "kind": "wait", "ms": 400 },
+    { "kind": "screenshot", "label": "05-theme-sepia" }
+  ]
+}

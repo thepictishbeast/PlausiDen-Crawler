@@ -937,7 +937,7 @@ async function main(args: string[]): Promise<number> {
     writeFileSync(join(outDir, 'findings.txt'), renderAxeFindings(screenshotAxe));
   }
 
-  const prior = findPriorRun(runsDir, outDir);
+  const prior = findPriorRun(runsDir, outDir, journey.name);
   const diff = diffReports(report, prior);
   writeFileSync(join(outDir, 'diff.json'), JSON.stringify(diff, null, 2));
 
