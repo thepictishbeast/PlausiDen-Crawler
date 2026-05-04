@@ -20,7 +20,8 @@ export interface CapturedEvent {
     | 'ui-overflow'
     | 'runtime-contrast'
     | 'runtime-images'
-    | 'runtime-focus';
+    | 'runtime-focus'
+    | 'web-vitals';
   level?: string;
   text: string;
   url?: string;
@@ -53,6 +54,8 @@ export interface Report {
     runtimeImagesFindingsStrict: number;
     runtimeFocusFindings: number;
     runtimeFocusFindingsStrict: number;
+    webVitalsFindings: number;
+    webVitalsFindingsStrict: number;
     total: number;
     stepsOk: number;
     stepsFailed: number;
@@ -105,6 +108,12 @@ export interface Diff {
    * 2.4.7). T79 (2026-05-04).
    */
   newRuntimeFocusFindings: CapturedEvent[];
+  /**
+   * web-vitals findings new in this run vs prior. Strict =
+   * Core Web Vitals 'poor' band (LCP > 4s, CLS > 0.25, INP > 500ms).
+   * Warn = 'needs-improvement'. T45 (2026-05-04).
+   */
+  newWebVitalsFindings: CapturedEvent[];
   newlyBrokenSteps: StepResult[];
   fixedSteps: StepResult[];
 }
@@ -123,6 +132,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     newRuntimeContrastFindings: [],
     newRuntimeImagesFindings: [],
     newRuntimeFocusFindings: [],
+    newWebVitalsFindings: [],
     newlyBrokenSteps: [],
     fixedSteps: [],
   };
@@ -136,6 +146,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     out.newRuntimeContrastFindings = current.events.filter(e => e.kind === 'runtime-contrast');
     out.newRuntimeImagesFindings = current.events.filter(e => e.kind === 'runtime-images');
     out.newRuntimeFocusFindings = current.events.filter(e => e.kind === 'runtime-focus');
+    out.newWebVitalsFindings = current.events.filter(e => e.kind === 'web-vitals');
     return out;
   }
   const priorKeys = new Set(prior.events.map(key));
@@ -150,6 +161,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     else if (e.kind === 'runtime-contrast') out.newRuntimeContrastFindings.push(e);
     else if (e.kind === 'runtime-images') out.newRuntimeImagesFindings.push(e);
     else if (e.kind === 'runtime-focus') out.newRuntimeFocusFindings.push(e);
+    else if (e.kind === 'web-vitals') out.newWebVitalsFindings.push(e);
   }
   const priorStepLabels = new Map(
     prior.steps.map((s, i) => [s.step.label || `${s.step.kind}-${i}`, s])
@@ -194,6 +206,7 @@ export function renderPositiveSignal(report: Report, diff: Diff): string {
     { name: 'runtimeContrast',    total: report.counts.runtimeContrastFindings,      news: diff.newRuntimeContrastFindings.length },
     { name: 'runtimeImages',      total: report.counts.runtimeImagesFindings,        news: diff.newRuntimeImagesFindings.length },
     { name: 'runtimeFocus',       total: report.counts.runtimeFocusFindings,         news: diff.newRuntimeFocusFindings.length },
+    { name: 'webVitals',          total: report.counts.webVitalsFindings,            news: diff.newWebVitalsFindings.length },
   ];
   const lines: string[] = [];
   lines.push(`=== positive signal (${axes.length} detection axes) ===`);

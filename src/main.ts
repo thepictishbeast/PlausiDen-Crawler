@@ -39,6 +39,7 @@ interface Budget {
   newRuntimeContrastStrict: number;
   newRuntimeImagesStrict: number;
   newRuntimeFocusStrict: number;
+  newWebVitalsStrict: number;
   newlyBrokenSteps: number;
 }
 
@@ -52,6 +53,7 @@ const DEFAULT_BUDGET: Budget = {
   newRuntimeContrastStrict: 0,
   newRuntimeImagesStrict: 0,
   newRuntimeFocusStrict: 0,
+  newWebVitalsStrict: 0,
   newlyBrokenSteps: 0,
 };
 
@@ -416,6 +418,51 @@ async function main(args: string[]): Promise<number> {
    * runtime DOM mutations.
    */
   /**
+   * T45: web-vitals detector. webVitals.ts already injects Google's
+   * library at context init; we collect after each goto and convert
+   * poor-band measurements into events.
+   *
+   * Thresholds match Google Core Web Vitals (good < 2.5s LCP, etc.).
+   * Strict-fail any 'poor' band; warn 'needs-improvement'.
+   */
+  const webVitalsByStep: Array<{ stepLabel: string; pageUrl: string; vitals: any }> = [];
+  const checkWebVitals = async (afterLabel: string) => {
+    try {
+      const snap = await collectVitals(page);
+      webVitalsByStep.push({ stepLabel: afterLabel, pageUrl: page.url(), vitals: snap });
+      const checks: Array<{ name: 'lcp' | 'cls' | 'inp'; m?: { value: number; band: string } }> = [
+        { name: 'lcp', m: snap.lcp },
+        { name: 'cls', m: snap.cls },
+        { name: 'inp', m: snap.inp },
+      ];
+      for (const c of checks) {
+        if (!c.m) continue;
+        if (c.m.band === 'poor') {
+          log({
+            kind: 'web-vitals',
+            text: `[vitals.${c.name}-poor] ${c.name.toUpperCase()}=${c.m.value} on ${afterLabel}`,
+            url: page.url(),
+            severity: 'strict',
+            ruleId: `vitals.${c.name}-poor`,
+            impact: 'serious',
+          });
+        } else if (c.m.band === 'needs-improvement') {
+          log({
+            kind: 'web-vitals',
+            text: `[vitals.${c.name}-nti] ${c.name.toUpperCase()}=${c.m.value} on ${afterLabel}`,
+            url: page.url(),
+            severity: 'warn',
+            ruleId: `vitals.${c.name}-nti`,
+            impact: 'minor',
+          });
+        }
+      }
+    } catch (e) {
+      // Silent — web-vitals may not have fired yet.
+    }
+  };
+
+  /**
    * T79: runtime focus-visible detector. WCAG 2.4.7 AA.
    * Programmatically focuses every interactive element and
    * compares before/after computed styles — catches outline:0
@@ -729,6 +776,7 @@ async function main(args: string[]): Promise<number> {
       await checkRuntimeContrast(step.label || `goto-${i}`);
       await checkRuntimeImages(step.label || `goto-${i}`);
       await checkRuntimeFocus(step.label || `goto-${i}`);
+      await checkWebVitals(step.label || `goto-${i}`);
     }
     // Memory snapshot at end of each step so the report shows heap growth
     // across the journey. Cheap (one page.evaluate call).
@@ -796,6 +844,8 @@ async function main(args: string[]): Promise<number> {
       runtimeImagesFindingsStrict: events.filter(e => e.kind === 'runtime-images' && e.severity === 'strict').length,
       runtimeFocusFindings: events.filter(e => e.kind === 'runtime-focus').length,
       runtimeFocusFindingsStrict: events.filter(e => e.kind === 'runtime-focus' && e.severity === 'strict').length,
+      webVitalsFindings: events.filter(e => e.kind === 'web-vitals').length,
+      webVitalsFindingsStrict: events.filter(e => e.kind === 'web-vitals' && e.severity === 'strict').length,
       total: events.length,
       stepsOk: stepResults.filter(s => s.ok).length,
       stepsFailed: stepResults.filter(s => !s.ok).length,
@@ -838,6 +888,12 @@ async function main(args: string[]): Promise<number> {
       JSON.stringify(runtimeFocusFindingsByStep, null, 2),
     );
   }
+  if (webVitalsByStep.length > 0) {
+    writeFileSync(
+      join(outDir, 'web-vitals.json'),
+      JSON.stringify(webVitalsByStep, null, 2),
+    );
+  }
   writeFileSync(join(outDir, 'report.json'), JSON.stringify(report, null, 2));
   // Write a terminal-friendly summary too so CI output is useful at a glance.
   writeFileSync(join(outDir, 'summary.txt'), renderSummary(agg));
@@ -864,6 +920,7 @@ async function main(args: string[]): Promise<number> {
   console.log(`  runtime contrast:  ${report.counts.runtimeContrastFindings} (strict ${report.counts.runtimeContrastFindingsStrict})`);
   console.log(`  runtime images:    ${report.counts.runtimeImagesFindings} (strict ${report.counts.runtimeImagesFindingsStrict})`);
   console.log(`  runtime focus:     ${report.counts.runtimeFocusFindings} (strict ${report.counts.runtimeFocusFindingsStrict})`);
+  console.log(`  web vitals:        ${report.counts.webVitalsFindings} (strict ${report.counts.webVitalsFindingsStrict})`);
   console.log(`  steps ok/failed:   ${report.counts.stepsOk}/${report.counts.stepsFailed}`);
   if (prior) {
     console.log(`  diff vs prior run (${prior.journey}):`);
@@ -886,6 +943,9 @@ async function main(args: string[]): Promise<number> {
     const newRuntimeFocusStrict = diff.newRuntimeFocusFindings.filter(e => e.severity === 'strict').length;
     const newRuntimeFocusWarn = diff.newRuntimeFocusFindings.length - newRuntimeFocusStrict;
     console.log(`    NEW runtime focus:    ${diff.newRuntimeFocusFindings.length} (strict ${newRuntimeFocusStrict}, warn ${newRuntimeFocusWarn})`);
+    const newWebVitalsStrict = diff.newWebVitalsFindings.filter(e => e.severity === 'strict').length;
+    const newWebVitalsWarn = diff.newWebVitalsFindings.length - newWebVitalsStrict;
+    console.log(`    NEW web vitals:       ${diff.newWebVitalsFindings.length} (strict ${newWebVitalsStrict}, warn ${newWebVitalsWarn})`);
     console.log(`    newly broken steps:   ${diff.newlyBrokenSteps.length}`);
     console.log(`    fixed steps:          ${diff.fixedSteps.length}`);
   } else {
@@ -897,6 +957,7 @@ async function main(args: string[]): Promise<number> {
   const newRuntimeContrastStrictCount = diff.newRuntimeContrastFindings.filter(e => e.severity === 'strict').length;
   const newRuntimeImagesStrictCount = diff.newRuntimeImagesFindings.filter(e => e.severity === 'strict').length;
   const newRuntimeFocusStrictCount = diff.newRuntimeFocusFindings.filter(e => e.severity === 'strict').length;
+  const newWebVitalsStrictCount = diff.newWebVitalsFindings.filter(e => e.severity === 'strict').length;
   const overBudget =
     diff.newConsoleErrors.length > DEFAULT_BUDGET.newConsoleErrors
     || diff.newPageErrors.length > DEFAULT_BUDGET.newPageErrors
@@ -907,6 +968,7 @@ async function main(args: string[]): Promise<number> {
     || newRuntimeContrastStrictCount > DEFAULT_BUDGET.newRuntimeContrastStrict
     || newRuntimeImagesStrictCount > DEFAULT_BUDGET.newRuntimeImagesStrict
     || newRuntimeFocusStrictCount > DEFAULT_BUDGET.newRuntimeFocusStrict
+    || newWebVitalsStrictCount > DEFAULT_BUDGET.newWebVitalsStrict
     || diff.newlyBrokenSteps.length > DEFAULT_BUDGET.newlyBrokenSteps;
 
   // T2: positive-signal report — make the silent-pass state legible.
