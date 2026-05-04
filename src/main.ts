@@ -914,8 +914,22 @@ async function main(args: string[]): Promise<number> {
   // detector flags. Findings are emitted into the events stream so
   // the diff axes carry them on next run.
   if (prior) {
+    // T16 fix: filter prior-run candidates by EXACT journey name.
+    // Run dirs are named "<journey>-<ISO timestamp>" where the timestamp
+    // starts with a digit (year). startsWith(journey.name + '-') alone
+    // would also match `skillshots-poc-mobile-...` for journey
+    // `skillshots-poc`, since 'mobile' starts after the dash. Pin
+    // with a regex that requires a digit immediately after the prefix.
+    const journeyPattern = new RegExp('^' + journey.name.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&') + '-\\d');
     const priorRunDir = (() => {
-      const entries = readdirSync(runsDir).filter((n: string) => !n.startsWith('.') && n !== outDir.split('/').pop()).sort();
+      const currentBase = outDir.split('/').pop() || '';
+      const entries = readdirSync(runsDir)
+        .filter((n: string) =>
+          !n.startsWith('.')
+          && n !== currentBase
+          && journeyPattern.test(n),
+        )
+        .sort();
       return entries.length > 0 ? join(runsDir, entries[entries.length - 1]) : null;
     })();
     if (priorRunDir) {
