@@ -18,7 +18,8 @@ export interface CapturedEvent {
     | 'a11y-violation'
     | 'css-health'
     | 'ui-overflow'
-    | 'runtime-contrast';
+    | 'runtime-contrast'
+    | 'runtime-images';
   level?: string;
   text: string;
   url?: string;
@@ -47,6 +48,8 @@ export interface Report {
     uiOverflowFindingsStrict: number;
     runtimeContrastFindings: number;
     runtimeContrastFindingsStrict: number;
+    runtimeImagesFindings: number;
+    runtimeImagesFindingsStrict: number;
     total: number;
     stepsOk: number;
     stepsFailed: number;
@@ -88,6 +91,11 @@ export interface Diff {
    * T29 (2026-05-04).
    */
   newRuntimeContrastFindings: CapturedEvent[];
+  /**
+   * runtime-images findings new in this run vs prior. Strict =
+   * broken/empty-src/missing-alt; warn = CLS-risk. T75 (2026-05-04).
+   */
+  newRuntimeImagesFindings: CapturedEvent[];
   newlyBrokenSteps: StepResult[];
   fixedSteps: StepResult[];
 }
@@ -104,6 +112,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     newCssHealthFindings: [],
     newUiOverflowFindings: [],
     newRuntimeContrastFindings: [],
+    newRuntimeImagesFindings: [],
     newlyBrokenSteps: [],
     fixedSteps: [],
   };
@@ -115,6 +124,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     out.newCssHealthFindings = current.events.filter(e => e.kind === 'css-health');
     out.newUiOverflowFindings = current.events.filter(e => e.kind === 'ui-overflow');
     out.newRuntimeContrastFindings = current.events.filter(e => e.kind === 'runtime-contrast');
+    out.newRuntimeImagesFindings = current.events.filter(e => e.kind === 'runtime-images');
     return out;
   }
   const priorKeys = new Set(prior.events.map(key));
@@ -127,6 +137,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     else if (e.kind === 'css-health') out.newCssHealthFindings.push(e);
     else if (e.kind === 'ui-overflow') out.newUiOverflowFindings.push(e);
     else if (e.kind === 'runtime-contrast') out.newRuntimeContrastFindings.push(e);
+    else if (e.kind === 'runtime-images') out.newRuntimeImagesFindings.push(e);
   }
   const priorStepLabels = new Map(
     prior.steps.map((s, i) => [s.step.label || `${s.step.kind}-${i}`, s])
