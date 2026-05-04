@@ -1,0 +1,24 @@
+{
+  "name": "css-health-fixtures",
+  "description": "Drives the cssHealth detector across known-broken fixtures so every detection arm is exercised. CI gate: each fixture page must produce its expected finding kind, and the control page must produce none.",
+  "baseUrl": "http://127.0.0.1:8766",
+  "viewport": { "width": 1280, "height": 800 },
+  "steps": [
+    { "kind": "goto", "url": "http://127.0.0.1:8766/working/", "screenshot": "01-working" },
+    { "kind": "goto", "url": "http://127.0.0.1:8766/missing/", "screenshot": "02-missing" },
+    { "kind": "goto", "url": "http://127.0.0.1:8766/partial/", "screenshot": "03-partial" },
+    { "kind": "goto", "url": "http://127.0.0.1:8766/empty/", "screenshot": "04-empty" },
+    { "kind": "goto", "url": "http://127.0.0.1:8766/wrongmime/", "screenshot": "05-wrongmime" },
+    { "kind": "goto", "url": "http://127.0.0.1:8766/parsefail/", "screenshot": "06-parsefail" },
+    { "kind": "goto", "url": "http://127.0.0.1:8766/no-stylesheets/", "screenshot": "07-no-stylesheets" }
+  ],
+  "expectedFindingsByPath": {
+    "/working/": [],
+    "/missing/": ["css.all-sheets-failed-network"],
+    "/partial/": ["css.some-sheets-failed-network"],
+    "/empty/": ["css.empty-or-tiny-body"],
+    "/wrongmime/": ["css.wrong-mime"],
+    "/parsefail/": ["css.served-but-not-applied", "css.applied-rule-count-anomaly", "css.brace-vs-applied-mismatch", "css.brace-imbalance"],
+    "/no-stylesheets/": ["css.no-stylesheets-declared"]
+  }
+}
