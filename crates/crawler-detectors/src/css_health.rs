@@ -287,7 +287,11 @@ pub fn detect_css_health_issues(snap: &CssHealthSnapshot) -> Vec<crate::AxisFind
 
     // Heuristic 1: declared-sheet network failures.
     if !snap.declared_sheets.is_empty() {
-        let failed_count = snap.declared_sheets.iter().filter(|s| sheet_failed_network(s)).count();
+        let failed_count = snap
+            .declared_sheets
+            .iter()
+            .filter(|s| sheet_failed_network(s))
+            .count();
         let total = snap.declared_sheets.len();
         if failed_count == total {
             out.push(crate::AxisFinding {
@@ -301,9 +305,7 @@ pub fn detect_css_health_issues(snap: &CssHealthSnapshot) -> Vec<crate::AxisFind
             out.push(crate::AxisFinding {
                 severity: crate::AxisSeverity::Strict,
                 kind: "css.some-sheets-failed-network".to_owned(),
-                detail: format!(
-                    "{failed_count} of {total} declared stylesheet(s) failed to load."
-                ),
+                detail: format!("{failed_count} of {total} declared stylesheet(s) failed to load."),
             });
         }
 
@@ -580,7 +582,9 @@ mod tests {
             applied_rule_count_estimate: 0,
         };
         let findings = detect_css_health_issues(&snap);
-        assert!(findings.iter().any(|f| f.kind == "css.all-sheets-failed-network"));
+        assert!(findings
+            .iter()
+            .any(|f| f.kind == "css.all-sheets-failed-network"));
     }
 
     #[test]
@@ -659,9 +663,11 @@ mod tests {
         };
         let findings = detect_css_health_issues(&snap);
         assert!(
-            findings.iter().any(|f| f.kind == "css.served-but-not-applied"
-                || f.kind == "css.applied-rule-count-anomaly"
-                || f.kind == "css.brace-imbalance"),
+            findings
+                .iter()
+                .any(|f| f.kind == "css.served-but-not-applied"
+                    || f.kind == "css.applied-rule-count-anomaly"
+                    || f.kind == "css.brace-imbalance"),
             "got: {:?}",
             findings.iter().map(|f| &f.kind).collect::<Vec<_>>()
         );
@@ -721,7 +727,9 @@ mod tests {
             applied_rule_count_estimate: 80,
         };
         let findings = detect_css_health_issues(&snap);
-        assert!(findings.iter().any(|f| f.kind == "css.some-sheets-failed-network"));
+        assert!(findings
+            .iter()
+            .any(|f| f.kind == "css.some-sheets-failed-network"));
     }
 
     #[test]

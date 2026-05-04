@@ -311,8 +311,7 @@ pub async fn spawn_raw_cdp_capture(
                     if let Some(ref url) = url_opt {
                         let mut net = network.lock().await;
                         let entry = net.entry(url.clone()).or_default();
-                        entry.status =
-                            u16::try_from(status_u).unwrap_or(u16::MAX);
+                        entry.status = u16::try_from(status_u).unwrap_or(u16::MAX);
                         entry.content_type = content_type;
                     }
                     // Status >= 400 → ResponseError.
@@ -336,9 +335,7 @@ pub async fn spawn_raw_cdp_capture(
                     }
                 }
                 "Network.loadingFinished" => {
-                    let req_id = params
-                        .get("requestId")
-                        .and_then(|s| s.as_str());
+                    let req_id = params.get("requestId").and_then(|s| s.as_str());
                     let encoded = params
                         .get("encodedDataLength")
                         .and_then(|n| n.as_f64())

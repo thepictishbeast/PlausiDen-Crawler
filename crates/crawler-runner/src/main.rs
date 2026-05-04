@@ -193,14 +193,10 @@ async fn run() -> Result<ExitCode> {
     // T102.4: spawn raw-CDP capture BEFORE creating the page so
     // we don't miss the about:blank → user-target attach.
     let ws_url = browser.websocket_address().clone();
-    let raw_capture = cdp_raw::spawn_raw_cdp_capture(
-        ws_url,
-        events.clone(),
-        network.clone(),
-        started_at,
-    )
-    .await
-    .context("starting raw-CDP capture")?;
+    let raw_capture =
+        cdp_raw::spawn_raw_cdp_capture(ws_url, events.clone(), network.clone(), started_at)
+            .await
+            .context("starting raw-CDP capture")?;
 
     let page = browser
         .new_page("about:blank")
@@ -372,9 +368,7 @@ async fn run() -> Result<ExitCode> {
             if let Err(e) = capture_runtime_focus(&page, &events, started_at).await {
                 tracing::debug!("runtime_focus snapshot failed: {e}");
             }
-            if let Err(e) =
-                capture_css_health(&page, &events, &network, started_at).await
-            {
+            if let Err(e) = capture_css_health(&page, &events, &network, started_at).await {
                 tracing::debug!("css_health snapshot failed: {e}");
             }
         }
@@ -612,8 +606,7 @@ async fn capture_css_health(
         )
     } else {
         let raw_val = page.evaluate(brace_counts_js(&declared_hrefs)).await?;
-        let raw: BraceCountsRaw =
-            raw_val.into_value().context("deserialize brace counts")?;
+        let raw: BraceCountsRaw = raw_val.into_value().context("deserialize brace counts")?;
         split_close_braces(raw)
     };
 
@@ -631,9 +624,7 @@ async fn capture_css_health(
         body: ComputedBody,
         html: ComputedHtml,
     }
-    let cs: ComputedStylesRaw = cs_val
-        .into_value()
-        .context("deserialize computed styles")?;
+    let cs: ComputedStylesRaw = cs_val.into_value().context("deserialize computed styles")?;
 
     // (5) body visible text length.
     let body_len_val = page.evaluate(BODY_VISIBLE_TEXT_LENGTH_JS).await?;
