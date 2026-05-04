@@ -172,9 +172,7 @@ pub struct RuntimeLandmarksSnapshot {
 
 /// Apply detection rules to a runtime-landmarks snapshot.
 #[must_use]
-pub fn detect_runtime_landmarks_issues(
-    snap: &RuntimeLandmarksSnapshot,
-) -> Vec<crate::AxisFinding> {
+pub fn detect_runtime_landmarks_issues(snap: &RuntimeLandmarksSnapshot) -> Vec<crate::AxisFinding> {
     let mut out = Vec::<crate::AxisFinding>::new();
 
     if snap.main_count == 0 {
