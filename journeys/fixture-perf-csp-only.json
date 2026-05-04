@@ -1,0 +1,11 @@
+{
+  "name": "fixture-perf-csp-only",
+  "description": "T84 isolation test: only the CSP route. If this fires cspViolations and the full perf-csp journey doesn't, the bug is multi-navigation related.",
+  "baseUrl": "http://127.0.0.1:8312",
+  "viewport": { "w": 1280, "h": 800 },
+  "steps": [
+    { "kind": "goto",       "url": "http://127.0.0.1:8312/csp-violation/", "label": "01-csp-only" },
+    { "kind": "wait",       "ms": 1500 },
+    { "kind": "screenshot", "label": "01-csp-only" }
+  ]
+}

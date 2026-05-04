@@ -774,6 +774,70 @@ async function main(args: string[]): Promise<number> {
     client.on('Network.webSocketFrameError', (ev: any) => {
       log({ kind: 'pageerror', text: `WebSocket frame error: ${ev?.errorMessage || 'unknown'}` });
     });
+    // T84: CSP violations via CDP Audits domain. The DOM
+    // 'securitypolicyviolation' event listener installed in
+    // addInitScript above proved unreliable in Playwright's
+    // headless Chromium — the listener attaches to a transient
+    // document at document_start, the meta-CSP / header-CSP
+    // block fires the violation against a Document object that
+    // gets torn down before our exposeFunction binding is
+    // visible. The Audits domain is connection-scoped (lives on
+    // the CDPSession) and surfaces every violation via
+    // Audits.issueAdded with code='ContentSecurityPolicyIssue'.
+    // T72 fixture-perf-csp /csp-violation/ confirms the route
+    // produces the event when Audits is enabled.
+    try {
+      await client.send('Audits.enable');
+      let issueCount = 0;
+      client.on('Audits.issueAdded', (ev: any) => {
+        issueCount++;
+        const issue = ev?.issue;
+        const code = issue?.code || 'unknown';
+        if (code !== 'ContentSecurityPolicyIssue') return;
+        const d = issue?.details?.cspIssueDetails || {};
+        const directive = String(d.violatedDirective || 'unknown');
+        const blocked = String(d.blockedURL || d.sourceCodeLocation?.url || 'inline');
+        const violationType = String(d.contentSecurityPolicyViolationType || 'unknown');
+        log({
+          kind: 'csp-violation',
+          text: `[csp.${directive}] ${violationType} blocked ${blocked}`,
+          url: d.sourceCodeLocation?.url || '',
+          severity: 'strict',
+          ruleId: `csp.${directive}`,
+          impact: 'serious',
+        });
+      });
+    } catch { /* Audits domain unavailable */ }
+    // T84 second-line: CDP Log.entryAdded captures Chromium's
+    // internal browser-emitted log entries — including CSP-block
+    // notices that don't surface through page.on('console') in
+    // headless mode. Catches what Audits misses.
+    try {
+      await client.send('Log.enable');
+      client.on('Log.entryAdded', (ev: any) => {
+        const entry = ev?.entry;
+        if (!entry) return;
+        // Only interested in CSP-relevant log entries here. The
+        // `source` field on Chromium log entries is one of:
+        //   xml | javascript | network | storage | appcache |
+        //   rendering | security | deprecation | worker |
+        //   violation | intervention | recommendation | other
+        // CSP enforcement lands in `security` source with text
+        // starting "Refused to" or "Content Security Policy".
+        const src = String(entry.source || '');
+        const txt = String(entry.text || '');
+        if (src === 'security' && /content security policy|refused to (execute|load|connect|frame|run)/i.test(txt)) {
+          log({
+            kind: 'csp-violation',
+            text: `[csp.${src}] ${txt}`,
+            url: String(entry.url || ''),
+            severity: 'strict',
+            ruleId: 'csp.cdp-log',
+            impact: 'serious',
+          });
+        }
+      });
+    } catch { /* Log domain unavailable */ }
   } catch { /* CDP unavailable on some platforms */ }
 
   // Execute each step sequentially. Screenshot steps are handled inline
