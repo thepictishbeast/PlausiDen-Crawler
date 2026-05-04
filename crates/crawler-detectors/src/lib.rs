@@ -41,6 +41,7 @@ use serde::{Deserialize, Serialize};
 
 pub mod css_health;
 pub mod heading_order;
+pub mod link_text;
 pub mod runtime_contrast;
 pub mod runtime_focus;
 pub mod runtime_images;

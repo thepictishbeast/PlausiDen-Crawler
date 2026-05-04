@@ -30,6 +30,7 @@ import { captureRuntimeImagesSnapshot, detectRuntimeImageIssues, type RuntimeIma
 import { captureRuntimeFocusSnapshot, detectRuntimeFocusIssues, type RuntimeFocusFinding } from './runtimeFocus.js';
 import { captureHeadingOrderSnapshot, detectHeadingOrderIssues, type HeadingOrderFinding } from './headingOrder.js';
 import { captureRuntimeLandmarksSnapshot, detectRuntimeLandmarksIssues, type RuntimeLandmarksFinding } from './runtimeLandmarks.js';
+import { captureLinkTextSnapshot, detectLinkTextIssues, type LinkTextFinding } from './linkText.js';
 
 interface Budget {
   newConsoleErrors: number;
@@ -737,6 +738,31 @@ async function main(args: string[]): Promise<number> {
   };
 
   /**
+   * T106: link-text detector. WCAG 2.4.4 link purpose. Mirrors
+   * crates/crawler-detectors/src/link_text.rs.
+   */
+  const linkTextFindingsByStep: Array<{ stepLabel: string; pageUrl: string; findings: LinkTextFinding[] }> = [];
+  const checkLinkText = async (afterLabel: string) => {
+    try {
+      const snap = await captureLinkTextSnapshot(page);
+      const findings = detectLinkTextIssues(snap);
+      linkTextFindingsByStep.push({ stepLabel: afterLabel, pageUrl: snap.pageUrl, findings });
+      for (const f of findings) {
+        log({
+          kind: 'link-text',
+          text: `[${f.kind}] ${f.detail}`,
+          url: snap.pageUrl,
+          severity: f.severity,
+          ruleId: f.kind,
+          impact: f.severity === 'strict' ? 'serious' : 'minor',
+        });
+      }
+    } catch (e) {
+      log({ kind: 'pageerror', text: `[linkText] detector threw on ${afterLabel}: ${(e as Error).message}` });
+    }
+  };
+
+  /**
    * T75: runtime image-health detector. Catches broken / empty /
    * missing-alt / CLS-risk images at the rendered DOM level.
    */
@@ -1111,6 +1137,7 @@ async function main(args: string[]): Promise<number> {
       await checkRuntimeFocus(step.label || `goto-${i}`);
       await checkHeadingOrder(step.label || `goto-${i}`);
       await checkRuntimeLandmarks(step.label || `goto-${i}`);
+      await checkLinkText(step.label || `goto-${i}`);
       await checkWebVitals(step.label || `goto-${i}`);
     }
     // Memory snapshot at end of each step so the report shows heap growth

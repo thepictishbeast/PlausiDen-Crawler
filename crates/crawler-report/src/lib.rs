@@ -71,6 +71,9 @@ pub enum EventKind {
     /// runtimeLandmarks detector — main/banner/contentinfo
     /// uniqueness + same-role nesting.
     RuntimeLandmarks,
+    /// linkText detector — WCAG 2.4.4 link purpose: empty +
+    /// generic link text.
+    LinkText,
 }
 
 /// Severity of a finding-bucketed event (cssHealth / uiOverflow

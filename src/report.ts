@@ -145,6 +145,12 @@ export interface Diff {
    * or same-role nesting (<main><main>). T105 (TS port).
    */
   newRuntimeLandmarksFindings: CapturedEvent[];
+  /**
+   * link-text findings new in this run vs prior. Strict = visible
+   * link with no accessible name; warn = generic phrases (click
+   * here / read more / etc.). WCAG 2.4.4. T106 (TS port).
+   */
+  newLinkTextFindings: CapturedEvent[];
   newlyBrokenSteps: StepResult[];
   fixedSteps: StepResult[];
 }
@@ -171,6 +177,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     newAriaDriftFindings: [],
     newHeadingOrderFindings: [],
     newRuntimeLandmarksFindings: [],
+    newLinkTextFindings: [],
     newlyBrokenSteps: [],
     fixedSteps: [],
   };
@@ -188,6 +195,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     out.newCspViolations = current.events.filter(e => e.kind === 'csp-violation');
     out.newHeadingOrderFindings = current.events.filter(e => e.kind === 'heading-order');
     out.newRuntimeLandmarksFindings = current.events.filter(e => e.kind === 'runtime-landmarks');
+    out.newLinkTextFindings = current.events.filter(e => e.kind === 'link-text');
     return out;
   }
   const priorKeys = new Set(prior.events.map(key));
@@ -206,6 +214,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     else if (e.kind === 'csp-violation') out.newCspViolations.push(e);
     else if (e.kind === 'heading-order') out.newHeadingOrderFindings.push(e);
     else if (e.kind === 'runtime-landmarks') out.newRuntimeLandmarksFindings.push(e);
+    else if (e.kind === 'link-text') out.newLinkTextFindings.push(e);
   }
   const priorStepLabels = new Map(
     prior.steps.map((s, i) => [s.step.label || `${s.step.kind}-${i}`, s])
@@ -290,6 +299,14 @@ export function renderPositiveSignal(report: Report, diff: Diff): string {
       total: report.events.filter((e) => e.kind === 'runtime-landmarks').length,
       news: diff.newRuntimeLandmarksFindings.length,
       strictNews: strict(diff.newRuntimeLandmarksFindings),
+    },
+    {
+      // T106 (TS port): link_text — empty + generic link text.
+      // WCAG 2.4.4. Mirrors crates/crawler-detectors/src/link_text.rs.
+      name: 'linkText',
+      total: report.events.filter((e) => e.kind === 'link-text').length,
+      news: diff.newLinkTextFindings.length,
+      strictNews: strict(diff.newLinkTextFindings),
     },
   ];
   const lines: string[] = [];
