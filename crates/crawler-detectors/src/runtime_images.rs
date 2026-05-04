@@ -176,8 +176,15 @@ mod tests {
 
     #[test]
     fn js_returns_required_keys() {
-        for k in ["vpW", "vpH", "totalImages", "broken", "emptySrc",
-                  "missingAlt", "clsRisk"] {
+        for k in [
+            "vpW",
+            "vpH",
+            "totalImages",
+            "broken",
+            "emptySrc",
+            "missingAlt",
+            "clsRisk",
+        ] {
             assert!(RUNTIME_IMAGES_JS.contains(k), "missing key: {k}");
         }
     }

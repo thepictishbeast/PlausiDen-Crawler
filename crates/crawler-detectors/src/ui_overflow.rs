@@ -186,8 +186,15 @@ mod tests {
 
     #[test]
     fn js_returns_required_keys() {
-        for k in ["vpW", "vpH", "docScrollWidth", "docClientWidth",
-                  "bleedingElements", "textClippedElements", "smallTapTargets"] {
+        for k in [
+            "vpW",
+            "vpH",
+            "docScrollWidth",
+            "docClientWidth",
+            "bleedingElements",
+            "textClippedElements",
+            "smallTapTargets",
+        ] {
             assert!(UI_OVERFLOW_JS.contains(k), "missing key: {k}");
         }
     }

@@ -367,9 +367,7 @@ mod tests {
         let s: Step = serde_json::from_str(json).expect("parse");
         match s {
             Step::WaitForSelector {
-                selector,
-                timeout,
-                ..
+                selector, timeout, ..
             } => {
                 assert_eq!(selector, "#main");
                 assert_eq!(timeout, Some(5000));
@@ -383,13 +381,55 @@ mod tests {
         // Round-trip every variant through (de)serialization to
         // confirm the JSON tag matches what the TS Crawler writes.
         let cases: &[(&str, Step)] = &[
-            ("goto", Step::Goto { url: "x".into(), timeout: None, label: None, screenshot: None }),
-            ("wait", Step::Wait { ms: 100, label: None }),
+            (
+                "goto",
+                Step::Goto {
+                    url: "x".into(),
+                    timeout: None,
+                    label: None,
+                    screenshot: None,
+                },
+            ),
+            (
+                "wait",
+                Step::Wait {
+                    ms: 100,
+                    label: None,
+                },
+            ),
             ("screenshot", Step::Screenshot { label: "x".into() }),
-            ("click", Step::Click { selector: "x".into(), timeout: None, label: None }),
-            ("press", Step::Press { key: "Tab".into(), selector: None, label: None }),
-            ("scroll", Step::Scroll { selector: None, position: None, label: None }),
-            ("waitForSelector", Step::WaitForSelector { selector: "x".into(), timeout: None, label: None }),
+            (
+                "click",
+                Step::Click {
+                    selector: "x".into(),
+                    timeout: None,
+                    label: None,
+                },
+            ),
+            (
+                "press",
+                Step::Press {
+                    key: "Tab".into(),
+                    selector: None,
+                    label: None,
+                },
+            ),
+            (
+                "scroll",
+                Step::Scroll {
+                    selector: None,
+                    position: None,
+                    label: None,
+                },
+            ),
+            (
+                "waitForSelector",
+                Step::WaitForSelector {
+                    selector: "x".into(),
+                    timeout: None,
+                    label: None,
+                },
+            ),
             ("discover", Step::Discover { label: None }),
             ("probe", Step::Probe { label: None }),
         ];

@@ -274,7 +274,13 @@ mod tests {
         // are removed accidentally, deserialisation into
         // RuntimeContrastSnapshot will fail at runtime — fail
         // here at compile/test time instead.
-        for key in ["vpW", "vpH", "textNodesScanned", "totalContrastPairs", "failingOffenders"] {
+        for key in [
+            "vpW",
+            "vpH",
+            "textNodesScanned",
+            "totalContrastPairs",
+            "failingOffenders",
+        ] {
             assert!(
                 RUNTIME_CONTRAST_JS.contains(key),
                 "JS eval missing expected return key: {key}"

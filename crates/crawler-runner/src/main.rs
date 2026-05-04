@@ -51,9 +51,7 @@ use chromiumoxide::cdp::js_protocol::runtime::{
 };
 use clap::Parser;
 use crawler_journey::Step;
-use crawler_report::{
-    CapturedEvent, EventKind, Report, ReportCounts, Viewport,
-};
+use crawler_report::{CapturedEvent, EventKind, Report, ReportCounts, Viewport};
 use futures::StreamExt;
 use serde_json::json;
 use tokio::sync::Mutex;
@@ -169,13 +167,9 @@ async fn run() -> Result<ExitCode> {
     // T102.4: spawn raw-CDP capture BEFORE creating the page so
     // we don't miss the about:blank → user-target attach.
     let ws_url = browser.websocket_address().clone();
-    let raw_capture = cdp_raw::spawn_raw_cdp_capture(
-        ws_url,
-        events.clone(),
-        started_at,
-    )
-    .await
-    .context("starting raw-CDP capture")?;
+    let raw_capture = cdp_raw::spawn_raw_cdp_capture(ws_url, events.clone(), started_at)
+        .await
+        .context("starting raw-CDP capture")?;
 
     let page = browser
         .new_page("about:blank")
@@ -423,7 +417,9 @@ async fn run_step(
                 escape_js_string(&key_text)
             ).as_str()).await?;
         }
-        Step::Scroll { selector, position, .. } => {
+        Step::Scroll {
+            selector, position, ..
+        } => {
             // MVP: scroll page to position (top / bottom / pixel).
             let pos = position.as_deref().unwrap_or("bottom");
             let js = match (selector.as_deref(), pos) {
@@ -458,11 +454,7 @@ async fn run_step(
     Ok(())
 }
 
-fn compute_counts(
-    events: &[CapturedEvent],
-    steps_ok: u32,
-    steps_failed: u32,
-) -> ReportCounts {
+fn compute_counts(events: &[CapturedEvent], steps_ok: u32, steps_failed: u32) -> ReportCounts {
     let mut c = ReportCounts {
         steps_ok,
         steps_failed,
@@ -503,11 +495,15 @@ fn iso_ts() -> String {
     let mins = (secs / 60) % 60;
     let hours = (secs / 3600) % 24;
     let day_secs = secs % 60;
-    format!("{:04}-{:02}-{:02}T{:02}-{:02}-{:02}Z",
+    format!(
+        "{:04}-{:02}-{:02}T{:02}-{:02}-{:02}Z",
         1970 + (secs / 31_557_600) as u32,
         ((secs / 2_629_800) % 12) + 1,
         ((secs / 86_400) % 31) + 1,
-        hours, mins, day_secs)
+        hours,
+        mins,
+        day_secs
+    )
 }
 
 fn epoch_millis() -> u64 {

@@ -65,18 +65,18 @@ pub async fn spawn_raw_cdp_capture(
     // the BROWSER session (sessionId omitted). For TARGET
     // sessions, the auto-attach hook re-enables on attach.
     let mut next_id: u64 = 1;
-    let mut send_cmd = |id: u64, method: &str, params: Value, session_id: Option<&str>|
-        -> Result<Message> {
-        let mut req = json!({
-            "id": id,
-            "method": method,
-            "params": params,
-        });
-        if let Some(sid) = session_id {
-            req["sessionId"] = Value::String(sid.to_owned());
-        }
-        Ok(Message::Text(req.to_string().into()))
-    };
+    let mut send_cmd =
+        |id: u64, method: &str, params: Value, session_id: Option<&str>| -> Result<Message> {
+            let mut req = json!({
+                "id": id,
+                "method": method,
+                "params": params,
+            });
+            if let Some(sid) = session_id {
+                req["sessionId"] = Value::String(sid.to_owned());
+            }
+            Ok(Message::Text(req.to_string().into()))
+        };
 
     // setAutoAttach on the root session
     let m = send_cmd(
@@ -111,8 +111,7 @@ pub async fn spawn_raw_cdp_capture(
     let handle = tokio::spawn(async move {
         let mut response_url_by_request: std::collections::HashMap<String, String> =
             std::collections::HashMap::new();
-        let mut seen_sessions: std::collections::HashSet<String> =
-            std::collections::HashSet::new();
+        let mut seen_sessions: std::collections::HashSet<String> = std::collections::HashSet::new();
         while let Some(msg) = reader.next().await {
             let msg = match msg {
                 Ok(m) => m,
@@ -150,7 +149,12 @@ pub async fn spawn_raw_cdp_capture(
                 if let Some(sid) = params.get("sessionId").and_then(|s| s.as_str()) {
                     if seen_sessions.insert(sid.to_owned()) {
                         // Send enables on this child session.
-                        let enables = ["Network.enable", "Runtime.enable", "Audits.enable", "Log.enable"];
+                        let enables = [
+                            "Network.enable",
+                            "Runtime.enable",
+                            "Audits.enable",
+                            "Log.enable",
+                        ];
                         for (i, m) in enables.iter().enumerate() {
                             let req = json!({
                                 "id": 100_000 + (seen_sessions.len() * 10 + i) as u64,
@@ -208,16 +212,17 @@ pub async fn spawn_raw_cdp_capture(
                     .await;
                 }
                 "Runtime.exceptionThrown" => {
-                    let details = params.get("exceptionDetails").cloned().unwrap_or(Value::Null);
+                    let details = params
+                        .get("exceptionDetails")
+                        .cloned()
+                        .unwrap_or(Value::Null);
                     let text = details
                         .get("exception")
                         .and_then(|e| e.get("description"))
                         .and_then(|d| d.as_str())
                         .unwrap_or("page error")
                         .to_owned();
-                    let stack = details
-                        .get("stackTrace")
-                        .map(|s| s.to_string());
+                    let stack = details.get("stackTrace").map(|s| s.to_string());
                     push_event(
                         &events,
                         CapturedEvent {
@@ -239,7 +244,8 @@ pub async fn spawn_raw_cdp_capture(
                     // Track URL by requestId so loadingFailed can name the URL.
                     if let (Some(req_id), Some(url)) = (
                         params.get("requestId").and_then(|s| s.as_str()),
-                        params.get("response")
+                        params
+                            .get("response")
                             .and_then(|r| r.get("url"))
                             .and_then(|s| s.as_str()),
                     ) {

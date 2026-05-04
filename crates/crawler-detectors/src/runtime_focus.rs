@@ -186,7 +186,13 @@ mod tests {
 
     #[test]
     fn js_returns_required_keys() {
-        for k in ["vpW", "vpH", "totalInteractive", "totalChecked", "invisibleFocus"] {
+        for k in [
+            "vpW",
+            "vpH",
+            "totalInteractive",
+            "totalChecked",
+            "invisibleFocus",
+        ] {
             assert!(RUNTIME_FOCUS_JS.contains(k), "missing key: {k}");
         }
     }
