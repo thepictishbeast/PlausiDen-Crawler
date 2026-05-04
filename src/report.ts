@@ -17,7 +17,8 @@ export interface CapturedEvent {
     | 'csp-violation'
     | 'a11y-violation'
     | 'css-health'
-    | 'ui-overflow';
+    | 'ui-overflow'
+    | 'runtime-contrast';
   level?: string;
   text: string;
   url?: string;
@@ -44,6 +45,8 @@ export interface Report {
     cssHealthFindingsStrict: number;
     uiOverflowFindings: number;
     uiOverflowFindingsStrict: number;
+    runtimeContrastFindings: number;
+    runtimeContrastFindingsStrict: number;
     total: number;
     stepsOk: number;
     stepsFailed: number;
@@ -79,6 +82,12 @@ export interface Diff {
    * tap-target on mobile. T28 (2026-05-04).
    */
   newUiOverflowFindings: CapturedEvent[];
+  /**
+   * runtime-contrast findings new in this run vs prior. Strict =
+   * body-text below WCAG AA 4.5:1, warn = large-text below 3:1.
+   * T29 (2026-05-04).
+   */
+  newRuntimeContrastFindings: CapturedEvent[];
   newlyBrokenSteps: StepResult[];
   fixedSteps: StepResult[];
 }
@@ -94,6 +103,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     newA11yViolations: [],
     newCssHealthFindings: [],
     newUiOverflowFindings: [],
+    newRuntimeContrastFindings: [],
     newlyBrokenSteps: [],
     fixedSteps: [],
   };
@@ -104,6 +114,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     out.newA11yViolations = current.events.filter(e => e.kind === 'a11y-violation');
     out.newCssHealthFindings = current.events.filter(e => e.kind === 'css-health');
     out.newUiOverflowFindings = current.events.filter(e => e.kind === 'ui-overflow');
+    out.newRuntimeContrastFindings = current.events.filter(e => e.kind === 'runtime-contrast');
     return out;
   }
   const priorKeys = new Set(prior.events.map(key));
@@ -115,6 +126,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     else if (e.kind === 'a11y-violation') out.newA11yViolations.push(e);
     else if (e.kind === 'css-health') out.newCssHealthFindings.push(e);
     else if (e.kind === 'ui-overflow') out.newUiOverflowFindings.push(e);
+    else if (e.kind === 'runtime-contrast') out.newRuntimeContrastFindings.push(e);
   }
   const priorStepLabels = new Map(
     prior.steps.map((s, i) => [s.step.label || `${s.step.kind}-${i}`, s])
