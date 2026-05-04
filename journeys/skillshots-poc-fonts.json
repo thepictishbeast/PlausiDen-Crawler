@@ -1,0 +1,20 @@
+{
+  "name": "skillshots-poc-fonts",
+  "description": "Font-variant matrix audit. 4 type systems × 1 page = 4 step snapshots. Catches type-specific overflow/contrast/baseline regressions. URL-param-driven via aesthetic.js (T42 mechanism).",
+  "baseUrl": "http://127.0.0.1:8123",
+  "viewport": { "w": 375, "h": 812 },
+  "steps": [
+    { "kind": "goto", "url": "http://127.0.0.1:8123/?font=display", "label": "01-font-display", "timeout": 8000 },
+    { "kind": "wait", "ms": 400 },
+    { "kind": "screenshot", "label": "01-font-display" },
+    { "kind": "goto", "url": "http://127.0.0.1:8123/?font=serif", "label": "02-font-serif" },
+    { "kind": "wait", "ms": 400 },
+    { "kind": "screenshot", "label": "02-font-serif" },
+    { "kind": "goto", "url": "http://127.0.0.1:8123/?font=mono", "label": "03-font-mono" },
+    { "kind": "wait", "ms": 400 },
+    { "kind": "screenshot", "label": "03-font-mono" },
+    { "kind": "goto", "url": "http://127.0.0.1:8123/?font=rounded", "label": "04-font-rounded" },
+    { "kind": "wait", "ms": 400 },
+    { "kind": "screenshot", "label": "04-font-rounded" }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "name": "skillshots-poc-densities",
+  "description": "Density-variant matrix audit. 3 spacing scales × 1 page = 3 step snapshots. Catches density-specific tap-target / overflow regressions (compact density risks <44px buttons; spacious risks pushing CTAs below the fold).",
+  "baseUrl": "http://127.0.0.1:8123",
+  "viewport": { "w": 375, "h": 812 },
+  "steps": [
+    { "kind": "goto", "url": "http://127.0.0.1:8123/?density=comfortable", "label": "01-density-comfortable", "timeout": 8000 },
+    { "kind": "wait", "ms": 400 },
+    { "kind": "screenshot", "label": "01-density-comfortable" },
+    { "kind": "goto", "url": "http://127.0.0.1:8123/?density=compact", "label": "02-density-compact" },
+    { "kind": "wait", "ms": 400 },
+    { "kind": "screenshot", "label": "02-density-compact" },
+    { "kind": "goto", "url": "http://127.0.0.1:8123/?density=spacious", "label": "03-density-spacious" },
+    { "kind": "wait", "ms": 400 },
+    { "kind": "screenshot", "label": "03-density-spacious" }
+  ]
+}
