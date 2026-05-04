@@ -683,10 +683,32 @@ async function main(args: string[]): Promise<number> {
     } catch { /* page may have navigated — skip */ }
   };
 
-  // WebSocket close tracking. Hook into CDP so we see genuine WS drops.
+  // WebSocket close tracking + T53 network-throttling. Hook into
+  // CDP for both. Throttle profile lives in journey.throttle:
+  //   "slow-3g"    150ms RTT,  400 Kbps down, 400 Kbps up
+  //   "fast-3g"    100ms RTT, 1.6 Mbps down, 750 Kbps up
+  //   "regular-4g"  20ms RTT,  4 Mbps down, 3 Mbps up
+  //   "offline"     network disabled
+  //   <unset>       no throttling
   try {
     const client = await page.context().newCDPSession(page);
     await client.send('Network.enable');
+    const throttle = (journey as { throttle?: string }).throttle;
+    if (throttle) {
+      const profiles: Record<string, { latency: number; downloadThroughput: number; uploadThroughput: number; offline: boolean }> = {
+        'slow-3g':    { latency: 150, downloadThroughput:  50_000, uploadThroughput:  50_000, offline: false },
+        'fast-3g':    { latency: 100, downloadThroughput: 200_000, uploadThroughput:  93_750, offline: false },
+        'regular-4g': { latency:  20, downloadThroughput: 500_000, uploadThroughput: 375_000, offline: false },
+        'offline':    { latency:   0, downloadThroughput:       0, uploadThroughput:       0, offline: true  },
+      };
+      const profile = profiles[throttle];
+      if (profile) {
+        await client.send('Network.emulateNetworkConditions', profile);
+        console.log(`[crawler] throttle=${throttle} (RTT ${profile.latency}ms, ${(profile.downloadThroughput * 8 / 1000).toFixed(0)} Kbps down)`);
+      } else {
+        console.log(`[crawler] WARN unknown throttle "${throttle}" — ignored`);
+      }
+    }
     client.on('Network.webSocketClosed', (ev: any) => {
       log({ kind: 'response-error', text: `WebSocket closed`, url: String(ev?.requestId || 'ws') });
     });

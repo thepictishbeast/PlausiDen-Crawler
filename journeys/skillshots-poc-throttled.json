@@ -1,0 +1,18 @@
+{
+  "name": "skillshots-poc-throttled",
+  "description": "Slow-3G throttled journey. Catches what fast-network testing hides — long FCP, large CSS bundles that delay first paint, JS that blocks render. Sets CDP Network.emulateNetworkConditions(150ms RTT, 50 KB/s down, 50 KB/s up). Web-vitals will land in poor / needs-improvement bands if budget is exceeded.",
+  "baseUrl": "http://127.0.0.1:8123",
+  "viewport": { "w": 375, "h": 812 },
+  "throttle": "slow-3g",
+  "steps": [
+    { "kind": "goto", "url": "http://127.0.0.1:8123/", "label": "01-throttled-feed", "timeout": 30000 },
+    { "kind": "wait", "ms": 1500 },
+    { "kind": "screenshot", "label": "01-throttled-feed" },
+    { "kind": "goto", "url": "http://127.0.0.1:8123/challenge.html", "label": "02-throttled-challenge", "timeout": 30000 },
+    { "kind": "wait", "ms": 1500 },
+    { "kind": "screenshot", "label": "02-throttled-challenge" },
+    { "kind": "goto", "url": "http://127.0.0.1:8123/post-skill.html", "label": "03-throttled-post-skill", "timeout": 30000 },
+    { "kind": "wait", "ms": 1500 },
+    { "kind": "screenshot", "label": "03-throttled-post-skill" }
+  ]
+}
