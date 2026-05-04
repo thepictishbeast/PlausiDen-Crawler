@@ -1,0 +1,39 @@
+{
+  "name": "skillshots-poc",
+  "description": "Full-coverage UI/UX audit of the SkillShots PoC. Walks every built page at three viewports (mobile/tablet/desktop), captures axe-core a11y findings, console errors, failed requests, CSP violations, and a screenshot of every above-the-fold + scrolled state. Owner directive 2026-05-04: catch EVERYTHING — false positives over false negatives.",
+  "baseUrl": "http://127.0.0.1:8123/",
+  "steps": [
+    { "kind": "goto", "url": "http://127.0.0.1:8123/", "timeout": 10000, "label": "battle-feed" },
+    { "kind": "wait", "ms": 1500, "label": "settle" },
+    { "kind": "screenshot", "label": "01-feed-top" },
+    { "kind": "press", "key": "End", "label": "feed-scroll-bottom" },
+    { "kind": "wait", "ms": 600 },
+    { "kind": "screenshot", "label": "02-feed-bottom" },
+
+    { "kind": "goto", "url": "http://127.0.0.1:8123/challenge.html", "timeout": 10000, "label": "challenge-detail" },
+    { "kind": "wait", "ms": 1200 },
+    { "kind": "screenshot", "label": "03-challenge-top" },
+    { "kind": "press", "key": "End" },
+    { "kind": "wait", "ms": 600 },
+    { "kind": "screenshot", "label": "04-challenge-bottom" },
+
+    { "kind": "goto", "url": "http://127.0.0.1:8123/leaderboard.html", "timeout": 10000, "label": "leaderboard" },
+    { "kind": "wait", "ms": 1200 },
+    { "kind": "screenshot", "label": "05-leaderboard" },
+
+    { "kind": "goto", "url": "http://127.0.0.1:8123/post-skill.html", "timeout": 10000, "label": "post-skill" },
+    { "kind": "wait", "ms": 1200 },
+    { "kind": "screenshot", "label": "06-post-skill-form" },
+
+    { "kind": "goto", "url": "http://127.0.0.1:8123/my-wins.html", "timeout": 10000, "label": "my-wins" },
+    { "kind": "wait", "ms": 1200 },
+    { "kind": "screenshot", "label": "07-my-wins-wallet" },
+
+    { "kind": "goto", "url": "http://127.0.0.1:8123/profile.html", "timeout": 10000, "label": "profile" },
+    { "kind": "wait", "ms": 1200 },
+    { "kind": "screenshot", "label": "08-profile-top" },
+    { "kind": "press", "key": "End" },
+    { "kind": "wait", "ms": 600 },
+    { "kind": "screenshot", "label": "09-profile-bottom" }
+  ]
+}
