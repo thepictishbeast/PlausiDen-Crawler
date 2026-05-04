@@ -1,0 +1,27 @@
+{
+  "name": "fixture-perf-csp",
+  "description": "T72: detection-first verification. Visits every route in fixtures/perf-csp/serve.py — each route is a known-bad input that MUST trigger a specific detector. Used to prove the detectors actually fire on their own bait. If this journey ever reports 0 findings on the bad routes, the relevant detector is broken.",
+  "baseUrl": "http://127.0.0.1:8312",
+  "viewport": { "w": 1280, "h": 800 },
+  "steps": [
+    { "kind": "goto",       "url": "http://127.0.0.1:8312/clean/",          "label": "01-fixture-clean" },
+    { "kind": "wait",       "ms": 500 },
+    { "kind": "screenshot", "label": "01-fixture-clean" },
+
+    { "kind": "goto",       "url": "http://127.0.0.1:8312/long-task/",      "label": "02-fixture-long-task" },
+    { "kind": "wait",       "ms": 1500 },
+    { "kind": "screenshot", "label": "02-fixture-long-task" },
+
+    { "kind": "goto",       "url": "http://127.0.0.1:8312/oversize-js/",    "label": "03-fixture-oversize-js" },
+    { "kind": "wait",       "ms": 1500 },
+    { "kind": "screenshot", "label": "03-fixture-oversize-js" },
+
+    { "kind": "goto",       "url": "http://127.0.0.1:8312/csp-violation/",  "label": "04-fixture-csp" },
+    { "kind": "wait",       "ms": 800 },
+    { "kind": "screenshot", "label": "04-fixture-csp" },
+
+    { "kind": "goto",       "url": "http://127.0.0.1:8312/broken-href/",    "label": "05-fixture-broken-href" },
+    { "kind": "wait",       "ms": 800 },
+    { "kind": "screenshot", "label": "05-fixture-broken-href" }
+  ]
+}

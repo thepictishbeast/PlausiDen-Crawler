@@ -414,15 +414,34 @@ async function main(args: string[]): Promise<number> {
   });
   await page.addInitScript(`
     document.addEventListener('securitypolicyviolation', (ev) => {
+      // T72: previously this used try/catch to swallow ALL errors,
+      // which masked bugs (exposeFunction not yet wired, listener
+      // attached to wrong document, etc.) — fixture audits showed
+      // the cspViolations axis silent on a known-violating page.
+      // Now we emit a console.warn fallback so a missing handler
+      // surfaces as a regular console error in the report.
+      var info = {
+        directive: ev.violatedDirective || '',
+        blockedURI: ev.blockedURI || '',
+        sourceFile: ev.sourceFile || '',
+        lineNumber: ev.lineNumber || 0
+      };
+      // Always log to console so the event is observable even if
+      // the exposeFunction binding hasn't reached this frame yet.
+      // The kind='console' axis will catch this as a backup signal
+      // — paired with the dedicated 'csp-violation' kind that the
+      // exposeFunction handler emits.
       try {
-        window.__crawler_cspViolation({
-          directive: ev.violatedDirective || '',
-          blockedURI: ev.blockedURI || '',
-          sourceFile: ev.sourceFile,
-          lineNumber: ev.lineNumber
-        });
-      } catch (_) {}
-    });
+        console.warn('[crawler.csp] ' + info.directive + ' blocked ' +
+                     (info.blockedURI || 'inline') + ' @ ' +
+                     info.sourceFile + ':' + info.lineNumber);
+      } catch (e) { /* swallowed: console may be detached */ }
+      try {
+        if (typeof window.__crawler_cspViolation === 'function') {
+          window.__crawler_cspViolation(info);
+        }
+      } catch (e) { /* swallowed: binding may race with iframe nav */ }
+    }, { capture: true });
   `);
 
   page.on('console', (msg) => {
