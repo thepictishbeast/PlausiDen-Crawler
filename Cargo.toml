@@ -22,6 +22,7 @@ members = [
     "crates/crawler-detectors",
     "crates/crawler-report",
     "crates/crawler-journey",
+    "crates/crawler-runner",
 ]
 
 [workspace.package]

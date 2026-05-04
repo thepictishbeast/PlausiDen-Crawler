@@ -1,0 +1,45 @@
+[package]
+name = "crawler-runner"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Crawler — chromiumoxide-based journey runner. Phase 3 of the TS→Rust port. MVP: launches Chromium, drives goto/wait/screenshot steps, captures console/pageerror/request-failed events, writes report.json."
+
+[[bin]]
+name = "crawler"
+path = "src/main.rs"
+
+[dependencies]
+crawler-journey = { path = "../crawler-journey" }
+crawler-report = { path = "../crawler-report" }
+
+# Async runtime + HTTP/IO. tokio's `rt-multi-thread` for the
+# chromiumoxide async-stream model; `macros` for #[tokio::main];
+# `fs` for journey + screenshot writes.
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "fs", "signal", "time", "sync"] }
+futures = "0.3"
+
+# CDP-based Chromium driver — see CRAWLER_STACK_AUDIT.md for the
+# port decision. Pinned to 0.7 (current major as of 2026-Q1).
+chromiumoxide = { version = "0.7", default-features = false, features = ["tokio-runtime"] }
+
+# CLI + serialization.
+clap = { version = "4", features = ["derive"] }
+anyhow = "1"
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+# Logging.
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[lints.rust]
+unsafe_code = "deny"
+
+[lints.clippy]
+unwrap_used = "warn"
+expect_used = "warn"
+panic = "warn"

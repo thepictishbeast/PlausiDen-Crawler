@@ -105,7 +105,6 @@ pub enum Impact {
 /// TS `CapturedEvent` interface 1:1 — the JSON the TS runner
 /// writes deserializes here without translation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[non_exhaustive]
 #[serde(rename_all = "camelCase")]
 pub struct CapturedEvent {
     /// Wall time (ms since journey start).
@@ -140,7 +139,6 @@ pub struct CapturedEvent {
 
 /// Per-axis finding counts. Mirrors `Report.counts` in TS.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[non_exhaustive]
 #[serde(rename_all = "camelCase")]
 pub struct ReportCounts {
     /// `console.error` count.
@@ -187,7 +185,6 @@ pub struct ReportCounts {
 
 /// Viewport dimensions reported in the run header.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[non_exhaustive]
 pub struct Viewport {
     /// CSS pixel width.
     pub w: u32,
@@ -199,7 +196,6 @@ pub struct Viewport {
 /// crates own the journey schema); kept as an untyped JSON value
 /// for round-trip preservation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[non_exhaustive]
 #[serde(rename_all = "camelCase")]
 pub struct StepResult {
     /// 0-based index in the journey.
@@ -220,7 +216,6 @@ pub struct StepResult {
 
 /// Top-level run output. Wire-compat with the TS `Report`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[non_exhaustive]
 #[serde(rename_all = "camelCase")]
 pub struct Report {
     /// Target URL (the `--url` flag or `journey.baseUrl`).
@@ -245,7 +240,6 @@ pub struct Report {
 /// field-for-field including the back-filled
 /// `newAriaDriftFindings` field (T83 fix).
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[non_exhaustive]
 #[serde(rename_all = "camelCase")]
 pub struct Diff {
     /// New `console.error` events.
