@@ -28,6 +28,7 @@ import { captureUIOverflowSnapshot, detectUIOverflowIssues, type UIOverflowFindi
 import { captureRuntimeContrastSnapshot, detectRuntimeContrastIssues, type RuntimeContrastFinding } from './runtimeContrast.js';
 import { captureRuntimeImagesSnapshot, detectRuntimeImageIssues, type RuntimeImageFinding } from './runtimeImages.js';
 import { captureRuntimeFocusSnapshot, detectRuntimeFocusIssues, type RuntimeFocusFinding } from './runtimeFocus.js';
+import { captureHeadingOrderSnapshot, detectHeadingOrderIssues, type HeadingOrderFinding } from './headingOrder.js';
 
 interface Budget {
   newConsoleErrors: number;
@@ -682,6 +683,33 @@ async function main(args: string[]): Promise<number> {
   };
 
   /**
+   * T104: heading-order detector. Walks h1-h6 in DOM order, flags
+   * pages with !=1 h1 (strict) and any level skip h2→h4 etc (warn).
+   * Mirrors crates/crawler-detectors/src/heading_order.rs — keep
+   * the kind+severity strings in sync between the two impls.
+   */
+  const headingOrderFindingsByStep: Array<{ stepLabel: string; pageUrl: string; findings: HeadingOrderFinding[] }> = [];
+  const checkHeadingOrder = async (afterLabel: string) => {
+    try {
+      const snap = await captureHeadingOrderSnapshot(page);
+      const findings = detectHeadingOrderIssues(snap);
+      headingOrderFindingsByStep.push({ stepLabel: afterLabel, pageUrl: snap.pageUrl, findings });
+      for (const f of findings) {
+        log({
+          kind: 'heading-order',
+          text: `[${f.kind}] ${f.detail}`,
+          url: snap.pageUrl,
+          severity: f.severity,
+          ruleId: f.kind,
+          impact: f.severity === 'strict' ? 'serious' : 'minor',
+        });
+      }
+    } catch (e) {
+      log({ kind: 'pageerror', text: `[headingOrder] detector threw on ${afterLabel}: ${(e as Error).message}` });
+    }
+  };
+
+  /**
    * T75: runtime image-health detector. Catches broken / empty /
    * missing-alt / CLS-risk images at the rendered DOM level.
    */
@@ -1054,6 +1082,7 @@ async function main(args: string[]): Promise<number> {
       await checkRuntimeContrast(step.label || `goto-${i}`);
       await checkRuntimeImages(step.label || `goto-${i}`);
       await checkRuntimeFocus(step.label || `goto-${i}`);
+      await checkHeadingOrder(step.label || `goto-${i}`);
       await checkWebVitals(step.label || `goto-${i}`);
     }
     // Memory snapshot at end of each step so the report shows heap growth

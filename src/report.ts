@@ -134,6 +134,11 @@ export interface Diff {
    * read site is renderPositiveSignal *after* the back-fill.
    */
   newAriaDriftFindings: CapturedEvent[];
+  /**
+   * heading-order findings new in this run vs prior. Strict =
+   * !=1 h1; warn = level skip (h2 -> h4 without h3). T104 (TS port).
+   */
+  newHeadingOrderFindings: CapturedEvent[];
   newlyBrokenSteps: StepResult[];
   fixedSteps: StepResult[];
 }
@@ -158,6 +163,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     // pushed onto report.events; default to empty here so consumers
     // see a stable shape regardless of pipeline ordering.
     newAriaDriftFindings: [],
+    newHeadingOrderFindings: [],
     newlyBrokenSteps: [],
     fixedSteps: [],
   };
@@ -173,6 +179,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     out.newRuntimeFocusFindings = current.events.filter(e => e.kind === 'runtime-focus');
     out.newWebVitalsFindings = current.events.filter(e => e.kind === 'web-vitals');
     out.newCspViolations = current.events.filter(e => e.kind === 'csp-violation');
+    out.newHeadingOrderFindings = current.events.filter(e => e.kind === 'heading-order');
     return out;
   }
   const priorKeys = new Set(prior.events.map(key));
@@ -189,6 +196,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     else if (e.kind === 'runtime-focus') out.newRuntimeFocusFindings.push(e);
     else if (e.kind === 'web-vitals') out.newWebVitalsFindings.push(e);
     else if (e.kind === 'csp-violation') out.newCspViolations.push(e);
+    else if (e.kind === 'heading-order') out.newHeadingOrderFindings.push(e);
   }
   const priorStepLabels = new Map(
     prior.steps.map((s, i) => [s.step.label || `${s.step.kind}-${i}`, s])
@@ -256,6 +264,14 @@ export function renderPositiveSignal(report: Report, diff: Diff): string {
       // events were pushed.
       news: diff.newAriaDriftFindings.length,
       strictNews: strict(diff.newAriaDriftFindings),
+    },
+    {
+      // T104 (TS port): heading_order — h1 count + level skips.
+      // Mirrors crates/crawler-detectors/src/heading_order.rs.
+      name: 'headingOrder',
+      total: report.events.filter((e) => e.kind === 'heading-order').length,
+      news: diff.newHeadingOrderFindings.length,
+      strictNews: strict(diff.newHeadingOrderFindings),
     },
   ];
   const lines: string[] = [];
