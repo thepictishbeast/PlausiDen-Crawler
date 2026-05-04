@@ -31,6 +31,8 @@
 
 #![forbid(unsafe_code)]
 
+mod cdp_raw;
+
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::Arc;
@@ -162,6 +164,18 @@ async fn run() -> Result<ExitCode> {
 
     // Event accumulator — shared between page subscriptions + main run.
     let events: Arc<Mutex<Vec<CapturedEvent>>> = Arc::new(Mutex::new(Vec::new()));
+    let started_at = Instant::now();
+
+    // T102.4: spawn raw-CDP capture BEFORE creating the page so
+    // we don't miss the about:blank → user-target attach.
+    let ws_url = browser.websocket_address().clone();
+    let raw_capture = cdp_raw::spawn_raw_cdp_capture(
+        ws_url,
+        events.clone(),
+        started_at,
+    )
+    .await
+    .context("starting raw-CDP capture")?;
 
     let page = browser
         .new_page("about:blank")
@@ -198,8 +212,10 @@ async fn run() -> Result<ExitCode> {
         warn!("Log.enable failed: {e}");
     }
 
+    // (typed event_listener subscriptions kept for future use
+    // when the chromiumoxide Message enum catches up to Chromium
+    // 147; raw-CDP capture handles the actual event flow today)
     // Subscribe to the three MVP axes BEFORE first navigation.
-    let started_at = Instant::now();
     {
         let events = events.clone();
         let mut stream = page
@@ -356,6 +372,7 @@ async fn run() -> Result<ExitCode> {
     );
 
     // Shutdown.
+    raw_capture.abort();
     let _ = browser.close().await;
     let _ = browser_handle.await;
     let _ = started_epoch_ms;

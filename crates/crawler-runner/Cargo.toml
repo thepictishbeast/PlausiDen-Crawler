@@ -38,6 +38,12 @@ thiserror = { workspace = true }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
+# T102.4: raw CDP WebSocket. Bypasses chromiumoxide's typed
+# Message dispatch (which can't deserialize Chromium-147-era
+# events). We open a SECOND WS on browser.websocket_address(),
+# auto-attach to all targets, and parse events as untyped JSON.
+tokio-tungstenite = { version = "0.27", default-features = false, features = ["connect"] }
+
 [lints.rust]
 unsafe_code = "deny"
 
