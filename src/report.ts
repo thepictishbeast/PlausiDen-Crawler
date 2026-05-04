@@ -16,7 +16,8 @@ export interface CapturedEvent {
     | 'response-error'
     | 'csp-violation'
     | 'a11y-violation'
-    | 'css-health';
+    | 'css-health'
+    | 'ui-overflow';
   level?: string;
   text: string;
   url?: string;
@@ -41,6 +42,8 @@ export interface Report {
     a11yViolations: number;
     cssHealthFindings: number;
     cssHealthFindingsStrict: number;
+    uiOverflowFindings: number;
+    uiOverflowFindingsStrict: number;
     total: number;
     stepsOk: number;
     stepsFailed: number;
@@ -70,6 +73,12 @@ export interface Diff {
    * console error: ship-blocking. T71 (2026-05-04).
    */
   newCssHealthFindings: CapturedEvent[];
+  /**
+   * uiOverflow findings new in this run vs the prior baseline.
+   * Strict = page-h-scroll, element-bleed, text-clipped, or
+   * tap-target on mobile. T28 (2026-05-04).
+   */
+  newUiOverflowFindings: CapturedEvent[];
   newlyBrokenSteps: StepResult[];
   fixedSteps: StepResult[];
 }
@@ -84,6 +93,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     newFailedRequests: [],
     newA11yViolations: [],
     newCssHealthFindings: [],
+    newUiOverflowFindings: [],
     newlyBrokenSteps: [],
     fixedSteps: [],
   };
@@ -93,6 +103,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     out.newFailedRequests = current.events.filter(e => e.kind === 'request-failed' || e.kind === 'response-error');
     out.newA11yViolations = current.events.filter(e => e.kind === 'a11y-violation');
     out.newCssHealthFindings = current.events.filter(e => e.kind === 'css-health');
+    out.newUiOverflowFindings = current.events.filter(e => e.kind === 'ui-overflow');
     return out;
   }
   const priorKeys = new Set(prior.events.map(key));
@@ -103,6 +114,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     else if (e.kind === 'request-failed' || e.kind === 'response-error') out.newFailedRequests.push(e);
     else if (e.kind === 'a11y-violation') out.newA11yViolations.push(e);
     else if (e.kind === 'css-health') out.newCssHealthFindings.push(e);
+    else if (e.kind === 'ui-overflow') out.newUiOverflowFindings.push(e);
   }
   const priorStepLabels = new Map(
     prior.steps.map((s, i) => [s.step.label || `${s.step.kind}-${i}`, s])

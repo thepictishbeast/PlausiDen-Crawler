@@ -24,6 +24,7 @@ import { runDiscover, type DiscoveredPage } from './discover.js';
 import { runProbe } from './probe.js';
 import { runAxe, axeEventsFor, renderAxeFindings, annotateViolations, type AxePageResult } from './audit.js';
 import { captureCSSHealthSnapshot, detectCSSHealthIssues, type CSSHealthFinding } from './cssHealth.js';
+import { captureUIOverflowSnapshot, detectUIOverflowIssues, type UIOverflowFinding } from './uiOverflow.js';
 
 interface Budget {
   newConsoleErrors: number;
@@ -31,6 +32,7 @@ interface Budget {
   newFailedRequests: number;
   newA11yViolations: number;
   newCssHealthStrict: number;
+  newUiOverflowStrict: number;
   newlyBrokenSteps: number;
 }
 
@@ -40,6 +42,7 @@ const DEFAULT_BUDGET: Budget = {
   newFailedRequests: 0,
   newA11yViolations: 0,
   newCssHealthStrict: 0,
+  newUiOverflowStrict: 0,
   newlyBrokenSteps: 0,
 };
 
@@ -403,6 +406,34 @@ async function main(args: string[]): Promise<number> {
    * loaded — the detector's job is to validate page-load CSS, not
    * runtime DOM mutations.
    */
+  /**
+   * T28: ui-overflow + tap-target detector. Runs after each goto in
+   * the same place as cssHealth.
+   */
+  const uiOverflowFindingsByStep: Array<{ stepLabel: string; pageUrl: string; viewport: { width: number; height: number }; findings: UIOverflowFinding[] }> = [];
+  const checkUiOverflow = async (afterLabel: string) => {
+    try {
+      const snap = await captureUIOverflowSnapshot(page);
+      const findings = detectUIOverflowIssues(snap);
+      uiOverflowFindingsByStep.push({ stepLabel: afterLabel, pageUrl: snap.pageUrl, viewport: snap.viewport, findings });
+      for (const f of findings) {
+        log({
+          kind: 'ui-overflow',
+          text: `[${f.kind}] ${f.detail}`,
+          url: snap.pageUrl,
+          severity: f.severity,
+          ruleId: f.kind,
+          impact: f.severity === 'strict' ? 'serious' : 'minor',
+        });
+      }
+    } catch (e) {
+      log({
+        kind: 'pageerror',
+        text: `[uiOverflow] detector threw on step ${afterLabel}: ${(e as Error).message}`,
+      });
+    }
+  };
+
   const cssHealthFindingsByStep: Array<{ stepLabel: string; pageUrl: string; findings: CSSHealthFinding[] }> = [];
   const checkCssHealth = async (afterLabel: string) => {
     try {
@@ -607,6 +638,7 @@ async function main(args: string[]): Promise<number> {
     // type as well for the same reason.
     if (step.kind === 'goto') {
       await checkCssHealth(step.label || `goto-${i}`);
+      await checkUiOverflow(step.label || `goto-${i}`);
     }
     // Memory snapshot at end of each step so the report shows heap growth
     // across the journey. Cheap (one page.evaluate call).
@@ -666,6 +698,8 @@ async function main(args: string[]): Promise<number> {
       a11yViolations: events.filter(e => e.kind === 'a11y-violation').length,
       cssHealthFindings: events.filter(e => e.kind === 'css-health').length,
       cssHealthFindingsStrict: events.filter(e => e.kind === 'css-health' && e.severity === 'strict').length,
+      uiOverflowFindings: events.filter(e => e.kind === 'ui-overflow').length,
+      uiOverflowFindingsStrict: events.filter(e => e.kind === 'ui-overflow' && e.severity === 'strict').length,
       total: events.length,
       stepsOk: stepResults.filter(s => s.ok).length,
       stepsFailed: stepResults.filter(s => !s.ok).length,
@@ -682,6 +716,12 @@ async function main(args: string[]): Promise<number> {
     writeFileSync(
       join(outDir, 'css-health.json'),
       JSON.stringify(cssHealthFindingsByStep, null, 2),
+    );
+  }
+  if (uiOverflowFindingsByStep.length > 0) {
+    writeFileSync(
+      join(outDir, 'ui-overflow.json'),
+      JSON.stringify(uiOverflowFindingsByStep, null, 2),
     );
   }
   writeFileSync(join(outDir, 'report.json'), JSON.stringify(report, null, 2));
@@ -706,6 +746,7 @@ async function main(args: string[]): Promise<number> {
   console.log(`  failed fetches:    ${report.counts.failedRequests}`);
   console.log(`  a11y violations:   ${report.counts.a11yViolations}`);
   console.log(`  css health:        ${report.counts.cssHealthFindings} (strict ${report.counts.cssHealthFindingsStrict})`);
+  console.log(`  ui overflow:       ${report.counts.uiOverflowFindings} (strict ${report.counts.uiOverflowFindingsStrict})`);
   console.log(`  steps ok/failed:   ${report.counts.stepsOk}/${report.counts.stepsFailed}`);
   if (prior) {
     console.log(`  diff vs prior run (${prior.journey}):`);
@@ -716,6 +757,9 @@ async function main(args: string[]): Promise<number> {
     const newCssHealthStrict = diff.newCssHealthFindings.filter(e => e.severity === 'strict').length;
     const newCssHealthWarn = diff.newCssHealthFindings.length - newCssHealthStrict;
     console.log(`    NEW css health:       ${diff.newCssHealthFindings.length} (strict ${newCssHealthStrict}, warn ${newCssHealthWarn})`);
+    const newUiOverflowStrict = diff.newUiOverflowFindings.filter(e => e.severity === 'strict').length;
+    const newUiOverflowWarn = diff.newUiOverflowFindings.length - newUiOverflowStrict;
+    console.log(`    NEW ui overflow:      ${diff.newUiOverflowFindings.length} (strict ${newUiOverflowStrict}, warn ${newUiOverflowWarn})`);
     console.log(`    newly broken steps:   ${diff.newlyBrokenSteps.length}`);
     console.log(`    fixed steps:          ${diff.fixedSteps.length}`);
   } else {
@@ -723,12 +767,14 @@ async function main(args: string[]): Promise<number> {
   }
 
   const newCssHealthStrictCount = diff.newCssHealthFindings.filter(e => e.severity === 'strict').length;
+  const newUiOverflowStrictCount = diff.newUiOverflowFindings.filter(e => e.severity === 'strict').length;
   const overBudget =
     diff.newConsoleErrors.length > DEFAULT_BUDGET.newConsoleErrors
     || diff.newPageErrors.length > DEFAULT_BUDGET.newPageErrors
     || diff.newFailedRequests.length > DEFAULT_BUDGET.newFailedRequests
     || diff.newA11yViolations.length > DEFAULT_BUDGET.newA11yViolations
     || newCssHealthStrictCount > DEFAULT_BUDGET.newCssHealthStrict
+    || newUiOverflowStrictCount > DEFAULT_BUDGET.newUiOverflowStrict
     || diff.newlyBrokenSteps.length > DEFAULT_BUDGET.newlyBrokenSteps;
 
   if (overBudget) {
