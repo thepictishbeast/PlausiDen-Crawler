@@ -21,6 +21,7 @@ resolver = "2"
 members = [
     "crates/crawler-detectors",
     "crates/crawler-report",
+    "crates/crawler-journey",
 ]
 
 [workspace.package]
