@@ -91,9 +91,7 @@ pub struct HeadingOrderSnapshot {
 /// Apply detection rules to a heading-order snapshot. Pure
 /// function. Returns `AxisFinding`s for every violation.
 #[must_use]
-pub fn detect_heading_order_issues(
-    snap: &HeadingOrderSnapshot,
-) -> Vec<crate::AxisFinding> {
+pub fn detect_heading_order_issues(snap: &HeadingOrderSnapshot) -> Vec<crate::AxisFinding> {
     let mut out = Vec::<crate::AxisFinding>::new();
 
     // Rule 1: exactly one h1.
@@ -207,12 +205,7 @@ mod tests {
 
     #[test]
     fn multiple_h1_fires_strict() {
-        let s = snap(vec![
-            h(1, "First"),
-            h(2, "x"),
-            h(1, "Second"),
-            h(2, "y"),
-        ]);
+        let s = snap(vec![h(1, "First"), h(2, "x"), h(1, "Second"), h(2, "y")]);
         let f = detect_heading_order_issues(&s);
         assert!(f.iter().any(|x| x.kind == "headings.multiple-h1"));
     }
@@ -249,12 +242,7 @@ mod tests {
 
     #[test]
     fn consecutive_same_level_is_fine() {
-        let s = snap(vec![
-            h(1, "T"),
-            h(2, "A"),
-            h(2, "B"),
-            h(2, "C"),
-        ]);
+        let s = snap(vec![h(1, "T"), h(2, "A"), h(2, "B"), h(2, "C")]);
         assert!(detect_heading_order_issues(&s).is_empty());
     }
 
