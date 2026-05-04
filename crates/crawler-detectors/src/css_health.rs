@@ -127,7 +127,6 @@ pub const APPLIED_RULE_COUNT_JS: &str = r##"(() => {
 
 /// Per-stylesheet observation. Mirrors the TS shape.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[non_exhaustive]
 #[serde(rename_all = "camelCase")]
 pub struct StylesheetObservation {
     /// Resolved absolute URL.
@@ -150,7 +149,6 @@ pub struct StylesheetObservation {
 
 /// Body + html computed styles slice.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[non_exhaustive]
 #[serde(rename_all = "camelCase")]
 pub struct ComputedBody {
     /// `getComputedStyle(body).backgroundColor`.
@@ -167,7 +165,6 @@ pub struct ComputedBody {
 
 /// Just html background.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[non_exhaustive]
 #[serde(rename_all = "camelCase")]
 pub struct ComputedHtml {
     /// background-color shorthand.
@@ -177,7 +174,6 @@ pub struct ComputedHtml {
 /// Combined snapshot. Assembled by the Rust runner after each of
 /// the 6 evals returns.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[non_exhaustive]
 #[serde(rename_all = "camelCase")]
 pub struct CssHealthSnapshot {
     /// Page URL at capture time.
@@ -234,6 +230,209 @@ pub fn split_close_braces(
     (opens, closes)
 }
 
+// Matches the TS USER_AGENT_DEFAULTS sets in cssHealth.ts:95.
+// "Browser-default" detection: if computedBody.backgroundColor /
+// fontFamily / margin all live in these sets AND html bg too,
+// the visitor sees no applied CSS.
+const UA_BG: &[&str] = &[
+    "rgba(0, 0, 0, 0)",
+    "rgb(255, 255, 255)",
+    "transparent",
+    "initial",
+];
+const UA_FONT: &[&str] = &[
+    "Times",
+    "\"Times New Roman\"",
+    "Times New Roman",
+    "serif",
+    "\"Times New Roman\", Times, serif",
+];
+const UA_MARGIN: &[&str] = &["8px", "0px 8px"];
+
+fn looks_like_ua_default_body(body: &ComputedBody) -> bool {
+    UA_BG.contains(&body.background_color.as_str())
+        && UA_FONT.contains(&body.font_family.as_str())
+        && UA_MARGIN.contains(&body.margin.as_str())
+}
+
+fn looks_like_ua_default_html(html: &ComputedHtml) -> bool {
+    UA_BG.contains(&html.background_color.as_str())
+}
+
+fn sheet_failed_network(s: &StylesheetObservation) -> bool {
+    s.error_text.is_some() || (s.from_network && (s.status == 0 || s.status >= 400))
+}
+
+fn sheet_loaded_ok(s: &StylesheetObservation) -> bool {
+    s.from_network && s.status >= 200 && s.status < 400 && s.body_bytes >= 50
+}
+
+/// Apply detection rules to a CSS-health snapshot. Pure function.
+/// Mirrors the TS `detectCSSHealthIssues` exactly (cssHealth.ts:253).
+#[must_use]
+#[allow(clippy::too_many_lines)]
+pub fn detect_css_health_issues(snap: &CssHealthSnapshot) -> Vec<crate::AxisFinding> {
+    let mut out = Vec::<crate::AxisFinding>::new();
+
+    // Heuristic 5: zero stylesheets at all.
+    if snap.declared_sheets.is_empty() && snap.inline_style_block_count == 0 {
+        out.push(crate::AxisFinding {
+            severity: crate::AxisSeverity::Warn,
+            kind: "css.no-stylesheets-declared".to_owned(),
+            detail: "Page has zero <link rel=\"stylesheet\"> tags AND zero <style> blocks. This is unusual; a real visitor will see browser-default styling.".to_owned(),
+        });
+        // No sheets means later heuristics don't apply.
+        return out;
+    }
+
+    // Heuristic 1: declared-sheet network failures.
+    if !snap.declared_sheets.is_empty() {
+        let failed_count = snap.declared_sheets.iter().filter(|s| sheet_failed_network(s)).count();
+        let total = snap.declared_sheets.len();
+        if failed_count == total {
+            out.push(crate::AxisFinding {
+                severity: crate::AxisSeverity::Strict,
+                kind: "css.all-sheets-failed-network".to_owned(),
+                detail: format!(
+                    "All {total} declared stylesheet(s) failed to load. The page renders with no CSS."
+                ),
+            });
+        } else if failed_count > 0 {
+            out.push(crate::AxisFinding {
+                severity: crate::AxisSeverity::Strict,
+                kind: "css.some-sheets-failed-network".to_owned(),
+                detail: format!(
+                    "{failed_count} of {total} declared stylesheet(s) failed to load."
+                ),
+            });
+        }
+
+        // Heuristic 2: wrong MIME type.
+        for s in &snap.declared_sheets {
+            if s.from_network && (200..400).contains(&s.status) {
+                if let Some(ct) = &s.content_type {
+                    let lower = ct.to_ascii_lowercase();
+                    if !lower.is_empty() && !lower.starts_with("text/css") {
+                        out.push(crate::AxisFinding {
+                            severity: crate::AxisSeverity::Strict,
+                            kind: "css.wrong-mime".to_owned(),
+                            detail: format!(
+                                "Stylesheet {} served with Content-Type \"{ct}\" — browsers refuse to apply non-text/css responses as CSS.",
+                                s.url
+                            ),
+                        });
+                    }
+                }
+            }
+        }
+
+        // Heuristic 3: stylesheet body suspiciously empty.
+        for s in &snap.declared_sheets {
+            if s.from_network && (200..400).contains(&s.status) && s.body_bytes < 50 {
+                out.push(crate::AxisFinding {
+                    severity: crate::AxisSeverity::Strict,
+                    kind: "css.empty-or-tiny-body".to_owned(),
+                    detail: format!(
+                        "Stylesheet {} returned {} byte(s) — almost certainly empty or truncated.",
+                        s.url, s.body_bytes
+                    ),
+                });
+            }
+        }
+    }
+
+    // Heuristics 4, A, B, brace-imbalance only fire if at least one
+    // declared sheet loaded fine.
+    let any_usable = snap.declared_sheets.iter().any(sheet_loaded_ok);
+    if any_usable {
+        // Heuristic 4: served-but-not-applied (UA defaults despite a
+        // usable sheet).
+        if looks_like_ua_default_body(&snap.computed_body)
+            && looks_like_ua_default_html(&snap.computed_html)
+        {
+            out.push(crate::AxisFinding {
+                severity: crate::AxisSeverity::Strict,
+                kind: "css.served-but-not-applied".to_owned(),
+                detail: "CSS file(s) loaded successfully but the body still has user-agent default styling (white background, serif font, 8px margin). Likely a CSS parse error early in the file caused the browser to silently drop the rest.".to_owned(),
+            });
+        }
+
+        // Rule-density heuristic A: bytes-per-rule.
+        let total_sheet_bytes: u64 = snap
+            .declared_sheets
+            .iter()
+            .filter(|s| s.from_network && (200..400).contains(&s.status))
+            .map(|s| s.body_bytes)
+            .sum();
+        if total_sheet_bytes >= 100 {
+            let bytes_per_rule = if snap.applied_rule_count_estimate > 0 {
+                total_sheet_bytes as f64 / f64::from(snap.applied_rule_count_estimate)
+            } else {
+                f64::INFINITY
+            };
+            if bytes_per_rule > 500.0 {
+                out.push(crate::AxisFinding {
+                    severity: crate::AxisSeverity::Strict,
+                    kind: "css.applied-rule-count-anomaly".to_owned(),
+                    detail: format!(
+                        "Browser reports only {} CSS rule(s) applied across {} byte(s) of stylesheet (~{} bytes/rule, healthy is < 200). Parse error likely dropped most rules.",
+                        snap.applied_rule_count_estimate,
+                        total_sheet_bytes,
+                        bytes_per_rule.round() as u64
+                    ),
+                });
+            }
+        }
+
+        // Rule-density heuristic B: declared opening braces vs applied
+        // rules. Ratio < 0.7 with >= 5 declared braces indicates a
+        // serious parser rejection.
+        let total_declared_braces: u32 = snap
+            .declared_sheets
+            .iter()
+            .map(|s| s.declared_brace_count.unwrap_or(0))
+            .sum();
+        let apply_ratio = if total_declared_braces > 0 {
+            f64::from(snap.applied_rule_count_estimate) / f64::from(total_declared_braces)
+        } else {
+            1.0
+        };
+        if total_declared_braces >= 5 && apply_ratio < 0.7 {
+            out.push(crate::AxisFinding {
+                severity: crate::AxisSeverity::Strict,
+                kind: "css.brace-vs-applied-mismatch".to_owned(),
+                detail: format!(
+                    "Stylesheet declares {} opening brace(s) but the browser applied only {} rule(s) ({}% applied; healthy is > 70%). Likely an unmatched brace, bad selector, or invalid at-rule early in the sheet.",
+                    total_declared_braces,
+                    snap.applied_rule_count_estimate,
+                    (apply_ratio * 100.0).round() as u32
+                ),
+            });
+        }
+
+        // Brace-imbalance heuristic: open vs close should be equal.
+        for s in &snap.declared_sheets {
+            if let (Some(open), Some(close)) =
+                (s.declared_brace_count, s.declared_close_brace_count)
+            {
+                let delta = i64::from(close) - i64::from(open);
+                if delta.abs() > 1 {
+                    out.push(crate::AxisFinding {
+                        severity: crate::AxisSeverity::Strict,
+                        kind: "css.brace-imbalance".to_owned(),
+                        detail: format!(
+                            "Stylesheet {} has {open} open brace(s) and {close} close brace(s) — a delta of {delta}. CSS is malformed; parser will mis-anchor and drop subsequent rules.",
+                            s.url
+                        ),
+                    });
+                }
+            }
+        }
+    }
+
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -286,6 +485,269 @@ mod tests {
         assert_eq!(opens.get("/x.css").copied(), Some(Some(42)));
         assert_eq!(opens.get("/y.css").copied(), Some(None));
         assert_eq!(closes.get("/x.css").copied(), Some(41));
+    }
+
+    fn ua_default_body() -> ComputedBody {
+        ComputedBody {
+            background_color: "rgba(0, 0, 0, 0)".to_owned(),
+            color: "rgb(0, 0, 0)".to_owned(),
+            font_family: "Times".to_owned(),
+            font_size: "16px".to_owned(),
+            margin: "8px".to_owned(),
+        }
+    }
+
+    fn styled_body() -> ComputedBody {
+        ComputedBody {
+            background_color: "rgb(15, 23, 42)".to_owned(),
+            color: "rgb(248, 250, 252)".to_owned(),
+            font_family: "\"Inter\", system-ui, sans-serif".to_owned(),
+            font_size: "16px".to_owned(),
+            margin: "0px".to_owned(),
+        }
+    }
+
+    fn sheet(
+        url: &str,
+        status: u16,
+        ct: Option<&str>,
+        bytes: u64,
+        open: Option<u32>,
+        close: Option<u32>,
+        from_net: bool,
+        err: Option<&str>,
+    ) -> StylesheetObservation {
+        StylesheetObservation {
+            url: url.to_owned(),
+            status,
+            content_type: ct.map(ToOwned::to_owned),
+            body_bytes: bytes,
+            declared_brace_count: open,
+            declared_close_brace_count: close,
+            from_network: from_net,
+            error_text: err.map(ToOwned::to_owned),
+        }
+    }
+
+    #[test]
+    fn working_css_produces_no_findings() {
+        let snap = CssHealthSnapshot {
+            page_url: "http://t/working".to_owned(),
+            declared_sheets: vec![sheet(
+                "http://t/style.css",
+                200,
+                Some("text/css"),
+                5000,
+                Some(80),
+                Some(80),
+                true,
+                None,
+            )],
+            inline_style_block_count: 0,
+            computed_body: styled_body(),
+            computed_html: ComputedHtml {
+                background_color: "rgb(15, 23, 42)".to_owned(),
+            },
+            body_visible_text_length: 200,
+            applied_rule_count_estimate: 80,
+        };
+        assert!(
+            detect_css_health_issues(&snap).is_empty(),
+            "expected zero findings"
+        );
+    }
+
+    #[test]
+    fn missing_css_triggers_all_failed() {
+        let snap = CssHealthSnapshot {
+            page_url: "http://t/missing".to_owned(),
+            declared_sheets: vec![sheet(
+                "http://t/missing.css",
+                404,
+                Some("text/html"),
+                0,
+                None,
+                None,
+                true,
+                None,
+            )],
+            inline_style_block_count: 0,
+            computed_body: ua_default_body(),
+            computed_html: ComputedHtml {
+                background_color: "rgba(0, 0, 0, 0)".to_owned(),
+            },
+            body_visible_text_length: 200,
+            applied_rule_count_estimate: 0,
+        };
+        let findings = detect_css_health_issues(&snap);
+        assert!(findings.iter().any(|f| f.kind == "css.all-sheets-failed-network"));
+    }
+
+    #[test]
+    fn empty_css_triggers_empty_or_tiny() {
+        let snap = CssHealthSnapshot {
+            page_url: "http://t/empty".to_owned(),
+            declared_sheets: vec![sheet(
+                "http://t/empty.css",
+                200,
+                Some("text/css"),
+                0,
+                Some(0),
+                Some(0),
+                true,
+                None,
+            )],
+            inline_style_block_count: 0,
+            computed_body: ua_default_body(),
+            computed_html: ComputedHtml {
+                background_color: "rgba(0, 0, 0, 0)".to_owned(),
+            },
+            body_visible_text_length: 200,
+            applied_rule_count_estimate: 0,
+        };
+        let findings = detect_css_health_issues(&snap);
+        assert!(findings.iter().any(|f| f.kind == "css.empty-or-tiny-body"));
+    }
+
+    #[test]
+    fn wrong_mime_triggers_finding() {
+        let snap = CssHealthSnapshot {
+            page_url: "http://t/wrongmime".to_owned(),
+            declared_sheets: vec![sheet(
+                "http://t/style.css",
+                200,
+                Some("text/html; charset=utf-8"),
+                5000,
+                Some(0),
+                Some(0),
+                true,
+                None,
+            )],
+            inline_style_block_count: 0,
+            computed_body: ua_default_body(),
+            computed_html: ComputedHtml {
+                background_color: "rgba(0, 0, 0, 0)".to_owned(),
+            },
+            body_visible_text_length: 200,
+            applied_rule_count_estimate: 0,
+        };
+        let findings = detect_css_health_issues(&snap);
+        assert!(findings.iter().any(|f| f.kind == "css.wrong-mime"));
+    }
+
+    #[test]
+    fn parsefail_triggers_served_or_anomaly() {
+        let snap = CssHealthSnapshot {
+            page_url: "http://t/parsefail".to_owned(),
+            declared_sheets: vec![sheet(
+                "http://t/parsefail.css",
+                200,
+                Some("text/css"),
+                5000,
+                Some(1),
+                Some(5),
+                true,
+                None,
+            )],
+            inline_style_block_count: 0,
+            computed_body: ua_default_body(),
+            computed_html: ComputedHtml {
+                background_color: "rgba(0, 0, 0, 0)".to_owned(),
+            },
+            body_visible_text_length: 200,
+            applied_rule_count_estimate: 1,
+        };
+        let findings = detect_css_health_issues(&snap);
+        assert!(
+            findings.iter().any(|f| f.kind == "css.served-but-not-applied"
+                || f.kind == "css.applied-rule-count-anomaly"
+                || f.kind == "css.brace-imbalance"),
+            "got: {:?}",
+            findings.iter().map(|f| &f.kind).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn no_stylesheets_warn_only() {
+        let snap = CssHealthSnapshot {
+            page_url: "http://t/no-css".to_owned(),
+            declared_sheets: vec![],
+            inline_style_block_count: 0,
+            computed_body: ua_default_body(),
+            computed_html: ComputedHtml {
+                background_color: "rgba(0, 0, 0, 0)".to_owned(),
+            },
+            body_visible_text_length: 50,
+            applied_rule_count_estimate: 0,
+        };
+        let findings = detect_css_health_issues(&snap);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].kind, "css.no-stylesheets-declared");
+        assert_eq!(findings[0].severity, crate::AxisSeverity::Warn);
+    }
+
+    #[test]
+    fn partial_failure_triggers_some_failed() {
+        let snap = CssHealthSnapshot {
+            page_url: "http://t/partial".to_owned(),
+            declared_sheets: vec![
+                sheet(
+                    "http://t/ok.css",
+                    200,
+                    Some("text/css"),
+                    5000,
+                    Some(80),
+                    Some(80),
+                    true,
+                    None,
+                ),
+                sheet(
+                    "http://t/404.css",
+                    404,
+                    Some("text/html"),
+                    0,
+                    None,
+                    None,
+                    true,
+                    None,
+                ),
+            ],
+            inline_style_block_count: 0,
+            computed_body: styled_body(),
+            computed_html: ComputedHtml {
+                background_color: "rgb(15, 23, 42)".to_owned(),
+            },
+            body_visible_text_length: 200,
+            applied_rule_count_estimate: 80,
+        };
+        let findings = detect_css_health_issues(&snap);
+        assert!(findings.iter().any(|f| f.kind == "css.some-sheets-failed-network"));
+    }
+
+    #[test]
+    fn brace_imbalance_triggers_finding() {
+        let snap = CssHealthSnapshot {
+            page_url: "http://t/imbalance".to_owned(),
+            declared_sheets: vec![sheet(
+                "http://t/imbalance.css",
+                200,
+                Some("text/css"),
+                5000,
+                Some(80),
+                Some(85),
+                true,
+                None,
+            )],
+            inline_style_block_count: 0,
+            computed_body: styled_body(),
+            computed_html: ComputedHtml {
+                background_color: "rgb(15, 23, 42)".to_owned(),
+            },
+            body_visible_text_length: 200,
+            applied_rule_count_estimate: 80,
+        };
+        let findings = detect_css_health_issues(&snap);
+        assert!(findings.iter().any(|f| f.kind == "css.brace-imbalance"));
     }
 
     #[test]

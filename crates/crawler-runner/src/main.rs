@@ -50,6 +50,12 @@ use chromiumoxide::cdp::js_protocol::runtime::{
     EnableParams as RuntimeEnable, EventConsoleApiCalled, EventExceptionThrown,
 };
 use clap::Parser;
+use crawler_detectors::css_health::{
+    brace_counts_js, detect_css_health_issues, split_close_braces, BraceCountsRaw, ComputedBody,
+    ComputedHtml, CssHealthSnapshot, StylesheetObservation, APPLIED_RULE_COUNT_JS,
+    BODY_VISIBLE_TEXT_LENGTH_JS, COMPUTED_STYLES_JS, DECLARED_HREFS_JS,
+    INLINE_STYLE_BLOCK_COUNT_JS,
+};
 use crawler_detectors::runtime_contrast::{
     detect_runtime_contrast_issues, RuntimeContrastSnapshot, RUNTIME_CONTRAST_JS,
 };
@@ -177,14 +183,24 @@ async fn run() -> Result<ExitCode> {
 
     // Event accumulator — shared between page subscriptions + main run.
     let events: Arc<Mutex<Vec<CapturedEvent>>> = Arc::new(Mutex::new(Vec::new()));
+    // Per-URL network observations — populated by raw CDP, read by
+    // css_health detector for status / content-type / body-bytes /
+    // error-text. T103.4.
+    let network: cdp_raw::NetworkObservations =
+        Arc::new(Mutex::new(std::collections::HashMap::new()));
     let started_at = Instant::now();
 
     // T102.4: spawn raw-CDP capture BEFORE creating the page so
     // we don't miss the about:blank → user-target attach.
     let ws_url = browser.websocket_address().clone();
-    let raw_capture = cdp_raw::spawn_raw_cdp_capture(ws_url, events.clone(), started_at)
-        .await
-        .context("starting raw-CDP capture")?;
+    let raw_capture = cdp_raw::spawn_raw_cdp_capture(
+        ws_url,
+        events.clone(),
+        network.clone(),
+        started_at,
+    )
+    .await
+    .context("starting raw-CDP capture")?;
 
     let page = browser
         .new_page("about:blank")
@@ -355,6 +371,11 @@ async fn run() -> Result<ExitCode> {
             }
             if let Err(e) = capture_runtime_focus(&page, &events, started_at).await {
                 tracing::debug!("runtime_focus snapshot failed: {e}");
+            }
+            if let Err(e) =
+                capture_css_health(&page, &events, &network, started_at).await
+            {
+                tracing::debug!("css_health snapshot failed: {e}");
             }
         }
     }
@@ -550,6 +571,126 @@ async fn capture_runtime_focus(
         events,
         findings,
         EventKind::RuntimeFocus,
+        started_at.elapsed().as_millis() as u64,
+    )
+    .await;
+    Ok(())
+}
+
+/// T103.4: capture a CSS-health snapshot via 6 sequential
+/// `page.evaluate` calls, then run the pure detection logic.
+///
+/// BUG ASSUMPTION: the page-side `BRACE_COUNTS_JS` does
+/// `fetch(url, {cache:'no-store'})` for each declared sheet.
+/// The fetch counts the bytes the visitor would actually see
+/// (post-decode), independent of what `Network.loadingFinished`
+/// reports as `encodedDataLength`. We use both: brace counts
+/// from same-origin fetch, body bytes from CDP `loadingFinished`.
+///
+/// Cross-origin sheets fail the fetch and return `null` brace
+/// counts — that's expected and is not an error. The detector
+/// silently ignores nulls in the brace-density heuristics.
+async fn capture_css_health(
+    page: &chromiumoxide::Page,
+    events: &Arc<Mutex<Vec<CapturedEvent>>>,
+    network: &cdp_raw::NetworkObservations,
+    started_at: Instant,
+) -> Result<()> {
+    let page_url = page.url().await?.unwrap_or_default();
+
+    // (1) declared <link rel="stylesheet"> hrefs.
+    let hrefs_val = page.evaluate(DECLARED_HREFS_JS).await?;
+    let declared_hrefs: Vec<String> = hrefs_val
+        .into_value()
+        .context("deserialize declared hrefs")?;
+
+    // (2) same-origin fetch: brace counts per URL.
+    let (open_braces, close_braces) = if declared_hrefs.is_empty() {
+        (
+            std::collections::HashMap::<String, Option<u32>>::new(),
+            std::collections::HashMap::<String, u32>::new(),
+        )
+    } else {
+        let raw_val = page.evaluate(brace_counts_js(&declared_hrefs)).await?;
+        let raw: BraceCountsRaw =
+            raw_val.into_value().context("deserialize brace counts")?;
+        split_close_braces(raw)
+    };
+
+    // (3) <style> block count.
+    let inline_blocks_val = page.evaluate(INLINE_STYLE_BLOCK_COUNT_JS).await?;
+    let inline_style_block_count: u32 = inline_blocks_val
+        .into_value()
+        .context("deserialize inline style block count")?;
+
+    // (4) computed body + html.
+    let cs_val = page.evaluate(COMPUTED_STYLES_JS).await?;
+    #[derive(serde::Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct ComputedStylesRaw {
+        body: ComputedBody,
+        html: ComputedHtml,
+    }
+    let cs: ComputedStylesRaw = cs_val
+        .into_value()
+        .context("deserialize computed styles")?;
+
+    // (5) body visible text length.
+    let body_len_val = page.evaluate(BODY_VISIBLE_TEXT_LENGTH_JS).await?;
+    let body_visible_text_length: u32 = body_len_val
+        .into_value()
+        .context("deserialize body visible text length")?;
+
+    // (6) applied-rule count estimate.
+    let arc_val = page.evaluate(APPLIED_RULE_COUNT_JS).await?;
+    let applied_rule_count_estimate: u32 = arc_val
+        .into_value()
+        .context("deserialize applied rule count")?;
+
+    // Merge network observations + brace counts into per-sheet rows.
+    let net = network.lock().await;
+    let declared_sheets: Vec<StylesheetObservation> = declared_hrefs
+        .iter()
+        .map(|url| {
+            let obs = net.get(url);
+            let (status, content_type, body_bytes, error_text, from_network) = match obs {
+                Some(o) => (
+                    o.status,
+                    o.content_type.clone(),
+                    o.body_bytes,
+                    o.error_text.clone(),
+                    true,
+                ),
+                None => (0, None, 0, None, false),
+            };
+            StylesheetObservation {
+                url: url.clone(),
+                status,
+                content_type,
+                body_bytes,
+                declared_brace_count: open_braces.get(url).copied().flatten(),
+                declared_close_brace_count: close_braces.get(url).copied(),
+                from_network,
+                error_text,
+            }
+        })
+        .collect();
+    drop(net);
+
+    let snap = CssHealthSnapshot {
+        page_url,
+        declared_sheets,
+        inline_style_block_count,
+        computed_body: cs.body,
+        computed_html: cs.html,
+        body_visible_text_length,
+        applied_rule_count_estimate,
+    };
+    let findings = detect_css_health_issues(&snap);
+    push_axis_findings(
+        events,
+        findings,
+        EventKind::CssHealth,
         started_at.elapsed().as_millis() as u64,
     )
     .await;

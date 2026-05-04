@@ -30,6 +30,7 @@
 //! this dispatcher will silently miss them — surface that case
 //! by returning the count of UNROUTED methods we encountered.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -39,15 +40,46 @@ use futures::{SinkExt, StreamExt};
 use serde_json::{json, Value};
 use tokio::sync::Mutex;
 use tokio_tungstenite::tungstenite::Message;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
+
+/// Per-URL network observation — what the css_health detector
+/// (and future audit-of-CDN type rules) reads to know whether a
+/// resource was actually fetched, what its content-type was, and
+/// how big the body was on the wire.
+///
+/// BUG ASSUMPTION: `body_bytes` is `Network.loadingFinished`'s
+/// `encodedDataLength` (post-content-encoding bytes). For empty-
+/// or-tiny detection (< 50 byte threshold) this is sufficient;
+/// for true source-byte counting use `Network.getResponseBody`
+/// (deferred — adds an async round-trip per URL).
+#[derive(Debug, Clone, Default)]
+#[non_exhaustive]
+pub struct NetworkObservation {
+    /// HTTP status (0 if not observed).
+    pub status: u16,
+    /// `Content-Type` from the response headers.
+    pub content_type: Option<String>,
+    /// Encoded body length (best-effort, from
+    /// `Network.loadingFinished.encodedDataLength`).
+    pub body_bytes: u64,
+    /// Network-level error text from `Network.loadingFailed`.
+    pub error_text: Option<String>,
+}
+
+/// Shared map of URL → observation. Populated by the raw-CDP
+/// pump; readable from any other task.
+pub type NetworkObservations = Arc<Mutex<HashMap<String, NetworkObservation>>>;
 
 /// Spawn a background task that pumps the raw-CDP WS, attaches
 /// to every target, and pushes captured events into `events`.
+/// Network responses are accumulated into `network` for the
+/// css_health detector.
 ///
 /// Returns a `JoinHandle`. Caller can `.abort()` at journey end.
 pub async fn spawn_raw_cdp_capture(
     ws_url: String,
     events: Arc<Mutex<Vec<CapturedEvent>>>,
+    network: NetworkObservations,
     started_at: Instant,
 ) -> Result<tokio::task::JoinHandle<()>> {
     let (ws, _resp) = tokio_tungstenite::connect_async(&ws_url)
@@ -65,7 +97,7 @@ pub async fn spawn_raw_cdp_capture(
     // the BROWSER session (sessionId omitted). For TARGET
     // sessions, the auto-attach hook re-enables on attach.
     let mut next_id: u64 = 1;
-    let mut send_cmd =
+    let send_cmd =
         |id: u64, method: &str, params: Value, session_id: Option<&str>| -> Result<Message> {
             let mut req = json!({
                 "id": id,
@@ -242,27 +274,49 @@ pub async fn spawn_raw_cdp_capture(
                 }
                 "Network.responseReceived" => {
                     // Track URL by requestId so loadingFailed can name the URL.
+                    let url_opt = params
+                        .get("response")
+                        .and_then(|r| r.get("url"))
+                        .and_then(|s| s.as_str())
+                        .map(ToOwned::to_owned);
                     if let (Some(req_id), Some(url)) = (
                         params.get("requestId").and_then(|s| s.as_str()),
-                        params
-                            .get("response")
-                            .and_then(|r| r.get("url"))
-                            .and_then(|s| s.as_str()),
+                        url_opt.as_ref(),
                     ) {
-                        response_url_by_request.insert(req_id.to_owned(), url.to_owned());
+                        response_url_by_request.insert(req_id.to_owned(), url.clone());
                     }
-                    // Status >= 400 → ResponseError.
                     let status_u = params
                         .get("response")
                         .and_then(|r| r.get("status"))
                         .and_then(|s| s.as_u64())
                         .unwrap_or(0);
+                    let content_type = params
+                        .get("response")
+                        .and_then(|r| r.get("headers"))
+                        .and_then(|h| {
+                            h.get("Content-Type")
+                                .or_else(|| h.get("content-type"))
+                                .or_else(|| h.get("Content-type"))
+                        })
+                        .and_then(|v| v.as_str())
+                        .map(ToOwned::to_owned)
+                        .or_else(|| {
+                            params
+                                .get("response")
+                                .and_then(|r| r.get("mimeType"))
+                                .and_then(|s| s.as_str())
+                                .map(ToOwned::to_owned)
+                        });
+                    // Update the per-URL observation.
+                    if let Some(ref url) = url_opt {
+                        let mut net = network.lock().await;
+                        let entry = net.entry(url.clone()).or_default();
+                        entry.status =
+                            u16::try_from(status_u).unwrap_or(u16::MAX);
+                        entry.content_type = content_type;
+                    }
+                    // Status >= 400 → ResponseError.
                     if status_u >= 400 {
-                        let url = params
-                            .get("response")
-                            .and_then(|r| r.get("url"))
-                            .and_then(|s| s.as_str())
-                            .map(|s| s.to_owned());
                         push_event(
                             &events,
                             CapturedEvent {
@@ -270,7 +324,7 @@ pub async fn spawn_raw_cdp_capture(
                                 kind: EventKind::ResponseError,
                                 level: None,
                                 text: format!("HTTP {status_u}"),
-                                url,
+                                url: url_opt,
                                 status: u16::try_from(status_u).ok(),
                                 stack: None,
                                 impact: None,
@@ -279,6 +333,23 @@ pub async fn spawn_raw_cdp_capture(
                             },
                         )
                         .await;
+                    }
+                }
+                "Network.loadingFinished" => {
+                    let req_id = params
+                        .get("requestId")
+                        .and_then(|s| s.as_str());
+                    let encoded = params
+                        .get("encodedDataLength")
+                        .and_then(|n| n.as_f64())
+                        .unwrap_or(0.0)
+                        .max(0.0);
+                    if let Some(req_id) = req_id {
+                        if let Some(url) = response_url_by_request.get(req_id).cloned() {
+                            let mut net = network.lock().await;
+                            let entry = net.entry(url).or_default();
+                            entry.body_bytes = encoded as u64;
+                        }
                     }
                 }
                 "Network.loadingFailed" => {
@@ -293,6 +364,11 @@ pub async fn spawn_raw_cdp_capture(
                         .and_then(|s| s.as_str())
                         .unwrap_or("loading failed")
                         .to_owned();
+                    if let Some(ref u) = url {
+                        let mut net = network.lock().await;
+                        let entry = net.entry(u.clone()).or_default();
+                        entry.error_text = Some(err.clone());
+                    }
                     push_event(
                         &events,
                         CapturedEvent {
