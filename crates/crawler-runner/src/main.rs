@@ -65,6 +65,7 @@ use crawler_detectors::runtime_focus::{
 use crawler_detectors::runtime_images::{
     detect_runtime_image_issues, RuntimeImagesSnapshot, RUNTIME_IMAGES_JS,
 };
+use crawler_detectors::web_vitals::{classify, COLLECT_JS, RawVitals, WIRE_CALLBACKS_JS};
 use crawler_detectors::ui_overflow::{
     detect_ui_overflow_issues, Severity as UiSeverity, UiOverflowSnapshot, UI_OVERFLOW_JS,
 };
@@ -202,6 +203,30 @@ async fn run() -> Result<ExitCode> {
         .new_page("about:blank")
         .await
         .context("creating page")?;
+
+    // T103.5: web-vitals capture. Inject the vendored
+    // web-vitals.iife.js + WIRE_CALLBACKS_JS as an init script so
+    // every navigation gets the global `webVitals` object and the
+    // window.__lfiVitals accumulator BEFORE any page-side script
+    // runs. The script must be concatenated INTO ONE source string
+    // because addScriptToEvaluateOnNewDocument runs each registered
+    // script in isolation (no shared scope) on each new document.
+    //
+    // BUG ASSUMPTION: web-vitals.iife.js lives at
+    // {crawler-root}/node_modules/web-vitals/dist/web-vitals.iife.js.
+    // If absent (production runner without node_modules), we skip
+    // the inject step + log a warn — the runner still functions,
+    // just without LCP/CLS/INP data.
+    if let Some(vitals_js) = load_web_vitals_iife().await {
+        let combined = format!("{vitals_js}\n{WIRE_CALLBACKS_JS}");
+        if let Err(e) = page.add_init_script(combined).await {
+            warn!("web-vitals add_init_script failed: {e}");
+        } else {
+            tracing::debug!("web-vitals init script registered");
+        }
+    } else {
+        warn!("web-vitals.iife.js not found — vitals capture disabled this run");
+    }
 
     // T102.3: explicit CDP domain enables. chromiumoxide 0.9
     // does NOT auto-enable domains when you subscribe to typed
@@ -372,6 +397,14 @@ async fn run() -> Result<ExitCode> {
                 tracing::debug!("css_health snapshot failed: {e}");
             }
         }
+    }
+
+    // T103.5: collect web-vitals before tearing down the page.
+    // CLS / INP finalize on hide; we read the accumulator for
+    // whatever the last-loaded page measured. Best-effort — a
+    // failure here doesn't fail the run.
+    if let Err(e) = capture_web_vitals(&page, &events, started_at).await {
+        tracing::debug!("web_vitals collect failed: {e}");
     }
 
     let duration_ms = run_start.elapsed().as_millis() as u64;
@@ -568,6 +601,115 @@ async fn capture_runtime_focus(
         started_at.elapsed().as_millis() as u64,
     )
     .await;
+    Ok(())
+}
+
+/// T103.5: locate and read web-vitals.iife.js from one of the
+/// expected vendoring sites. Returns `None` if not found — the
+/// runner then skips vitals capture rather than failing the run.
+///
+/// BUG ASSUMPTION: the resolution order matches what TS Crawler's
+/// pipeline expects. If the runner is shipped from a release
+/// directory without node_modules, the operator must vendor the
+/// IIFE into a sibling `vendor/` directory or set
+/// CRAWLER_WEB_VITALS_PATH explicitly.
+async fn load_web_vitals_iife() -> Option<String> {
+    if let Ok(path) = std::env::var("CRAWLER_WEB_VITALS_PATH") {
+        if let Ok(s) = tokio::fs::read_to_string(&path).await {
+            return Some(s);
+        }
+    }
+    let candidates = [
+        "node_modules/web-vitals/dist/web-vitals.iife.js",
+        "../../node_modules/web-vitals/dist/web-vitals.iife.js",
+        "../node_modules/web-vitals/dist/web-vitals.iife.js",
+        "vendor/web-vitals.iife.js",
+    ];
+    for c in candidates {
+        if let Ok(s) = tokio::fs::read_to_string(c).await {
+            return Some(s);
+        }
+    }
+    None
+}
+
+/// Map a vitals band to a Report severity. `Good` → None
+/// (filtered out before push); other bands map to warn / strict.
+fn band_to_severity(band: crawler_detectors::web_vitals::Band) -> Option<ReportSeverity> {
+    use crawler_detectors::web_vitals::Band;
+    match band {
+        Band::Good => None,
+        Band::NeedsImprovement => Some(ReportSeverity::Warn),
+        Band::Poor => Some(ReportSeverity::Strict),
+        _ => Some(ReportSeverity::Warn), // forward-compat for new bands
+    }
+}
+
+/// T103.5: capture web-vitals via the page-side accumulator.
+/// Pulls window.__lfiVitals, classifies bands, and pushes one
+/// CapturedEvent per non-good metric.
+async fn capture_web_vitals(
+    page: &chromiumoxide::Page,
+    events: &Arc<Mutex<Vec<CapturedEvent>>>,
+    started_at: Instant,
+) -> Result<()> {
+    let raw_val = page.evaluate(COLLECT_JS).await?;
+    let raw: RawVitals = raw_val
+        .into_value()
+        .context("deserialize web-vitals raw")?;
+    let snap = classify(raw, epoch_millis());
+    let t_ms = started_at.elapsed().as_millis() as u64;
+    let mut findings = Vec::<CapturedEvent>::new();
+
+    let mut push = |rule_id: &str, text: String, severity: ReportSeverity| {
+        findings.push(CapturedEvent {
+            t: t_ms,
+            kind: EventKind::WebVitals,
+            level: None,
+            text,
+            url: None,
+            status: None,
+            stack: None,
+            impact: None,
+            rule_id: Some(rule_id.to_owned()),
+            severity: Some(severity),
+        });
+    };
+
+    if let Some(b) = &snap.lcp {
+        if let Some(sev) = band_to_severity(b.band) {
+            push(
+                "web_vitals.lcp",
+                format!("[lcp] {:.0}ms ({:?})", b.value, b.band),
+                sev,
+            );
+        }
+    }
+    if let Some(b) = &snap.cls {
+        if let Some(sev) = band_to_severity(b.band) {
+            push(
+                "web_vitals.cls",
+                format!("[cls] {:.3} ({:?})", b.value, b.band),
+                sev,
+            );
+        }
+    }
+    if let Some(b) = &snap.inp {
+        if let Some(sev) = band_to_severity(b.band) {
+            push(
+                "web_vitals.inp",
+                format!("[inp] {:.0}ms ({:?})", b.value, b.band),
+                sev,
+            );
+        }
+    }
+
+    if !findings.is_empty() {
+        let mut g = events.lock().await;
+        for f in findings {
+            g.push(f);
+        }
+    }
     Ok(())
 }
 
