@@ -1,0 +1,21 @@
+{
+  "name": "css-health-fixtures-integrated",
+  "description": "T71 verification — runs through src/main.ts so the integrated cssHealth detector fires per-step. Each goto should produce its expected findings in report.json events. The control /working/ page should produce zero findings.",
+  "baseUrl": "http://127.0.0.1:8766",
+  "viewport": { "w": 1280, "h": 800 },
+  "steps": [
+    { "kind": "goto", "url": "http://127.0.0.1:8766/working/", "label": "01-working" },
+    { "kind": "wait", "ms": 300 },
+    { "kind": "goto", "url": "http://127.0.0.1:8766/missing/", "label": "02-missing" },
+    { "kind": "wait", "ms": 300 },
+    { "kind": "goto", "url": "http://127.0.0.1:8766/partial/", "label": "03-partial" },
+    { "kind": "wait", "ms": 300 },
+    { "kind": "goto", "url": "http://127.0.0.1:8766/empty/", "label": "04-empty" },
+    { "kind": "wait", "ms": 300 },
+    { "kind": "goto", "url": "http://127.0.0.1:8766/wrongmime/", "label": "05-wrongmime" },
+    { "kind": "wait", "ms": 300 },
+    { "kind": "goto", "url": "http://127.0.0.1:8766/parsefail/", "label": "06-parsefail" },
+    { "kind": "wait", "ms": 300 },
+    { "kind": "goto", "url": "http://127.0.0.1:8766/no-stylesheets/", "label": "07-no-stylesheets" }
+  ]
+}

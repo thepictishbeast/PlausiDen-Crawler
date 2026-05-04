@@ -23,12 +23,14 @@ import { aggregate, renderSummary } from './aggregates.js';
 import { runDiscover, type DiscoveredPage } from './discover.js';
 import { runProbe } from './probe.js';
 import { runAxe, axeEventsFor, renderAxeFindings, annotateViolations, type AxePageResult } from './audit.js';
+import { captureCSSHealthSnapshot, detectCSSHealthIssues, type CSSHealthFinding } from './cssHealth.js';
 
 interface Budget {
   newConsoleErrors: number;
   newPageErrors: number;
   newFailedRequests: number;
   newA11yViolations: number;
+  newCssHealthStrict: number;
   newlyBrokenSteps: number;
 }
 
@@ -37,6 +39,7 @@ const DEFAULT_BUDGET: Budget = {
   newPageErrors: 0,
   newFailedRequests: 0,
   newA11yViolations: 0,
+  newCssHealthStrict: 0,
   newlyBrokenSteps: 0,
 };
 
@@ -343,14 +346,89 @@ async function main(args: string[]): Promise<number> {
   page.on('pageerror', (err) => {
     log({ kind: 'pageerror', text: err.message, stack: err.stack });
   });
+  // T71: cssHealth needs per-URL response metadata (status,
+  // content-type, body length, error text). The existing log()
+  // stream is event-flavored; cssHealth wants a Map<url,obs>. So
+  // both listeners co-exist: log() captures per-event for the
+  // diff stream, cssHealthNetworkResponses captures per-URL for
+  // the detector. Single response/requestfailed pair feeds both.
+  const cssHealthNetworkResponses = new Map<
+    string,
+    { status: number; contentType: string | null; bodyBytes: number; errorText: string | null }
+  >();
   page.on('requestfailed', (req) => {
     log({ kind: 'request-failed', text: req.failure()?.errorText || 'unknown', url: req.url() });
+    cssHealthNetworkResponses.set(req.url(), {
+      status: 0,
+      contentType: null,
+      bodyBytes: 0,
+      errorText: req.failure()?.errorText || 'request failed',
+    });
   });
-  page.on('response', (res) => {
+  page.on('response', async (res) => {
     if (res.status() >= 400) {
       log({ kind: 'response-error', text: res.statusText(), url: res.url(), status: res.status() });
     }
+    // Capture metadata for the css-health detector. Best-effort —
+    // body() can throw (canceled requests, redirects). We only need
+    // size for stylesheets, so it's worth the call cost.
+    try {
+      const headers = res.headers();
+      let bodyBytes = 0;
+      try {
+        const body = await res.body();
+        bodyBytes = body.length;
+      } catch {
+        bodyBytes = 0;
+      }
+      cssHealthNetworkResponses.set(res.url(), {
+        status: res.status(),
+        contentType: headers['content-type'] ?? null,
+        bodyBytes,
+        errorText: null,
+      });
+    } catch {
+      /* response handler is best-effort */
+    }
   });
+
+  /**
+   * T71: run cssHealth detector on the *current* DOM + network
+   * state and append findings to the events stream.
+   *
+   * Called after every goto step. Discover/probe steps are skipped
+   * because the page may navigate many times during them; the
+   * detector would fire stale snapshots. Click/fill/wait/screenshot
+   * steps are skipped because the DOM hasn't been *intentionally*
+   * loaded — the detector's job is to validate page-load CSS, not
+   * runtime DOM mutations.
+   */
+  const cssHealthFindingsByStep: Array<{ stepLabel: string; pageUrl: string; findings: CSSHealthFinding[] }> = [];
+  const checkCssHealth = async (afterLabel: string) => {
+    try {
+      const snap = await captureCSSHealthSnapshot(page, cssHealthNetworkResponses);
+      const findings = detectCSSHealthIssues(snap);
+      cssHealthFindingsByStep.push({ stepLabel: afterLabel, pageUrl: snap.pageUrl, findings });
+      for (const f of findings) {
+        log({
+          kind: 'css-health',
+          text: `[${f.kind}] ${f.detail}`,
+          url: snap.pageUrl,
+          severity: f.severity,
+          ruleId: f.kind,
+          impact: f.severity === 'strict' ? 'serious' : 'minor',
+        });
+      }
+    } catch (e) {
+      // Detector failure is itself worth surfacing — but as a soft
+      // page error, not a css-health finding (avoid recursive
+      // claims about css when the detector itself broke).
+      log({
+        kind: 'pageerror',
+        text: `[cssHealth] detector threw on step ${afterLabel}: ${(e as Error).message}`,
+      });
+    }
+  };
 
   // Deeper heuristics that the surface-level event capture misses:
   //  - WebSocket failures (onclose with non-1000 code)
@@ -523,6 +601,13 @@ async function main(args: string[]): Promise<number> {
     await page.waitForTimeout(200);
     // Deep heuristics check — error copy, blank main, stuck loading.
     await checkUiHealth(step.label || step.kind);
+    // T71: run cssHealth detector after every goto. Skipped on
+    // wait/click/fill — those steps don't reload the page, so the
+    // last goto's snapshot would still apply. Skipped on press/
+    // type as well for the same reason.
+    if (step.kind === 'goto') {
+      await checkCssHealth(step.label || `goto-${i}`);
+    }
     // Memory snapshot at end of each step so the report shows heap growth
     // across the journey. Cheap (one page.evaluate call).
     await snapshotMemory(page, step.label || step.kind, startEpoch, telemetry);
@@ -579,6 +664,8 @@ async function main(args: string[]): Promise<number> {
       pageErrors: events.filter(e => e.kind === 'pageerror').length,
       failedRequests: events.filter(e => e.kind === 'request-failed' || e.kind === 'response-error').length,
       a11yViolations: events.filter(e => e.kind === 'a11y-violation').length,
+      cssHealthFindings: events.filter(e => e.kind === 'css-health').length,
+      cssHealthFindingsStrict: events.filter(e => e.kind === 'css-health' && e.severity === 'strict').length,
       total: events.length,
       stepsOk: stepResults.filter(s => s.ok).length,
       stepsFailed: stepResults.filter(s => !s.ok).length,
@@ -589,6 +676,14 @@ async function main(args: string[]): Promise<number> {
     telemetry,
     aggregates: agg,
   };
+  // Per-step cssHealth findings, separate file so operators can
+  // grep one place for "what CSS broke and where".
+  if (cssHealthFindingsByStep.length > 0) {
+    writeFileSync(
+      join(outDir, 'css-health.json'),
+      JSON.stringify(cssHealthFindingsByStep, null, 2),
+    );
+  }
   writeFileSync(join(outDir, 'report.json'), JSON.stringify(report, null, 2));
   // Write a terminal-friendly summary too so CI output is useful at a glance.
   writeFileSync(join(outDir, 'summary.txt'), renderSummary(agg));
@@ -610,6 +705,7 @@ async function main(args: string[]): Promise<number> {
   console.log(`  page errors:       ${report.counts.pageErrors}`);
   console.log(`  failed fetches:    ${report.counts.failedRequests}`);
   console.log(`  a11y violations:   ${report.counts.a11yViolations}`);
+  console.log(`  css health:        ${report.counts.cssHealthFindings} (strict ${report.counts.cssHealthFindingsStrict})`);
   console.log(`  steps ok/failed:   ${report.counts.stepsOk}/${report.counts.stepsFailed}`);
   if (prior) {
     console.log(`  diff vs prior run (${prior.journey}):`);
@@ -617,17 +713,22 @@ async function main(args: string[]): Promise<number> {
     console.log(`    NEW page errors:      ${diff.newPageErrors.length}`);
     console.log(`    NEW failed fetches:   ${diff.newFailedRequests.length}`);
     console.log(`    NEW a11y violations:  ${diff.newA11yViolations.length}`);
+    const newCssHealthStrict = diff.newCssHealthFindings.filter(e => e.severity === 'strict').length;
+    const newCssHealthWarn = diff.newCssHealthFindings.length - newCssHealthStrict;
+    console.log(`    NEW css health:       ${diff.newCssHealthFindings.length} (strict ${newCssHealthStrict}, warn ${newCssHealthWarn})`);
     console.log(`    newly broken steps:   ${diff.newlyBrokenSteps.length}`);
     console.log(`    fixed steps:          ${diff.fixedSteps.length}`);
   } else {
     console.log(`  (no prior run to diff against)`);
   }
 
+  const newCssHealthStrictCount = diff.newCssHealthFindings.filter(e => e.severity === 'strict').length;
   const overBudget =
     diff.newConsoleErrors.length > DEFAULT_BUDGET.newConsoleErrors
     || diff.newPageErrors.length > DEFAULT_BUDGET.newPageErrors
     || diff.newFailedRequests.length > DEFAULT_BUDGET.newFailedRequests
     || diff.newA11yViolations.length > DEFAULT_BUDGET.newA11yViolations
+    || newCssHealthStrictCount > DEFAULT_BUDGET.newCssHealthStrict
     || diff.newlyBrokenSteps.length > DEFAULT_BUDGET.newlyBrokenSteps;
 
   if (overBudget) {

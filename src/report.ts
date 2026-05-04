@@ -9,7 +9,14 @@ import type { StepResult } from './journey';
 
 export interface CapturedEvent {
   t: number;
-  kind: 'console' | 'pageerror' | 'request-failed' | 'response-error' | 'csp-violation' | 'a11y-violation';
+  kind:
+    | 'console'
+    | 'pageerror'
+    | 'request-failed'
+    | 'response-error'
+    | 'csp-violation'
+    | 'a11y-violation'
+    | 'css-health';
   level?: string;
   text: string;
   url?: string;
@@ -17,6 +24,8 @@ export interface CapturedEvent {
   stack?: string;
   impact?: 'minor' | 'moderate' | 'serious' | 'critical';
   ruleId?: string;
+  /** css-health-only: severity bucket from cssHealth detector. */
+  severity?: 'strict' | 'warn';
 }
 
 export interface Report {
@@ -30,6 +39,8 @@ export interface Report {
     pageErrors: number;
     failedRequests: number;
     a11yViolations: number;
+    cssHealthFindings: number;
+    cssHealthFindingsStrict: number;
     total: number;
     stepsOk: number;
     stepsFailed: number;
@@ -53,6 +64,12 @@ export interface Diff {
   newPageErrors: CapturedEvent[];
   newFailedRequests: CapturedEvent[];
   newA11yViolations: CapturedEvent[];
+  /**
+   * cssHealth findings new in this run vs the prior baseline. A new
+   * strict cssHealth finding is the same severity-class as a new
+   * console error: ship-blocking. T71 (2026-05-04).
+   */
+  newCssHealthFindings: CapturedEvent[];
   newlyBrokenSteps: StepResult[];
   fixedSteps: StepResult[];
 }
@@ -66,6 +83,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     newPageErrors: [],
     newFailedRequests: [],
     newA11yViolations: [],
+    newCssHealthFindings: [],
     newlyBrokenSteps: [],
     fixedSteps: [],
   };
@@ -74,6 +92,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     out.newPageErrors = current.events.filter(e => e.kind === 'pageerror');
     out.newFailedRequests = current.events.filter(e => e.kind === 'request-failed' || e.kind === 'response-error');
     out.newA11yViolations = current.events.filter(e => e.kind === 'a11y-violation');
+    out.newCssHealthFindings = current.events.filter(e => e.kind === 'css-health');
     return out;
   }
   const priorKeys = new Set(prior.events.map(key));
@@ -83,6 +102,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     else if (e.kind === 'pageerror') out.newPageErrors.push(e);
     else if (e.kind === 'request-failed' || e.kind === 'response-error') out.newFailedRequests.push(e);
     else if (e.kind === 'a11y-violation') out.newA11yViolations.push(e);
+    else if (e.kind === 'css-health') out.newCssHealthFindings.push(e);
   }
   const priorStepLabels = new Map(
     prior.steps.map((s, i) => [s.step.label || `${s.step.kind}-${i}`, s])
