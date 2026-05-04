@@ -1,0 +1,32 @@
+{
+  "name": "skillshots-poc-tablet",
+  "description": "Tablet-viewport (768×1024 portrait, iPad-class) audit of SkillShots PoC. Catches the in-between viewport class where mobile-first layouts often produce awkward stretching (panels too wide, side-by-side that should still stack).",
+  "baseUrl": "http://127.0.0.1:8123",
+  "viewport": { "w": 768, "h": 1024 },
+  "steps": [
+    { "kind": "goto", "url": "http://127.0.0.1:8123/", "label": "battle-feed", "timeout": 8000 },
+    { "kind": "wait", "ms": 400 },
+    { "kind": "screenshot", "label": "01-feed-top" },
+    { "kind": "scroll", "dy": 1200 },
+    { "kind": "wait", "ms": 200, "label": "feed-scroll-bottom" },
+    { "kind": "screenshot", "label": "02-feed-bottom" },
+    { "kind": "goto", "url": "http://127.0.0.1:8123/challenge.html", "label": "challenge-detail" },
+    { "kind": "wait", "ms": 400 },
+    { "kind": "screenshot", "label": "03-challenge-top" },
+    { "kind": "goto", "url": "http://127.0.0.1:8123/leaderboard.html", "label": "leaderboard" },
+    { "kind": "wait", "ms": 400 },
+    { "kind": "screenshot", "label": "04-leaderboard" },
+    { "kind": "goto", "url": "http://127.0.0.1:8123/post-skill.html", "label": "post-skill" },
+    { "kind": "wait", "ms": 400 },
+    { "kind": "screenshot", "label": "05-post-skill" },
+    { "kind": "goto", "url": "http://127.0.0.1:8123/my-wins.html", "label": "my-wins" },
+    { "kind": "wait", "ms": 400 },
+    { "kind": "screenshot", "label": "06-my-wins" },
+    { "kind": "goto", "url": "http://127.0.0.1:8123/profile.html", "label": "profile" },
+    { "kind": "wait", "ms": 400 },
+    { "kind": "screenshot", "label": "07-profile" },
+    { "kind": "goto", "url": "http://127.0.0.1:8123/votes.html", "label": "votes" },
+    { "kind": "wait", "ms": 400 },
+    { "kind": "screenshot", "label": "08-votes" }
+  ]
+}
