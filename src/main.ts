@@ -29,6 +29,7 @@ import { captureRuntimeContrastSnapshot, detectRuntimeContrastIssues, type Runti
 import { captureRuntimeImagesSnapshot, detectRuntimeImageIssues, type RuntimeImageFinding } from './runtimeImages.js';
 import { captureRuntimeFocusSnapshot, detectRuntimeFocusIssues, type RuntimeFocusFinding } from './runtimeFocus.js';
 import { captureHeadingOrderSnapshot, detectHeadingOrderIssues, type HeadingOrderFinding } from './headingOrder.js';
+import { captureRuntimeLandmarksSnapshot, detectRuntimeLandmarksIssues, type RuntimeLandmarksFinding } from './runtimeLandmarks.js';
 
 interface Budget {
   newConsoleErrors: number;
@@ -710,6 +711,32 @@ async function main(args: string[]): Promise<number> {
   };
 
   /**
+   * T105: runtime-landmarks detector. Counts main/banner/contentinfo,
+   * flags duplicates + same-role nesting. Mirrors
+   * crates/crawler-detectors/src/runtime_landmarks.rs.
+   */
+  const runtimeLandmarksFindingsByStep: Array<{ stepLabel: string; pageUrl: string; findings: RuntimeLandmarksFinding[] }> = [];
+  const checkRuntimeLandmarks = async (afterLabel: string) => {
+    try {
+      const snap = await captureRuntimeLandmarksSnapshot(page);
+      const findings = detectRuntimeLandmarksIssues(snap);
+      runtimeLandmarksFindingsByStep.push({ stepLabel: afterLabel, pageUrl: snap.pageUrl, findings });
+      for (const f of findings) {
+        log({
+          kind: 'runtime-landmarks',
+          text: `[${f.kind}] ${f.detail}`,
+          url: snap.pageUrl,
+          severity: f.severity,
+          ruleId: f.kind,
+          impact: f.severity === 'strict' ? 'serious' : 'minor',
+        });
+      }
+    } catch (e) {
+      log({ kind: 'pageerror', text: `[runtimeLandmarks] detector threw on ${afterLabel}: ${(e as Error).message}` });
+    }
+  };
+
+  /**
    * T75: runtime image-health detector. Catches broken / empty /
    * missing-alt / CLS-risk images at the rendered DOM level.
    */
@@ -1083,6 +1110,7 @@ async function main(args: string[]): Promise<number> {
       await checkRuntimeImages(step.label || `goto-${i}`);
       await checkRuntimeFocus(step.label || `goto-${i}`);
       await checkHeadingOrder(step.label || `goto-${i}`);
+      await checkRuntimeLandmarks(step.label || `goto-${i}`);
       await checkWebVitals(step.label || `goto-${i}`);
     }
     // Memory snapshot at end of each step so the report shows heap growth

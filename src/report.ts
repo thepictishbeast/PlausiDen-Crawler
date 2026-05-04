@@ -139,6 +139,12 @@ export interface Diff {
    * !=1 h1; warn = level skip (h2 -> h4 without h3). T104 (TS port).
    */
   newHeadingOrderFindings: CapturedEvent[];
+  /**
+   * runtime-landmarks findings new in this run vs prior. Strict =
+   * landmark uniqueness violation (no main / multiple main / etc.)
+   * or same-role nesting (<main><main>). T105 (TS port).
+   */
+  newRuntimeLandmarksFindings: CapturedEvent[];
   newlyBrokenSteps: StepResult[];
   fixedSteps: StepResult[];
 }
@@ -164,6 +170,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     // see a stable shape regardless of pipeline ordering.
     newAriaDriftFindings: [],
     newHeadingOrderFindings: [],
+    newRuntimeLandmarksFindings: [],
     newlyBrokenSteps: [],
     fixedSteps: [],
   };
@@ -180,6 +187,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     out.newWebVitalsFindings = current.events.filter(e => e.kind === 'web-vitals');
     out.newCspViolations = current.events.filter(e => e.kind === 'csp-violation');
     out.newHeadingOrderFindings = current.events.filter(e => e.kind === 'heading-order');
+    out.newRuntimeLandmarksFindings = current.events.filter(e => e.kind === 'runtime-landmarks');
     return out;
   }
   const priorKeys = new Set(prior.events.map(key));
@@ -197,6 +205,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     else if (e.kind === 'web-vitals') out.newWebVitalsFindings.push(e);
     else if (e.kind === 'csp-violation') out.newCspViolations.push(e);
     else if (e.kind === 'heading-order') out.newHeadingOrderFindings.push(e);
+    else if (e.kind === 'runtime-landmarks') out.newRuntimeLandmarksFindings.push(e);
   }
   const priorStepLabels = new Map(
     prior.steps.map((s, i) => [s.step.label || `${s.step.kind}-${i}`, s])
@@ -272,6 +281,15 @@ export function renderPositiveSignal(report: Report, diff: Diff): string {
       total: report.events.filter((e) => e.kind === 'heading-order').length,
       news: diff.newHeadingOrderFindings.length,
       strictNews: strict(diff.newHeadingOrderFindings),
+    },
+    {
+      // T105 (TS port): runtime_landmarks — main/banner/contentinfo
+      // uniqueness + same-role nesting.
+      // Mirrors crates/crawler-detectors/src/runtime_landmarks.rs.
+      name: 'runtimeLandmarks',
+      total: report.events.filter((e) => e.kind === 'runtime-landmarks').length,
+      news: diff.newRuntimeLandmarksFindings.length,
+      strictNews: strict(diff.newRuntimeLandmarksFindings),
     },
   ];
   const lines: string[] = [];
