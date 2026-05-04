@@ -12,10 +12,10 @@
  * - Diffs against the previous run and exits non-zero on NEW regressions.
  */
 import { chromium, type Page } from 'playwright';
-import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { runStep, type Journey, type StepResult } from './journey.js';
-import { diffReports, findPriorRun, renderPositiveSignal, type CapturedEvent, type Report } from './report.js';
+import { diffReports, findPriorRun, renderPositiveSignal, compareAriaTrees, type CapturedEvent, type Report } from './report.js';
 import { captureAriaTree, ariaTreeToText, interactableNodes, scoreAriaTree } from './aria.js';
 import { installWebVitals, collectVitals } from './webVitals.js';
 import { attachTelemetry, snapshotMemory, captureServiceWorker } from './telemetry.js';
@@ -908,6 +908,35 @@ async function main(args: string[]): Promise<number> {
   const prior = findPriorRun(runsDir, outDir);
   const diff = diffReports(report, prior);
   writeFileSync(join(outDir, 'diff.json'), JSON.stringify(diff, null, 2));
+
+  // T16: aria-tree drift between this run and prior run. Catches
+  // panels disappearing or major structural changes that no other
+  // detector flags. Findings are emitted into the events stream so
+  // the diff axes carry them on next run.
+  if (prior) {
+    const priorRunDir = (() => {
+      const entries = readdirSync(runsDir).filter((n: string) => !n.startsWith('.') && n !== outDir.split('/').pop()).sort();
+      return entries.length > 0 ? join(runsDir, entries[entries.length - 1]) : null;
+    })();
+    if (priorRunDir) {
+      const drifts = compareAriaTrees(outDir, priorRunDir);
+      if (drifts.length > 0) {
+        writeFileSync(join(outDir, 'aria-drift.json'), JSON.stringify(drifts, null, 2));
+        for (const d of drifts) {
+          report.events.push({
+            t: Date.now() - startEpoch,
+            kind: 'aria-drift',
+            severity: d.severity,
+            text: `[aria.drift] ${d.step}: ${d.priorLines} → ${d.currentLines} lines (${Math.round(d.deltaPct * 100)}% drift)`,
+            ruleId: 'aria.drift',
+            impact: d.severity === 'strict' ? 'serious' : 'minor',
+          });
+        }
+        // Re-write report.json with the new events.
+        writeFileSync(join(outDir, 'report.json'), JSON.stringify(report, null, 2));
+      }
+    }
+  }
 
   // Summary to stdout.
   console.log(`\n[crawler] run complete: ${outDir}/report.json`);

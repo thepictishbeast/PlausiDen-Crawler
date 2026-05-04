@@ -5,7 +5,7 @@
  */
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import type { StepResult } from './journey';
+import type { StepResult } from './journey.js';
 
 export interface CapturedEvent {
   t: number;
@@ -21,7 +21,8 @@ export interface CapturedEvent {
     | 'runtime-contrast'
     | 'runtime-images'
     | 'runtime-focus'
-    | 'web-vitals';
+    | 'web-vitals'
+    | 'aria-drift';
   level?: string;
   text: string;
   url?: string;
@@ -207,6 +208,7 @@ export function renderPositiveSignal(report: Report, diff: Diff): string {
     { name: 'runtimeImages',      total: report.counts.runtimeImagesFindings,        news: diff.newRuntimeImagesFindings.length },
     { name: 'runtimeFocus',       total: report.counts.runtimeFocusFindings,         news: diff.newRuntimeFocusFindings.length },
     { name: 'webVitals',          total: report.counts.webVitalsFindings,            news: diff.newWebVitalsFindings.length },
+    { name: 'ariaDrift',          total: report.events.filter(e => e.kind === 'aria-drift').length, news: report.events.filter(e => e.kind === 'aria-drift').length },
   ];
   const lines: string[] = [];
   lines.push(`=== positive signal (${axes.length} detection axes) ===`);
@@ -231,6 +233,62 @@ export function renderPositiveSignal(report: Report, diff: Diff): string {
     lines.push(`  ✗ ${axes.filter((a) => a.news > 0).length} axis/axes regressed: ${dirty}`);
   }
   return lines.join('\n');
+}
+
+/**
+ * T16: aria-tree drift detector. Compares per-step .aria.txt files
+ * between the current run and the prior run; emits findings when a
+ * step's structural line-count diverges more than the bands below.
+ *
+ * Bands (delta = |current_lines - prior_lines| / max(prior_lines, 1)):
+ *   delta < 0.10   silent (page content edits, normal flux)
+ *   0.10-0.30      warn (significant structural drift)
+ *   > 0.30         strict (major regression — content gone, panels collapsed)
+ *
+ * Catches what the per-event diff misses: a panel disappearing
+ * silently (no console error, no missing-file error, just gone).
+ *
+ * Pure function — caller passes the two run-directory paths.
+ */
+export interface AriaDriftFinding {
+  severity: 'strict' | 'warn';
+  step: string;
+  priorLines: number;
+  currentLines: number;
+  deltaPct: number;
+}
+
+export function compareAriaTrees(
+  currentDir: string,
+  priorDir: string,
+): AriaDriftFinding[] {
+  const out: AriaDriftFinding[] = [];
+  if (!existsSync(currentDir) || !existsSync(priorDir)) return out;
+  const currentFiles = readdirSync(currentDir)
+    .filter((f: string) => f.endsWith('.aria.txt'));
+  for (const fname of currentFiles) {
+    const priorPath = join(priorDir, fname);
+    if (!existsSync(priorPath)) continue; // step is new
+    let curLines = 0;
+    let priorLines = 0;
+    try {
+      curLines = readFileSync(join(currentDir, fname), 'utf-8').split('\n').length;
+      priorLines = readFileSync(priorPath, 'utf-8').split('\n').length;
+    } catch {
+      continue;
+    }
+    if (priorLines < 5) continue; // tiny snapshots are noisy
+    const deltaPct = Math.abs(curLines - priorLines) / priorLines;
+    if (deltaPct < 0.10) continue;
+    out.push({
+      severity: deltaPct >= 0.30 ? 'strict' : 'warn',
+      step: fname.replace(/\.aria\.txt$/, ''),
+      priorLines,
+      currentLines: curLines,
+      deltaPct: Math.round(deltaPct * 100) / 100,
+    });
+  }
+  return out;
 }
 
 export function findPriorRun(runsDir: string, exceptPath?: string): Report | null {
