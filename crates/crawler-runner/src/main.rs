@@ -65,10 +65,10 @@ use crawler_detectors::runtime_focus::{
 use crawler_detectors::runtime_images::{
     detect_runtime_image_issues, RuntimeImagesSnapshot, RUNTIME_IMAGES_JS,
 };
-use crawler_detectors::web_vitals::{classify, COLLECT_JS, RawVitals, WIRE_CALLBACKS_JS};
 use crawler_detectors::ui_overflow::{
     detect_ui_overflow_issues, Severity as UiSeverity, UiOverflowSnapshot, UI_OVERFLOW_JS,
 };
+use crawler_detectors::web_vitals::{classify, RawVitals, COLLECT_JS, WIRE_CALLBACKS_JS};
 use crawler_detectors::{AxisFinding, AxisSeverity};
 use crawler_journey::Step;
 use crawler_report::{
@@ -654,9 +654,7 @@ async fn capture_web_vitals(
     started_at: Instant,
 ) -> Result<()> {
     let raw_val = page.evaluate(COLLECT_JS).await?;
-    let raw: RawVitals = raw_val
-        .into_value()
-        .context("deserialize web-vitals raw")?;
+    let raw: RawVitals = raw_val.into_value().context("deserialize web-vitals raw")?;
     let snap = classify(raw, epoch_millis());
     let t_ms = started_at.elapsed().as_millis() as u64;
     let mut findings = Vec::<CapturedEvent>::new();
