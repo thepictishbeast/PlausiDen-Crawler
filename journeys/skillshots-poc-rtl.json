@@ -1,0 +1,17 @@
+{
+  "name": "skillshots-poc-rtl",
+  "description": "RTL (right-to-left) layout audit. Loom skin migrated to logical properties (T26); this journey verifies dir=rtl doesn't break overflow / focus / contrast / image health. Sets dir=rtl via aesthetic.js URL param (?dir=rtl handler added to aesthetic.js).",
+  "baseUrl": "http://127.0.0.1:8123",
+  "viewport": { "w": 375, "h": 812 },
+  "steps": [
+    { "kind": "goto", "url": "http://127.0.0.1:8123/?dir=rtl", "label": "01-rtl-feed", "timeout": 8000 },
+    { "kind": "wait", "ms": 400 },
+    { "kind": "screenshot", "label": "01-rtl-feed" },
+    { "kind": "goto", "url": "http://127.0.0.1:8123/challenge.html?dir=rtl", "label": "02-rtl-challenge" },
+    { "kind": "wait", "ms": 400 },
+    { "kind": "screenshot", "label": "02-rtl-challenge" },
+    { "kind": "goto", "url": "http://127.0.0.1:8123/post-skill.html?dir=rtl", "label": "03-rtl-post-skill" },
+    { "kind": "wait", "ms": 400 },
+    { "kind": "screenshot", "label": "03-rtl-post-skill" }
+  ]
+}
