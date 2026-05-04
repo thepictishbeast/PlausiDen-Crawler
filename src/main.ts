@@ -15,7 +15,7 @@ import { chromium, type Page } from 'playwright';
 import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { runStep, type Journey, type StepResult } from './journey.js';
-import { diffReports, findPriorRun, type CapturedEvent, type Report } from './report.js';
+import { diffReports, findPriorRun, renderPositiveSignal, type CapturedEvent, type Report } from './report.js';
 import { captureAriaTree, ariaTreeToText, interactableNodes, scoreAriaTree } from './aria.js';
 import { installWebVitals, collectVitals } from './webVitals.js';
 import { attachTelemetry, snapshotMemory, captureServiceWorker } from './telemetry.js';
@@ -863,6 +863,12 @@ async function main(args: string[]): Promise<number> {
     || newRuntimeContrastStrictCount > DEFAULT_BUDGET.newRuntimeContrastStrict
     || newRuntimeImagesStrictCount > DEFAULT_BUDGET.newRuntimeImagesStrict
     || diff.newlyBrokenSteps.length > DEFAULT_BUDGET.newlyBrokenSteps;
+
+  // T2: positive-signal report — make the silent-pass state legible.
+  // Always emit (PASS or FAIL); also write to disk for audit trail.
+  const positive = renderPositiveSignal(report, diff);
+  console.log('\n' + positive);
+  writeFileSync(join(outDir, 'positive-signal.txt'), positive + '\n');
 
   if (overBudget) {
     console.log('\n[crawler] FAIL — new regressions exceed budget.');

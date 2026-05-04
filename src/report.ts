@@ -151,6 +151,62 @@ export function diffReports(current: Report, prior: Report | null): Diff {
   return out;
 }
 
+/**
+ * T2: render a "positive signal" summary that makes the silent-pass
+ * state legible. The diff alone says "0 NEW errors" — that could
+ * mean "all checks passed" OR "no checks ran". This makes the
+ * difference visible: per axis, "checked N steps, K total findings,
+ * J new vs prior".
+ *
+ * Operator sees:
+ *
+ *   axis            steps  total  new  status
+ *   axe-static      27     40     0    pass (40 baseline frozen)
+ *   cssHealth       27     0      0    pass (silent)
+ *   uiOverflow      27     0      0    pass (silent)
+ *   runtimeContrast 27     0      0    pass (silent)
+ *   runtimeImages   27     0      0    pass (silent)
+ *
+ * 5 detection axes, all silent — that's a positive confirmation,
+ * not a maybe.
+ */
+export function renderPositiveSignal(report: Report, diff: Diff): string {
+  const stepCount = report.steps.length;
+  const axes: { name: string; total: number; news: number }[] = [
+    { name: 'console-errors',     total: report.counts.consoleErrors,                news: diff.newConsoleErrors.length },
+    { name: 'page-errors',        total: report.counts.pageErrors,                   news: diff.newPageErrors.length },
+    { name: 'failed-requests',    total: report.counts.failedRequests,               news: diff.newFailedRequests.length },
+    { name: 'axe-static-a11y',    total: report.counts.a11yViolations,               news: diff.newA11yViolations.length },
+    { name: 'cssHealth',          total: report.counts.cssHealthFindings,            news: diff.newCssHealthFindings.length },
+    { name: 'uiOverflow',         total: report.counts.uiOverflowFindings,           news: diff.newUiOverflowFindings.length },
+    { name: 'runtimeContrast',    total: report.counts.runtimeContrastFindings,      news: diff.newRuntimeContrastFindings.length },
+    { name: 'runtimeImages',      total: report.counts.runtimeImagesFindings,        news: diff.newRuntimeImagesFindings.length },
+  ];
+  const lines: string[] = [];
+  lines.push(`=== positive signal (${axes.length} detection axes) ===`);
+  lines.push('');
+  lines.push(`  axis              steps   total    new   status`);
+  lines.push(`  ----------------  ------  -------  ----  --------`);
+  for (const a of axes) {
+    let status: string;
+    if (a.news > 0) status = 'REGRESSION';
+    else if (a.total > 0) status = `pass (${a.total} baseline frozen)`;
+    else status = 'pass (silent)';
+    lines.push(
+      `  ${a.name.padEnd(16)}  ${String(stepCount).padStart(6)}  ${String(a.total).padStart(7)}  ${String(a.news).padStart(4)}  ${status}`,
+    );
+  }
+  const allClean = axes.every((a) => a.news === 0);
+  lines.push('');
+  if (allClean) {
+    lines.push(`  ✓ all ${axes.length} axes silent vs prior run — positive PASS confirmation`);
+  } else {
+    const dirty = axes.filter((a) => a.news > 0).map((a) => a.name).join(', ');
+    lines.push(`  ✗ ${axes.filter((a) => a.news > 0).length} axis/axes regressed: ${dirty}`);
+  }
+  return lines.join('\n');
+}
+
 export function findPriorRun(runsDir: string, exceptPath?: string): Report | null {
   if (!existsSync(runsDir)) return null;
   const entries = readdirSync(runsDir).filter(n => !n.startsWith('.')).sort();
