@@ -59,9 +59,7 @@ use crawler_detectors::css_health::{
 use crawler_detectors::heading_order::{
     detect_heading_order_issues, HeadingOrderSnapshot, HEADING_ORDER_JS,
 };
-use crawler_detectors::link_text::{
-    detect_link_text_issues, LinkTextSnapshot, LINK_TEXT_JS,
-};
+use crawler_detectors::link_text::{detect_link_text_issues, LinkTextSnapshot, LINK_TEXT_JS};
 use crawler_detectors::runtime_contrast::{
     detect_runtime_contrast_issues, RuntimeContrastSnapshot, RUNTIME_CONTRAST_JS,
 };

@@ -169,10 +169,7 @@ pub fn detect_link_text_issues(snap: &LinkTextSnapshot) -> Vec<crate::AxisFindin
         if name.is_empty() {
             empty_count += 1;
             if empty_examples.len() < 5 {
-                empty_examples.push(format!(
-                    "{} → href={}",
-                    link.selector, link.href
-                ));
+                empty_examples.push(format!("{} → href={}", link.selector, link.href));
             }
             continue;
         }
@@ -180,10 +177,7 @@ pub fn detect_link_text_issues(snap: &LinkTextSnapshot) -> Vec<crate::AxisFindin
         if GENERIC_PHRASES.iter().any(|p| *p == lower.as_str()) {
             generic_count += 1;
             if generic_examples.len() < 5 {
-                generic_examples.push(format!(
-                    "'{name}' → href={}",
-                    link.href
-                ));
+                generic_examples.push(format!("'{name}' → href={}", link.href));
             }
         }
     }
@@ -315,9 +309,11 @@ mod tests {
     fn substring_doesnt_match_generic() {
         // "Click here for the calendar" contains 'click here' but
         // is not the WHOLE link text — should pass.
-        let s = snap(vec![
-            link("body > a", "/cal", "Click here for the calendar"),
-        ]);
+        let s = snap(vec![link(
+            "body > a",
+            "/cal",
+            "Click here for the calendar",
+        )]);
         assert!(detect_link_text_issues(&s).is_empty());
     }
 
