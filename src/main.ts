@@ -27,6 +27,7 @@ import { captureCSSHealthSnapshot, detectCSSHealthIssues, type CSSHealthFinding 
 import { captureUIOverflowSnapshot, detectUIOverflowIssues, type UIOverflowFinding } from './uiOverflow.js';
 import { captureRuntimeContrastSnapshot, detectRuntimeContrastIssues, type RuntimeContrastFinding } from './runtimeContrast.js';
 import { captureRuntimeImagesSnapshot, detectRuntimeImageIssues, type RuntimeImageFinding } from './runtimeImages.js';
+import { captureRuntimeFocusSnapshot, detectRuntimeFocusIssues, type RuntimeFocusFinding } from './runtimeFocus.js';
 
 interface Budget {
   newConsoleErrors: number;
@@ -37,6 +38,7 @@ interface Budget {
   newUiOverflowStrict: number;
   newRuntimeContrastStrict: number;
   newRuntimeImagesStrict: number;
+  newRuntimeFocusStrict: number;
   newlyBrokenSteps: number;
 }
 
@@ -49,6 +51,7 @@ const DEFAULT_BUDGET: Budget = {
   newUiOverflowStrict: 0,
   newRuntimeContrastStrict: 0,
   newRuntimeImagesStrict: 0,
+  newRuntimeFocusStrict: 0,
   newlyBrokenSteps: 0,
 };
 
@@ -413,6 +416,33 @@ async function main(args: string[]): Promise<number> {
    * runtime DOM mutations.
    */
   /**
+   * T79: runtime focus-visible detector. WCAG 2.4.7 AA.
+   * Programmatically focuses every interactive element and
+   * compares before/after computed styles — catches outline:0
+   * with no border/box-shadow replacement.
+   */
+  const runtimeFocusFindingsByStep: Array<{ stepLabel: string; pageUrl: string; findings: RuntimeFocusFinding[] }> = [];
+  const checkRuntimeFocus = async (afterLabel: string) => {
+    try {
+      const snap = await captureRuntimeFocusSnapshot(page);
+      const findings = detectRuntimeFocusIssues(snap);
+      runtimeFocusFindingsByStep.push({ stepLabel: afterLabel, pageUrl: snap.pageUrl, findings });
+      for (const f of findings) {
+        log({
+          kind: 'runtime-focus',
+          text: `[${f.kind}] ${f.detail}`,
+          url: snap.pageUrl,
+          severity: f.severity,
+          ruleId: f.kind,
+          impact: f.severity === 'strict' ? 'serious' : 'minor',
+        });
+      }
+    } catch (e) {
+      log({ kind: 'pageerror', text: `[runtimeFocus] detector threw on ${afterLabel}: ${(e as Error).message}` });
+    }
+  };
+
+  /**
    * T75: runtime image-health detector. Catches broken / empty /
    * missing-alt / CLS-risk images at the rendered DOM level.
    */
@@ -698,6 +728,7 @@ async function main(args: string[]): Promise<number> {
       await checkUiOverflow(step.label || `goto-${i}`);
       await checkRuntimeContrast(step.label || `goto-${i}`);
       await checkRuntimeImages(step.label || `goto-${i}`);
+      await checkRuntimeFocus(step.label || `goto-${i}`);
     }
     // Memory snapshot at end of each step so the report shows heap growth
     // across the journey. Cheap (one page.evaluate call).
@@ -763,6 +794,8 @@ async function main(args: string[]): Promise<number> {
       runtimeContrastFindingsStrict: events.filter(e => e.kind === 'runtime-contrast' && e.severity === 'strict').length,
       runtimeImagesFindings: events.filter(e => e.kind === 'runtime-images').length,
       runtimeImagesFindingsStrict: events.filter(e => e.kind === 'runtime-images' && e.severity === 'strict').length,
+      runtimeFocusFindings: events.filter(e => e.kind === 'runtime-focus').length,
+      runtimeFocusFindingsStrict: events.filter(e => e.kind === 'runtime-focus' && e.severity === 'strict').length,
       total: events.length,
       stepsOk: stepResults.filter(s => s.ok).length,
       stepsFailed: stepResults.filter(s => !s.ok).length,
@@ -799,6 +832,12 @@ async function main(args: string[]): Promise<number> {
       JSON.stringify(runtimeImagesFindingsByStep, null, 2),
     );
   }
+  if (runtimeFocusFindingsByStep.length > 0) {
+    writeFileSync(
+      join(outDir, 'runtime-focus.json'),
+      JSON.stringify(runtimeFocusFindingsByStep, null, 2),
+    );
+  }
   writeFileSync(join(outDir, 'report.json'), JSON.stringify(report, null, 2));
   // Write a terminal-friendly summary too so CI output is useful at a glance.
   writeFileSync(join(outDir, 'summary.txt'), renderSummary(agg));
@@ -824,6 +863,7 @@ async function main(args: string[]): Promise<number> {
   console.log(`  ui overflow:       ${report.counts.uiOverflowFindings} (strict ${report.counts.uiOverflowFindingsStrict})`);
   console.log(`  runtime contrast:  ${report.counts.runtimeContrastFindings} (strict ${report.counts.runtimeContrastFindingsStrict})`);
   console.log(`  runtime images:    ${report.counts.runtimeImagesFindings} (strict ${report.counts.runtimeImagesFindingsStrict})`);
+  console.log(`  runtime focus:     ${report.counts.runtimeFocusFindings} (strict ${report.counts.runtimeFocusFindingsStrict})`);
   console.log(`  steps ok/failed:   ${report.counts.stepsOk}/${report.counts.stepsFailed}`);
   if (prior) {
     console.log(`  diff vs prior run (${prior.journey}):`);
@@ -843,6 +883,9 @@ async function main(args: string[]): Promise<number> {
     const newRuntimeImagesStrict = diff.newRuntimeImagesFindings.filter(e => e.severity === 'strict').length;
     const newRuntimeImagesWarn = diff.newRuntimeImagesFindings.length - newRuntimeImagesStrict;
     console.log(`    NEW runtime images:   ${diff.newRuntimeImagesFindings.length} (strict ${newRuntimeImagesStrict}, warn ${newRuntimeImagesWarn})`);
+    const newRuntimeFocusStrict = diff.newRuntimeFocusFindings.filter(e => e.severity === 'strict').length;
+    const newRuntimeFocusWarn = diff.newRuntimeFocusFindings.length - newRuntimeFocusStrict;
+    console.log(`    NEW runtime focus:    ${diff.newRuntimeFocusFindings.length} (strict ${newRuntimeFocusStrict}, warn ${newRuntimeFocusWarn})`);
     console.log(`    newly broken steps:   ${diff.newlyBrokenSteps.length}`);
     console.log(`    fixed steps:          ${diff.fixedSteps.length}`);
   } else {
@@ -853,6 +896,7 @@ async function main(args: string[]): Promise<number> {
   const newUiOverflowStrictCount = diff.newUiOverflowFindings.filter(e => e.severity === 'strict').length;
   const newRuntimeContrastStrictCount = diff.newRuntimeContrastFindings.filter(e => e.severity === 'strict').length;
   const newRuntimeImagesStrictCount = diff.newRuntimeImagesFindings.filter(e => e.severity === 'strict').length;
+  const newRuntimeFocusStrictCount = diff.newRuntimeFocusFindings.filter(e => e.severity === 'strict').length;
   const overBudget =
     diff.newConsoleErrors.length > DEFAULT_BUDGET.newConsoleErrors
     || diff.newPageErrors.length > DEFAULT_BUDGET.newPageErrors
@@ -862,6 +906,7 @@ async function main(args: string[]): Promise<number> {
     || newUiOverflowStrictCount > DEFAULT_BUDGET.newUiOverflowStrict
     || newRuntimeContrastStrictCount > DEFAULT_BUDGET.newRuntimeContrastStrict
     || newRuntimeImagesStrictCount > DEFAULT_BUDGET.newRuntimeImagesStrict
+    || newRuntimeFocusStrictCount > DEFAULT_BUDGET.newRuntimeFocusStrict
     || diff.newlyBrokenSteps.length > DEFAULT_BUDGET.newlyBrokenSteps;
 
   // T2: positive-signal report — make the silent-pass state legible.

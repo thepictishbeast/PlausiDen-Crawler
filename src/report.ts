@@ -19,7 +19,8 @@ export interface CapturedEvent {
     | 'css-health'
     | 'ui-overflow'
     | 'runtime-contrast'
-    | 'runtime-images';
+    | 'runtime-images'
+    | 'runtime-focus';
   level?: string;
   text: string;
   url?: string;
@@ -50,6 +51,8 @@ export interface Report {
     runtimeContrastFindingsStrict: number;
     runtimeImagesFindings: number;
     runtimeImagesFindingsStrict: number;
+    runtimeFocusFindings: number;
+    runtimeFocusFindingsStrict: number;
     total: number;
     stepsOk: number;
     stepsFailed: number;
@@ -96,6 +99,12 @@ export interface Diff {
    * broken/empty-src/missing-alt; warn = CLS-risk. T75 (2026-05-04).
    */
   newRuntimeImagesFindings: CapturedEvent[];
+  /**
+   * runtime-focus findings new in this run vs prior. Strict =
+   * interactive element with no visible focus indicator (WCAG
+   * 2.4.7). T79 (2026-05-04).
+   */
+  newRuntimeFocusFindings: CapturedEvent[];
   newlyBrokenSteps: StepResult[];
   fixedSteps: StepResult[];
 }
@@ -113,6 +122,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     newUiOverflowFindings: [],
     newRuntimeContrastFindings: [],
     newRuntimeImagesFindings: [],
+    newRuntimeFocusFindings: [],
     newlyBrokenSteps: [],
     fixedSteps: [],
   };
@@ -125,6 +135,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     out.newUiOverflowFindings = current.events.filter(e => e.kind === 'ui-overflow');
     out.newRuntimeContrastFindings = current.events.filter(e => e.kind === 'runtime-contrast');
     out.newRuntimeImagesFindings = current.events.filter(e => e.kind === 'runtime-images');
+    out.newRuntimeFocusFindings = current.events.filter(e => e.kind === 'runtime-focus');
     return out;
   }
   const priorKeys = new Set(prior.events.map(key));
@@ -138,6 +149,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     else if (e.kind === 'ui-overflow') out.newUiOverflowFindings.push(e);
     else if (e.kind === 'runtime-contrast') out.newRuntimeContrastFindings.push(e);
     else if (e.kind === 'runtime-images') out.newRuntimeImagesFindings.push(e);
+    else if (e.kind === 'runtime-focus') out.newRuntimeFocusFindings.push(e);
   }
   const priorStepLabels = new Map(
     prior.steps.map((s, i) => [s.step.label || `${s.step.kind}-${i}`, s])
@@ -181,6 +193,7 @@ export function renderPositiveSignal(report: Report, diff: Diff): string {
     { name: 'uiOverflow',         total: report.counts.uiOverflowFindings,           news: diff.newUiOverflowFindings.length },
     { name: 'runtimeContrast',    total: report.counts.runtimeContrastFindings,      news: diff.newRuntimeContrastFindings.length },
     { name: 'runtimeImages',      total: report.counts.runtimeImagesFindings,        news: diff.newRuntimeImagesFindings.length },
+    { name: 'runtimeFocus',       total: report.counts.runtimeFocusFindings,         news: diff.newRuntimeFocusFindings.length },
   ];
   const lines: string[] = [];
   lines.push(`=== positive signal (${axes.length} detection axes) ===`);
