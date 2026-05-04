@@ -40,6 +40,7 @@ interface Budget {
   newRuntimeImagesStrict: number;
   newRuntimeFocusStrict: number;
   newWebVitalsStrict: number;
+  newCspViolations: number;
   newlyBrokenSteps: number;
 }
 
@@ -54,6 +55,7 @@ const DEFAULT_BUDGET: Budget = {
   newRuntimeImagesStrict: 0,
   newRuntimeFocusStrict: 0,
   newWebVitalsStrict: 0,
+  newCspViolations: 0,
   newlyBrokenSteps: 0,
 };
 
@@ -353,6 +355,35 @@ async function main(args: string[]): Promise<number> {
   const telemetry = richTelemetry
     ? await attachTelemetry(page, startEpoch)
     : makeEmptyBundle();
+
+  // T80: always-on CSP-violation listener. The browser fires
+  // 'securitypolicyviolation' on the document for every blocked
+  // resource. We capture each as a diff-axis event so a future
+  // accidental inline-style or unauthorized CDN gets flagged.
+  // (telemetry.ts has a richer version gated behind
+  // CRAWLER_RICH_TELEMETRY=1; this is the always-on minimum.)
+  await page.exposeFunction('__crawler_cspViolation', (info: { directive: string; blockedURI: string; sourceFile?: string; lineNumber?: number }) => {
+    log({
+      kind: 'csp-violation',
+      text: `${info.directive} blocked ${info.blockedURI || 'inline'}`,
+      url: info.sourceFile || '',
+      severity: 'strict',
+      ruleId: `csp.${info.directive}`,
+      impact: 'serious',
+    });
+  });
+  await page.addInitScript(`
+    document.addEventListener('securitypolicyviolation', (ev) => {
+      try {
+        window.__crawler_cspViolation({
+          directive: ev.violatedDirective || '',
+          blockedURI: ev.blockedURI || '',
+          sourceFile: ev.sourceFile,
+          lineNumber: ev.lineNumber
+        });
+      } catch (_) {}
+    });
+  `);
 
   page.on('console', (msg) => {
     log({ kind: 'console', level: msg.type(), text: msg.text(), url: msg.location().url });
@@ -846,6 +877,7 @@ async function main(args: string[]): Promise<number> {
       runtimeFocusFindingsStrict: events.filter(e => e.kind === 'runtime-focus' && e.severity === 'strict').length,
       webVitalsFindings: events.filter(e => e.kind === 'web-vitals').length,
       webVitalsFindingsStrict: events.filter(e => e.kind === 'web-vitals' && e.severity === 'strict').length,
+      cspViolations: events.filter(e => e.kind === 'csp-violation').length,
       total: events.length,
       stepsOk: stepResults.filter(s => s.ok).length,
       stepsFailed: stepResults.filter(s => !s.ok).length,
@@ -964,6 +996,7 @@ async function main(args: string[]): Promise<number> {
   console.log(`  runtime images:    ${report.counts.runtimeImagesFindings} (strict ${report.counts.runtimeImagesFindingsStrict})`);
   console.log(`  runtime focus:     ${report.counts.runtimeFocusFindings} (strict ${report.counts.runtimeFocusFindingsStrict})`);
   console.log(`  web vitals:        ${report.counts.webVitalsFindings} (strict ${report.counts.webVitalsFindingsStrict})`);
+  console.log(`  csp violations:    ${report.counts.cspViolations}`);
   console.log(`  steps ok/failed:   ${report.counts.stepsOk}/${report.counts.stepsFailed}`);
   if (prior) {
     console.log(`  diff vs prior run (${prior.journey}):`);
@@ -989,6 +1022,7 @@ async function main(args: string[]): Promise<number> {
     const newWebVitalsStrict = diff.newWebVitalsFindings.filter(e => e.severity === 'strict').length;
     const newWebVitalsWarn = diff.newWebVitalsFindings.length - newWebVitalsStrict;
     console.log(`    NEW web vitals:       ${diff.newWebVitalsFindings.length} (strict ${newWebVitalsStrict}, warn ${newWebVitalsWarn})`);
+    console.log(`    NEW csp violations:   ${diff.newCspViolations.length}`);
     console.log(`    newly broken steps:   ${diff.newlyBrokenSteps.length}`);
     console.log(`    fixed steps:          ${diff.fixedSteps.length}`);
   } else {
@@ -1012,6 +1046,7 @@ async function main(args: string[]): Promise<number> {
     || newRuntimeImagesStrictCount > DEFAULT_BUDGET.newRuntimeImagesStrict
     || newRuntimeFocusStrictCount > DEFAULT_BUDGET.newRuntimeFocusStrict
     || newWebVitalsStrictCount > DEFAULT_BUDGET.newWebVitalsStrict
+    || diff.newCspViolations.length > DEFAULT_BUDGET.newCspViolations
     || diff.newlyBrokenSteps.length > DEFAULT_BUDGET.newlyBrokenSteps;
 
   // T2: positive-signal report — make the silent-pass state legible.

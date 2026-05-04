@@ -57,6 +57,7 @@ export interface Report {
     runtimeFocusFindingsStrict: number;
     webVitalsFindings: number;
     webVitalsFindingsStrict: number;
+    cspViolations: number;
     total: number;
     stepsOk: number;
     stepsFailed: number;
@@ -115,6 +116,12 @@ export interface Diff {
    * Warn = 'needs-improvement'. T45 (2026-05-04).
    */
   newWebVitalsFindings: CapturedEvent[];
+  /**
+   * csp-violation events new in this run vs prior. Strict — any
+   * new violation is ship-blocking (security regression). T80
+   * (2026-05-04).
+   */
+  newCspViolations: CapturedEvent[];
   newlyBrokenSteps: StepResult[];
   fixedSteps: StepResult[];
 }
@@ -134,6 +141,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     newRuntimeImagesFindings: [],
     newRuntimeFocusFindings: [],
     newWebVitalsFindings: [],
+    newCspViolations: [],
     newlyBrokenSteps: [],
     fixedSteps: [],
   };
@@ -148,6 +156,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     out.newRuntimeImagesFindings = current.events.filter(e => e.kind === 'runtime-images');
     out.newRuntimeFocusFindings = current.events.filter(e => e.kind === 'runtime-focus');
     out.newWebVitalsFindings = current.events.filter(e => e.kind === 'web-vitals');
+    out.newCspViolations = current.events.filter(e => e.kind === 'csp-violation');
     return out;
   }
   const priorKeys = new Set(prior.events.map(key));
@@ -163,6 +172,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     else if (e.kind === 'runtime-images') out.newRuntimeImagesFindings.push(e);
     else if (e.kind === 'runtime-focus') out.newRuntimeFocusFindings.push(e);
     else if (e.kind === 'web-vitals') out.newWebVitalsFindings.push(e);
+    else if (e.kind === 'csp-violation') out.newCspViolations.push(e);
   }
   const priorStepLabels = new Map(
     prior.steps.map((s, i) => [s.step.label || `${s.step.kind}-${i}`, s])
@@ -208,6 +218,7 @@ export function renderPositiveSignal(report: Report, diff: Diff): string {
     { name: 'runtimeImages',      total: report.counts.runtimeImagesFindings,        news: diff.newRuntimeImagesFindings.length },
     { name: 'runtimeFocus',       total: report.counts.runtimeFocusFindings,         news: diff.newRuntimeFocusFindings.length },
     { name: 'webVitals',          total: report.counts.webVitalsFindings,            news: diff.newWebVitalsFindings.length },
+    { name: 'cspViolations',      total: report.counts.cspViolations,                news: diff.newCspViolations.length },
     { name: 'ariaDrift',          total: report.events.filter(e => e.kind === 'aria-drift').length, news: report.events.filter(e => e.kind === 'aria-drift').length },
   ];
   const lines: string[] = [];
