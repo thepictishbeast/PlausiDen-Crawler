@@ -406,6 +406,79 @@ async function main(args: string[]): Promise<number> {
     console.log('[crawler] firstTime=true — localStorage/sessionStorage/cookies wiped on every navigation');
   }
 
+  // T51: screen-reader UX sweep. Runs after page load and emits
+  // console.warn for SR-specific structural issues that axe doesn't
+  // always flag at default-rule strictness:
+  //   1. aria-hidden=true on tab-focusable elements (the SR
+  //      announces nothing but Tab still lands there → confusing).
+  //   2. Heading-level skip (h1 → h3) which breaks heading nav.
+  //   3. Roles requiring an accessible name with neither
+  //      aria-label nor aria-labelledby nor associated <label>.
+  //   4. <main> count != 1 (SR uses landmark nav and benefits
+  //      from a single primary main region).
+  // The diff against prior run flags any new SR ergonomic
+  // regression on the very next forge build.
+  if ((journey as { screenReader?: boolean }).screenReader) {
+    const sr = `(function(){
+      function audit(){
+        var msgs = [];
+        // 1. focusable + aria-hidden
+        var focusableHidden = document.querySelectorAll('[aria-hidden="true"]:not([tabindex="-1"])');
+        focusableHidden.forEach(function(el){
+          if (el.matches('a[href], button, [tabindex]:not([tabindex="-1"]), input:not([type=hidden]), select, textarea')) {
+            msgs.push('[sr.focus-hidden] aria-hidden=true on focusable: ' + (el.tagName + (el.id ? '#'+el.id : '')));
+          }
+        });
+        // 2. heading skip
+        var hs = Array.prototype.slice.call(document.querySelectorAll('h1,h2,h3,h4,h5,h6'));
+        var prev = 0;
+        hs.forEach(function(h){
+          var lvl = parseInt(h.tagName.slice(1), 10);
+          if (prev > 0 && lvl > prev + 1) {
+            msgs.push('[sr.heading-skip] H' + prev + ' to H' + lvl + ' (skipped): "' + (h.textContent||'').trim().slice(0,40) + '"');
+          }
+          prev = lvl;
+        });
+        // 3. role-requires-name
+        var labelable = document.querySelectorAll('[role="button"], [role="link"], [role="checkbox"], [role="tab"], [role="menuitem"], [role="switch"]');
+        labelable.forEach(function(el){
+          var hasName = !!(el.getAttribute('aria-label') || el.getAttribute('aria-labelledby') || (el.textContent||'').trim());
+          if (!hasName) {
+            msgs.push('[sr.role-no-name] role=' + el.getAttribute('role') + ' without accessible name: ' + el.tagName);
+          }
+        });
+        // 4. <main> count
+        var mains = document.querySelectorAll('main, [role="main"]');
+        if (mains.length === 0) {
+          msgs.push('[sr.no-main] no <main> or role=main on page (landmark navigation degraded)');
+        } else if (mains.length > 1) {
+          msgs.push('[sr.too-many-main] ' + mains.length + ' main landmarks (should be exactly 1)');
+        }
+        // Emit each msg as a console.warn so the diff axis catches it.
+        msgs.forEach(function(m){ try { console.warn(m); } catch(e){} });
+        // Diagnostic heartbeat — always emits one info line per page
+        // so we can verify the audit ran. Counts aren't "found
+        // problems" — they're page structural totals (aria-hidden
+        // candidates, headings, role-labelable elements, mains).
+        // Actual SR-ergonomic warns are in msgs above.
+        try {
+          console.info('[sr.audit] aria-hidden-cands=' + focusableHidden.length +
+                       ' headings=' + hs.length +
+                       ' role-labelable=' + labelable.length +
+                       ' main=' + mains.length +
+                       ' issues=' + msgs.length);
+        } catch (e) {}
+      }
+      if (document.readyState === 'complete') {
+        setTimeout(audit, 100);
+      } else {
+        window.addEventListener('load', function(){ setTimeout(audit, 100); });
+      }
+    })();`;
+    await context.addInitScript({ content: sr });
+    console.log('[crawler] screenReader=true — SR ergonomics audit injected on every navigation');
+  }
+
   const page: Page = await context.newPage();
   // Per-screenshot axe results — written to findings.txt at end of run
   // so the user can triage WCAG violations alongside the JSON report.

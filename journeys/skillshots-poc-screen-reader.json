@@ -1,0 +1,36 @@
+{
+  "name": "skillshots-poc-screen-reader",
+  "description": "T51: screen-reader UX. Injects an SR-ergonomics audit on every navigation that emits console.warn for: (1) aria-hidden=true on tab-focusable elements; (2) heading-level skips (h1→h3); (3) role=button/link/etc without accessible name; (4) <main> count != 1. The diff axis catches new SR regressions on the very next forge build. Pairs with T50 (first-time) + T52 (keyboard) + T53 (slow-3g) + T54 (200% zoom) as the fifth UX-persona axis.",
+  "baseUrl": "http://127.0.0.1:8123",
+  "viewport": { "w": 1280, "h": 800 },
+  "screenReader": true,
+  "steps": [
+    { "kind": "goto", "url": "http://127.0.0.1:8123/", "label": "01-sr-feed" },
+    { "kind": "wait", "ms": 1000 },
+    { "kind": "screenshot", "label": "01-sr-feed" },
+
+    { "kind": "goto", "url": "http://127.0.0.1:8123/leaderboard.html", "label": "02-sr-leaderboard" },
+    { "kind": "wait", "ms": 1000 },
+    { "kind": "screenshot", "label": "02-sr-leaderboard" },
+
+    { "kind": "goto", "url": "http://127.0.0.1:8123/post-skill.html", "label": "03-sr-post-skill" },
+    { "kind": "wait", "ms": 1000 },
+    { "kind": "screenshot", "label": "03-sr-post-skill" },
+
+    { "kind": "goto", "url": "http://127.0.0.1:8123/profile.html", "label": "04-sr-profile" },
+    { "kind": "wait", "ms": 1000 },
+    { "kind": "screenshot", "label": "04-sr-profile" },
+
+    { "kind": "goto", "url": "http://127.0.0.1:8123/my-wins.html", "label": "05-sr-my-wins" },
+    { "kind": "wait", "ms": 1000 },
+    { "kind": "screenshot", "label": "05-sr-my-wins" },
+
+    { "kind": "goto", "url": "http://127.0.0.1:8123/votes.html", "label": "06-sr-votes" },
+    { "kind": "wait", "ms": 1000 },
+    { "kind": "screenshot", "label": "06-sr-votes" },
+
+    { "kind": "goto", "url": "http://127.0.0.1:8123/challenge.html", "label": "07-sr-challenge" },
+    { "kind": "wait", "ms": 1000 },
+    { "kind": "screenshot", "label": "07-sr-challenge" }
+  ]
+}
