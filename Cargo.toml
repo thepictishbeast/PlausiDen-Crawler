@@ -1,0 +1,40 @@
+# PlausiDen-Crawler — Rust workspace.
+#
+# Established 2026-05-04 per CRAWLER_STACK_AUDIT.md decision: port
+# the TypeScript Crawler to Rust + chromiumoxide in 6 phases.
+#
+# Phase 1 (this commit): extract page-side detector eval-function
+# strings + their typed result structs into a `crawler-detectors`
+# crate. Both the existing TS Crawler and the future Rust Crawler
+# will consume from this single source of truth — eliminating the
+# class of bugs where a JS evalFn drifts from its TS-side type.
+#
+# Phases 2-6 land subsequently:
+#   2. crawler-report (shared with forge-core::Finding shape)
+#   3. minimal chromiumoxide journey runner (1 axis parity)
+#   4. all 12 detector axes ported
+#   5. UX-persona journeys (5 personas)
+#   6. retire `npm run audit`, switch CI to cargo
+
+[workspace]
+resolver = "2"
+members = [
+    "crates/crawler-detectors",
+]
+
+[workspace.package]
+edition = "2021"
+rust-version = "1.78"
+license = "AGPL-3.0-or-later"
+repository = "https://github.com/thepictishbeast/PlausiDen-Crawler"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "1"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = "symbols"
