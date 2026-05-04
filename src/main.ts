@@ -377,6 +377,35 @@ async function main(args: string[]): Promise<number> {
     console.log(`[crawler] zoom=${zoomPct}% (root font-size: ${fontSizePx}px) — WCAG 1.4.4 text-resize emulation`);
   }
 
+  // T50: first-time-visitor emulation. Wipes localStorage,
+  // sessionStorage, and document.cookie at document_start on EVERY
+  // navigation so each page-load is indistinguishable from "user
+  // hits this URL with no prior history". Catches code paths that
+  // assume defaults/preferences/auth-tokens already exist —
+  // missing onboarding triggers, broken empty states, JS errors
+  // when reading absent keys.
+  //
+  // BUG ASSUMPTION: pages that set a cookie THEN immediately read
+  // it (sync, same tick) will see the wipe + write + read. Pages
+  // that write on load and read on next-load see only the new
+  // load's wipe — that's exactly what "first-time" means.
+  if ((journey as { firstTime?: boolean }).firstTime) {
+    const wipe = `(function(){
+      try { localStorage.clear(); } catch (e) {}
+      try { sessionStorage.clear(); } catch (e) {}
+      try {
+        // Cookie clear: iterate document.cookie and expire each one.
+        var cookies = document.cookie ? document.cookie.split('; ') : [];
+        for (var i = 0; i < cookies.length; i++) {
+          var name = cookies[i].split('=')[0];
+          document.cookie = name + '=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
+        }
+      } catch (e) {}
+    })();`;
+    await context.addInitScript({ content: wipe });
+    console.log('[crawler] firstTime=true — localStorage/sessionStorage/cookies wiped on every navigation');
+  }
+
   const page: Page = await context.newPage();
   // Per-screenshot axe results — written to findings.txt at end of run
   // so the user can triage WCAG violations alongside the JSON report.
