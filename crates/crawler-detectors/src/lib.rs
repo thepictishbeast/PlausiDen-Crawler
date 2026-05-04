@@ -44,6 +44,7 @@ pub mod heading_order;
 pub mod runtime_contrast;
 pub mod runtime_focus;
 pub mod runtime_images;
+pub mod runtime_landmarks;
 pub mod ui_overflow;
 pub mod web_vitals;
 

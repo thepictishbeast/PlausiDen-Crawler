@@ -68,6 +68,9 @@ pub enum EventKind {
     AriaDrift,
     /// headingOrder detector — h1 count + level skips.
     HeadingOrder,
+    /// runtimeLandmarks detector — main/banner/contentinfo
+    /// uniqueness + same-role nesting.
+    RuntimeLandmarks,
 }
 
 /// Severity of a finding-bucketed event (cssHealth / uiOverflow

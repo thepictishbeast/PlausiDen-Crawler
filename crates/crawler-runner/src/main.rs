@@ -68,6 +68,9 @@ use crawler_detectors::runtime_focus::{
 use crawler_detectors::runtime_images::{
     detect_runtime_image_issues, RuntimeImagesSnapshot, RUNTIME_IMAGES_JS,
 };
+use crawler_detectors::runtime_landmarks::{
+    detect_runtime_landmarks_issues, RuntimeLandmarksSnapshot, RUNTIME_LANDMARKS_JS,
+};
 use crawler_detectors::ui_overflow::{
     detect_ui_overflow_issues, Severity as UiSeverity, UiOverflowSnapshot, UI_OVERFLOW_JS,
 };
@@ -399,6 +402,9 @@ async fn run() -> Result<ExitCode> {
             if let Err(e) = capture_heading_order(&page, &events, started_at).await {
                 tracing::debug!("heading_order snapshot failed: {e}");
             }
+            if let Err(e) = capture_runtime_landmarks(&page, &events, started_at).await {
+                tracing::debug!("runtime_landmarks snapshot failed: {e}");
+            }
             if let Err(e) = capture_css_health(&page, &events, &network, started_at).await {
                 tracing::debug!("css_health snapshot failed: {e}");
             }
@@ -583,6 +589,29 @@ async fn capture_runtime_images(
         events,
         findings,
         EventKind::RuntimeImages,
+        started_at.elapsed().as_millis() as u64,
+    )
+    .await;
+    Ok(())
+}
+
+/// T105: capture runtime-landmarks snapshot. Pure DOM walk;
+/// counts main/banner/contentinfo/nav/aside + flags same-role
+/// nesting.
+async fn capture_runtime_landmarks(
+    page: &chromiumoxide::Page,
+    events: &Arc<Mutex<Vec<CapturedEvent>>>,
+    started_at: Instant,
+) -> Result<()> {
+    let result = page.evaluate(RUNTIME_LANDMARKS_JS).await?;
+    let snap: RuntimeLandmarksSnapshot = result
+        .into_value()
+        .context("deserialize runtimeLandmarks snapshot")?;
+    let findings = detect_runtime_landmarks_issues(&snap);
+    push_axis_findings(
+        events,
+        findings,
+        EventKind::RuntimeLandmarks,
         started_at.elapsed().as_millis() as u64,
     )
     .await;
