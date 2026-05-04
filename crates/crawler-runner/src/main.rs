@@ -38,10 +38,17 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
 use chromiumoxide::browser::{Browser, BrowserConfig};
-use chromiumoxide::cdp::browser_protocol::network::EventLoadingFailed;
-use chromiumoxide::cdp::js_protocol::runtime::{EventConsoleApiCalled, EventExceptionThrown};
+use chromiumoxide::cdp::browser_protocol::audits::EnableParams as AuditsEnable;
+use chromiumoxide::cdp::browser_protocol::log::EnableParams as LogEnable;
+use chromiumoxide::cdp::browser_protocol::network::{
+    EnableParams as NetworkEnable, EventLoadingFailed,
+};
+use chromiumoxide::cdp::browser_protocol::page::EnableParams as PageEnable;
+use chromiumoxide::cdp::js_protocol::runtime::{
+    EnableParams as RuntimeEnable, EventConsoleApiCalled, EventExceptionThrown,
+};
 use clap::Parser;
-use crawler_journey::{Journey, Step};
+use crawler_journey::Step;
 use crawler_report::{
     CapturedEvent, EventKind, Report, ReportCounts, Viewport,
 };
@@ -160,6 +167,36 @@ async fn run() -> Result<ExitCode> {
         .new_page("about:blank")
         .await
         .context("creating page")?;
+
+    // T102.3: explicit CDP domain enables. chromiumoxide 0.9
+    // does NOT auto-enable domains when you subscribe to typed
+    // events — the wire stays silent until each domain is
+    // turned on via `<Domain>.enable`. We enable everything we
+    // intend to listen on, in the order Playwright does:
+    //   Network — for loadingFailed / responseReceived
+    //   Page    — for frame/document lifecycle (currently
+    //             unused but cheap; future-proof)
+    //   Runtime — for consoleAPICalled / exceptionThrown
+    //   Audits  — for issueAdded (CSP, mixed-content) — T84
+    //   Log     — for entryAdded (CSP browser-emitted text) — T84
+    //
+    // Each enable is best-effort: if a domain is unavailable on
+    // this Chromium build (rare), log + continue.
+    if let Err(e) = page.execute(NetworkEnable::default()).await {
+        warn!("Network.enable failed: {e}");
+    }
+    if let Err(e) = page.execute(PageEnable::default()).await {
+        warn!("Page.enable failed: {e}");
+    }
+    if let Err(e) = page.execute(RuntimeEnable::default()).await {
+        warn!("Runtime.enable failed: {e}");
+    }
+    if let Err(e) = page.execute(AuditsEnable::default()).await {
+        warn!("Audits.enable failed: {e}");
+    }
+    if let Err(e) = page.execute(LogEnable::default()).await {
+        warn!("Log.enable failed: {e}");
+    }
 
     // Subscribe to the three MVP axes BEFORE first navigation.
     let started_at = Instant::now();
