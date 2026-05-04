@@ -249,6 +249,45 @@ pub fn classify(offender: &ContrastOffender) -> Severity {
     }
 }
 
+/// Apply detection rules to a contrast snapshot. Pure function.
+/// Mirrors the TS `detectRuntimeContrastIssues` exactly: body-text
+/// (NOT large) below 4.5:1 → strict; large-text below 3:1 → warn.
+#[must_use]
+pub fn detect_runtime_contrast_issues(
+    snap: &RuntimeContrastSnapshot,
+) -> Vec<crate::AxisFinding> {
+    let mut out = Vec::new();
+    let strict_count = snap
+        .failing_offenders
+        .iter()
+        .filter(|o| !o.is_large)
+        .count();
+    let warn_count = snap
+        .failing_offenders
+        .iter()
+        .filter(|o| o.is_large)
+        .count();
+    if strict_count > 0 {
+        out.push(crate::AxisFinding {
+            severity: crate::AxisSeverity::Strict,
+            kind: "contrast.body-text-below-aa".to_owned(),
+            detail: format!(
+                "{strict_count} body-text element(s) below WCAG AA 4.5:1 contrast."
+            ),
+        });
+    }
+    if warn_count > 0 {
+        out.push(crate::AxisFinding {
+            severity: crate::AxisSeverity::Warn,
+            kind: "contrast.large-text-below-aa".to_owned(),
+            detail: format!(
+                "{warn_count} large-text element(s) below WCAG AA 3:1 contrast."
+            ),
+        });
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

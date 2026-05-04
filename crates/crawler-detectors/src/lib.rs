@@ -37,9 +37,36 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+use serde::{Deserialize, Serialize};
+
 pub mod css_health;
 pub mod runtime_contrast;
 pub mod runtime_focus;
 pub mod runtime_images;
 pub mod ui_overflow;
 pub mod web_vitals;
+
+/// Severity bucket shared across every detector axis. Mirrors the
+/// TS string-literal `'strict' | 'warn'` exactly (lowercase wire
+/// format) and matches `crawler_report::Severity` for round-trip.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AxisSeverity {
+    /// Gate-blocking. Build / journey fails on any strict.
+    Strict,
+    /// Within budget. Surfaces but doesn't block.
+    Warn,
+}
+
+/// One detector finding — the normalized output every per-axis
+/// `detect_*_issues` function produces.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AxisFinding {
+    /// Strict (gate-blocking) or warn (within budget).
+    pub severity: AxisSeverity,
+    /// Machine-grepable kind id (e.g. `overflow.text-clipped`).
+    pub kind: String,
+    /// Human-readable explanation.
+    pub detail: String,
+}

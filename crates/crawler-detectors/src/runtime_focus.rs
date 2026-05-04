@@ -166,6 +166,27 @@ pub struct RuntimeFocusSnapshot {
     pub invisible_focus: Vec<FocusOffender>,
 }
 
+/// Apply detection rules to a runtime-focus snapshot. Pure function.
+/// Mirrors the TS `detectRuntimeFocusIssues`.
+#[must_use]
+pub fn detect_runtime_focus_issues(
+    snap: &RuntimeFocusSnapshot,
+) -> Vec<crate::AxisFinding> {
+    let mut out = Vec::new();
+    if !snap.invisible_focus.is_empty() {
+        out.push(crate::AxisFinding {
+            severity: crate::AxisSeverity::Strict,
+            kind: "focus.invisible-indicator".to_owned(),
+            detail: format!(
+                "{} interactive element(s) of {} checked have no visible focus indicator (outline + box-shadow + border-top all unchanged on :focus). WCAG 2.4.7 AA.",
+                snap.invisible_focus.len(),
+                snap.total_checked
+            ),
+        });
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

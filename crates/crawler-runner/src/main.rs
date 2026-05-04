@@ -50,9 +50,19 @@ use chromiumoxide::cdp::js_protocol::runtime::{
     EnableParams as RuntimeEnable, EventConsoleApiCalled, EventExceptionThrown,
 };
 use clap::Parser;
+use crawler_detectors::runtime_contrast::{
+    detect_runtime_contrast_issues, RuntimeContrastSnapshot, RUNTIME_CONTRAST_JS,
+};
+use crawler_detectors::runtime_focus::{
+    detect_runtime_focus_issues, RuntimeFocusSnapshot, RUNTIME_FOCUS_JS,
+};
+use crawler_detectors::runtime_images::{
+    detect_runtime_image_issues, RuntimeImagesSnapshot, RUNTIME_IMAGES_JS,
+};
 use crawler_detectors::ui_overflow::{
     detect_ui_overflow_issues, Severity as UiSeverity, UiOverflowSnapshot, UI_OVERFLOW_JS,
 };
+use crawler_detectors::{AxisFinding, AxisSeverity};
 use crawler_journey::Step;
 use crawler_report::{
     CapturedEvent, EventKind, Report, ReportCounts, Severity as ReportSeverity, Viewport,
@@ -330,12 +340,21 @@ async fn run() -> Result<ExitCode> {
                 steps_failed += 1;
             }
         }
-        // T103.2: run uiOverflow detector after every `wait` step
-        // (best snapshot moment — DOM has settled). Best-effort:
+        // T103.2 + T103.3: run detector axes after every `wait`
+        // step (DOM-settle moment). Best-effort each — a single
         // detector failure does not fail the run.
         if matches!(step, Step::Wait { .. }) {
             if let Err(e) = capture_ui_overflow(&page, &events, started_at).await {
                 tracing::debug!("ui_overflow snapshot failed: {e}");
+            }
+            if let Err(e) = capture_runtime_contrast(&page, &events, started_at).await {
+                tracing::debug!("runtime_contrast snapshot failed: {e}");
+            }
+            if let Err(e) = capture_runtime_images(&page, &events, started_at).await {
+                tracing::debug!("runtime_images snapshot failed: {e}");
+            }
+            if let Err(e) = capture_runtime_focus(&page, &events, started_at).await {
+                tracing::debug!("runtime_focus snapshot failed: {e}");
             }
         }
     }
@@ -436,6 +455,104 @@ async fn capture_ui_overflow(
             severity: Some(severity),
         });
     }
+    Ok(())
+}
+
+/// Map a per-axis `AxisSeverity` to the report's `Severity`.
+fn map_axis_severity(s: AxisSeverity) -> ReportSeverity {
+    match s {
+        AxisSeverity::Strict => ReportSeverity::Strict,
+        AxisSeverity::Warn => ReportSeverity::Warn,
+    }
+}
+
+/// Push axis findings as `CapturedEvent`s of the given kind.
+async fn push_axis_findings(
+    events: &Arc<Mutex<Vec<CapturedEvent>>>,
+    findings: Vec<AxisFinding>,
+    kind: EventKind,
+    t_ms: u64,
+) {
+    if findings.is_empty() {
+        return;
+    }
+    let mut g = events.lock().await;
+    for f in findings {
+        g.push(CapturedEvent {
+            t: t_ms,
+            kind,
+            level: None,
+            text: format!("[{}] {}", f.kind, f.detail),
+            url: None,
+            status: None,
+            stack: None,
+            impact: None,
+            rule_id: Some(f.kind),
+            severity: Some(map_axis_severity(f.severity)),
+        });
+    }
+}
+
+/// T103.3: capture a runtime-contrast snapshot via raw page.evaluate.
+async fn capture_runtime_contrast(
+    page: &chromiumoxide::Page,
+    events: &Arc<Mutex<Vec<CapturedEvent>>>,
+    started_at: Instant,
+) -> Result<()> {
+    let result = page.evaluate(RUNTIME_CONTRAST_JS).await?;
+    let snap: RuntimeContrastSnapshot = result
+        .into_value()
+        .context("deserialize runtimeContrast snapshot")?;
+    let findings = detect_runtime_contrast_issues(&snap);
+    push_axis_findings(
+        events,
+        findings,
+        EventKind::RuntimeContrast,
+        started_at.elapsed().as_millis() as u64,
+    )
+    .await;
+    Ok(())
+}
+
+/// T103.3: capture a runtime-images snapshot via raw page.evaluate.
+async fn capture_runtime_images(
+    page: &chromiumoxide::Page,
+    events: &Arc<Mutex<Vec<CapturedEvent>>>,
+    started_at: Instant,
+) -> Result<()> {
+    let result = page.evaluate(RUNTIME_IMAGES_JS).await?;
+    let snap: RuntimeImagesSnapshot = result
+        .into_value()
+        .context("deserialize runtimeImages snapshot")?;
+    let findings = detect_runtime_image_issues(&snap);
+    push_axis_findings(
+        events,
+        findings,
+        EventKind::RuntimeImages,
+        started_at.elapsed().as_millis() as u64,
+    )
+    .await;
+    Ok(())
+}
+
+/// T103.3: capture a runtime-focus snapshot via raw page.evaluate.
+async fn capture_runtime_focus(
+    page: &chromiumoxide::Page,
+    events: &Arc<Mutex<Vec<CapturedEvent>>>,
+    started_at: Instant,
+) -> Result<()> {
+    let result = page.evaluate(RUNTIME_FOCUS_JS).await?;
+    let snap: RuntimeFocusSnapshot = result
+        .into_value()
+        .context("deserialize runtimeFocus snapshot")?;
+    let findings = detect_runtime_focus_issues(&snap);
+    push_axis_findings(
+        events,
+        findings,
+        EventKind::RuntimeFocus,
+        started_at.elapsed().as_millis() as u64,
+    )
+    .await;
     Ok(())
 }
 

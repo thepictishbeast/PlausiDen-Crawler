@@ -156,6 +156,56 @@ pub struct RuntimeImagesSnapshot {
     pub cls_risk: Vec<ImageOffender>,
 }
 
+/// Apply detection rules to a runtime-images snapshot. Pure function.
+/// Mirrors the TS `detectRuntimeImageIssues`.
+#[must_use]
+pub fn detect_runtime_image_issues(
+    snap: &RuntimeImagesSnapshot,
+) -> Vec<crate::AxisFinding> {
+    let mut out = Vec::new();
+    if !snap.broken.is_empty() {
+        out.push(crate::AxisFinding {
+            severity: crate::AxisSeverity::Strict,
+            kind: "images.broken".to_owned(),
+            detail: format!(
+                "{} <img> tag(s) failed to load (naturalWidth=0 with complete=true). Visitors see broken-image icons.",
+                snap.broken.len()
+            ),
+        });
+    }
+    if !snap.empty_src.is_empty() {
+        out.push(crate::AxisFinding {
+            severity: crate::AxisSeverity::Strict,
+            kind: "images.empty-src".to_owned(),
+            detail: format!(
+                "{} <img> tag(s) have empty or missing src attribute.",
+                snap.empty_src.len()
+            ),
+        });
+    }
+    if !snap.missing_alt.is_empty() {
+        out.push(crate::AxisFinding {
+            severity: crate::AxisSeverity::Strict,
+            kind: "images.missing-alt-attr".to_owned(),
+            detail: format!(
+                "{} <img> tag(s) have no alt attribute. Screen readers announce filename instead. (Decorative images need alt=\"\", not missing attribute.)",
+                snap.missing_alt.len()
+            ),
+        });
+    }
+    if !snap.cls_risk.is_empty() {
+        out.push(crate::AxisFinding {
+            severity: crate::AxisSeverity::Warn,
+            kind: "images.cls-risk".to_owned(),
+            detail: format!(
+                "{} visible <img> tag(s) lack both explicit width+height attributes AND CSS aspect-ratio. Page will shift as images load (CLS).",
+                snap.cls_risk.len()
+            ),
+        });
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
