@@ -34,6 +34,10 @@
     { "kind": "screenshot", "label": "08-profile-top" },
     { "kind": "press", "key": "End" },
     { "kind": "wait", "ms": 600 },
-    { "kind": "screenshot", "label": "09-profile-bottom" }
+    { "kind": "screenshot", "label": "09-profile-bottom" },
+
+    { "kind": "goto", "url": "http://127.0.0.1:8123/about.html", "timeout": 10000, "label": "about" },
+    { "kind": "wait", "ms": 1200 },
+    { "kind": "screenshot", "label": "10-about" }
   ]
 }
