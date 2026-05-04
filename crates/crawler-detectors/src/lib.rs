@@ -37,7 +37,9 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+pub mod css_health;
 pub mod runtime_contrast;
 pub mod runtime_focus;
 pub mod runtime_images;
 pub mod ui_overflow;
+pub mod web_vitals;
