@@ -102,7 +102,7 @@ pub const BODY_VISIBLE_TEXT_LENGTH_JS: &str =
     r##"(document.body.innerText || '').replace(/\s+/g, ' ').trim().length"##;
 
 /// (6) Estimated count of CSS rules ACTUALLY applied (recursive
-/// walk of styleSheets[*].cssRules + nested @media / @supports).
+/// walk of `styleSheets[*].cssRules` + nested `@media` / `@supports`).
 pub const APPLIED_RULE_COUNT_JS: &str = r##"(() => {
     let total = 0;
     const stack = [];
@@ -265,7 +265,13 @@ mod tests {
 
     #[test]
     fn computed_styles_js_returns_required_keys() {
-        for k in ["backgroundColor", "color", "fontFamily", "fontSize", "margin"] {
+        for k in [
+            "backgroundColor",
+            "color",
+            "fontFamily",
+            "fontSize",
+            "margin",
+        ] {
             assert!(COMPUTED_STYLES_JS.contains(k), "missing key: {k}");
         }
     }
@@ -275,10 +281,7 @@ mod tests {
         let mut raw: BraceCountsRaw = HashMap::new();
         raw.insert("/x.css".to_owned(), serde_json::json!(42));
         raw.insert("/y.css".to_owned(), serde_json::Value::Null);
-        raw.insert(
-            "_close".to_owned(),
-            serde_json::json!({ "/x.css": 41 }),
-        );
+        raw.insert("_close".to_owned(), serde_json::json!({ "/x.css": 41 }));
         let (opens, closes) = split_close_braces(raw);
         assert_eq!(opens.get("/x.css").copied(), Some(Some(42)));
         assert_eq!(opens.get("/y.css").copied(), Some(None));

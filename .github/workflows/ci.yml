@@ -2,13 +2,20 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, master]
   pull_request:
-    branches: [main]
+    branches: [main, master]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+
+# PlausiDen-Crawler is mid-port from TypeScript to Rust per the
+# CRAWLER_STACK_AUDIT.md decision (2026-05-04). Both stacks ship
+# in the same tree right now: the TS code at src/ continues to
+# run nightly audits while the Rust workspace at crates/ takes
+# over phase by phase (T100 detectors → T101 report → T102
+# journey + runner). CI gates both.
 
 jobs:
   typescript:
@@ -35,3 +42,25 @@ jobs:
           if [ -f tsconfig.json ]; then
             npx -y tsc --noEmit || true
           fi
+
+  rust:
+    name: cargo fmt + clippy + test
+    runs-on: [self-hosted, linux, x64, plausiden]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --workspace --all-targets --locked
+      - run: cargo test --workspace --locked
+
+  doc:
+    name: cargo doc (strict)
+    runs-on: [self-hosted, linux, x64, plausiden]
+    env:
+      RUSTDOCFLAGS: "-D warnings"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo doc --workspace --no-deps --locked

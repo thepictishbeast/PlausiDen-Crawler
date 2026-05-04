@@ -6,3 +6,4 @@ test-results/
 *.log
 .DS_Store
 package-lock.json
+target/
