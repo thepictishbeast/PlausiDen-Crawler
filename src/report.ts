@@ -122,6 +122,18 @@ export interface Diff {
    * (2026-05-04).
    */
   newCspViolations: CapturedEvent[];
+  /**
+   * aria-drift findings new in this run vs prior. Populated by
+   * main.ts AFTER diffReports() runs (aria-drift events are
+   * pushed onto report.events later in the pipeline, so we
+   * back-fill this field once they exist). Strict = >30% line
+   * delta in a step's aria-tree; warn = 10-30%. T83 (2026-05-04).
+   *
+   * BUG ASSUMPTION: any consumer reading this field BEFORE
+   * main.ts back-fills it sees an empty array. The only safe
+   * read site is renderPositiveSignal *after* the back-fill.
+   */
+  newAriaDriftFindings: CapturedEvent[];
   newlyBrokenSteps: StepResult[];
   fixedSteps: StepResult[];
 }
@@ -142,6 +154,10 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     newRuntimeFocusFindings: [],
     newWebVitalsFindings: [],
     newCspViolations: [],
+    // T83: back-filled by main.ts after aria-drift events get
+    // pushed onto report.events; default to empty here so consumers
+    // see a stable shape regardless of pipeline ordering.
+    newAriaDriftFindings: [],
     newlyBrokenSteps: [],
     fixedSteps: [],
   };
@@ -207,19 +223,40 @@ export function diffReports(current: Report, prior: Report | null): Diff {
  */
 export function renderPositiveSignal(report: Report, diff: Diff): string {
   const stepCount = report.steps.length;
-  const axes: { name: string; total: number; news: number }[] = [
-    { name: 'console-errors',     total: report.counts.consoleErrors,                news: diff.newConsoleErrors.length },
-    { name: 'page-errors',        total: report.counts.pageErrors,                   news: diff.newPageErrors.length },
-    { name: 'failed-requests',    total: report.counts.failedRequests,               news: diff.newFailedRequests.length },
-    { name: 'axe-static-a11y',    total: report.counts.a11yViolations,               news: diff.newA11yViolations.length },
-    { name: 'cssHealth',          total: report.counts.cssHealthFindings,            news: diff.newCssHealthFindings.length },
-    { name: 'uiOverflow',         total: report.counts.uiOverflowFindings,           news: diff.newUiOverflowFindings.length },
-    { name: 'runtimeContrast',    total: report.counts.runtimeContrastFindings,      news: diff.newRuntimeContrastFindings.length },
-    { name: 'runtimeImages',      total: report.counts.runtimeImagesFindings,        news: diff.newRuntimeImagesFindings.length },
-    { name: 'runtimeFocus',       total: report.counts.runtimeFocusFindings,         news: diff.newRuntimeFocusFindings.length },
-    { name: 'webVitals',          total: report.counts.webVitalsFindings,            news: diff.newWebVitalsFindings.length },
-    { name: 'cspViolations',      total: report.counts.cspViolations,                news: diff.newCspViolations.length },
-    { name: 'ariaDrift',          total: report.events.filter(e => e.kind === 'aria-drift').length, news: report.events.filter(e => e.kind === 'aria-drift').length },
+  // T83: per-axis status now distinguishes strict-news (gate-blocking
+  // REGRESSION) from warn-news (within-budget warning). Without this
+  // split, a row with 6 NEW warn findings was labelled "REGRESSION"
+  // even though the gate emits PASS — operator learns to ignore the
+  // red label.
+  //
+  // Severity-bucketed axes set strictNews from the diff array; the
+  // remaining axes (where every finding is implicitly strict —
+  // console errors, page errors, failed requests, a11y violations,
+  // CSP violations) treat all news as strict.
+  const strict = (events: CapturedEvent[]) =>
+    events.filter((e) => e.severity === 'strict').length;
+  const axes: { name: string; total: number; news: number; strictNews: number }[] = [
+    { name: 'console-errors',  total: report.counts.consoleErrors,           news: diff.newConsoleErrors.length,           strictNews: diff.newConsoleErrors.length },
+    { name: 'page-errors',     total: report.counts.pageErrors,              news: diff.newPageErrors.length,              strictNews: diff.newPageErrors.length },
+    { name: 'failed-requests', total: report.counts.failedRequests,          news: diff.newFailedRequests.length,          strictNews: diff.newFailedRequests.length },
+    { name: 'axe-static-a11y', total: report.counts.a11yViolations,          news: diff.newA11yViolations.length,          strictNews: diff.newA11yViolations.length },
+    { name: 'cssHealth',       total: report.counts.cssHealthFindings,       news: diff.newCssHealthFindings.length,       strictNews: strict(diff.newCssHealthFindings) },
+    { name: 'uiOverflow',      total: report.counts.uiOverflowFindings,      news: diff.newUiOverflowFindings.length,      strictNews: strict(diff.newUiOverflowFindings) },
+    { name: 'runtimeContrast', total: report.counts.runtimeContrastFindings, news: diff.newRuntimeContrastFindings.length, strictNews: strict(diff.newRuntimeContrastFindings) },
+    { name: 'runtimeImages',   total: report.counts.runtimeImagesFindings,   news: diff.newRuntimeImagesFindings.length,   strictNews: strict(diff.newRuntimeImagesFindings) },
+    { name: 'runtimeFocus',    total: report.counts.runtimeFocusFindings,    news: diff.newRuntimeFocusFindings.length,    strictNews: strict(diff.newRuntimeFocusFindings) },
+    { name: 'webVitals',       total: report.counts.webVitalsFindings,       news: diff.newWebVitalsFindings.length,       strictNews: strict(diff.newWebVitalsFindings) },
+    { name: 'cspViolations',   total: report.counts.cspViolations,           news: diff.newCspViolations.length,           strictNews: diff.newCspViolations.length },
+    {
+      name: 'ariaDrift',
+      total: report.events.filter((e) => e.kind === 'aria-drift').length,
+      // T83: read from diff.newAriaDriftFindings (back-filled by
+      // main.ts) instead of report.events directly. Previously
+      // news==total because diffReports() ran before aria-drift
+      // events were pushed.
+      news: diff.newAriaDriftFindings.length,
+      strictNews: strict(diff.newAriaDriftFindings),
+    },
   ];
   const lines: string[] = [];
   lines.push(`=== positive signal (${axes.length} detection axes) ===`);
@@ -228,20 +265,39 @@ export function renderPositiveSignal(report: Report, diff: Diff): string {
   lines.push(`  ----------------  ------  -------  ----  --------`);
   for (const a of axes) {
     let status: string;
-    if (a.news > 0) status = 'REGRESSION';
-    else if (a.total > 0) status = `pass (${a.total} baseline frozen)`;
-    else status = 'pass (silent)';
+    if (a.strictNews > 0) {
+      status = `REGRESSION (${a.strictNews} strict)`;
+    } else if (a.news > 0) {
+      // News exist but all are warn-severity (within budget). Still
+      // worth surfacing — these are NEW issues that didn't exist in
+      // the prior run — but they don't block ship.
+      status = `warn (${a.news} new — within budget)`;
+    } else if (a.total > 0) {
+      status = `pass (${a.total} baseline frozen)`;
+    } else {
+      status = 'pass (silent)';
+    }
     lines.push(
       `  ${a.name.padEnd(16)}  ${String(stepCount).padStart(6)}  ${String(a.total).padStart(7)}  ${String(a.news).padStart(4)}  ${status}`,
     );
   }
-  const allClean = axes.every((a) => a.news === 0);
+  // Footer reflects the gate semantics, not the row labels: the gate
+  // blocks on strict-news only, so the footer flags strict-news axes
+  // separately from warn-news axes.
+  const strictAxes = axes.filter((a) => a.strictNews > 0);
+  const warnAxes = axes.filter((a) => a.strictNews === 0 && a.news > 0);
   lines.push('');
-  if (allClean) {
+  if (strictAxes.length === 0 && warnAxes.length === 0) {
     lines.push(`  ✓ all ${axes.length} axes silent vs prior run — positive PASS confirmation`);
+  } else if (strictAxes.length > 0) {
+    const dirty = strictAxes.map((a) => `${a.name} (+${a.strictNews})`).join(', ');
+    lines.push(`  ✗ ${strictAxes.length} axis/axes regressed (strict): ${dirty}`);
+    if (warnAxes.length > 0) {
+      lines.push(`  · ${warnAxes.length} axis/axes also have new warn findings: ${warnAxes.map((a) => a.name).join(', ')}`);
+    }
   } else {
-    const dirty = axes.filter((a) => a.news > 0).map((a) => a.name).join(', ');
-    lines.push(`  ✗ ${axes.filter((a) => a.news > 0).length} axis/axes regressed: ${dirty}`);
+    const w = warnAxes.map((a) => `${a.name} (+${a.news})`).join(', ');
+    lines.push(`  ⚠ ${warnAxes.length} axis/axes have new warn findings (within budget): ${w}`);
   }
   return lines.join('\n');
 }

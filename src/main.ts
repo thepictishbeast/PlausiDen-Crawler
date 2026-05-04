@@ -41,6 +41,10 @@ interface Budget {
   newRuntimeFocusStrict: number;
   newWebVitalsStrict: number;
   newCspViolations: number;
+  // T83: strict aria-drift findings (>30% line-delta) were silently
+  // missing from the gate. Default budget is 0 — any strict drift
+  // blocks ship. Warn-band drift (10-30%) stays advisory.
+  newAriaDriftStrict: number;
   newlyBrokenSteps: number;
 }
 
@@ -56,6 +60,7 @@ const DEFAULT_BUDGET: Budget = {
   newRuntimeFocusStrict: 0,
   newWebVitalsStrict: 0,
   newCspViolations: 0,
+  newAriaDriftStrict: 0,
   newlyBrokenSteps: 0,
 };
 
@@ -1004,6 +1009,15 @@ async function main(args: string[]): Promise<number> {
         writeFileSync(join(outDir, 'report.json'), JSON.stringify(report, null, 2));
       }
     }
+    // T83: aria-drift events are pushed onto report.events AFTER
+    // diffReports() ran above (line 963), so diff.newAriaDriftFindings
+    // was empty at construction. Back-fill it now that the events
+    // exist. The aria-drift detector is itself a delta detector
+    // (compares current step's aria.txt against the prior run), so
+    // every aria-drift event is by definition new — no further diff
+    // needed against priorKeys.
+    diff.newAriaDriftFindings = report.events.filter((e) => e.kind === 'aria-drift');
+    writeFileSync(join(outDir, 'diff.json'), JSON.stringify(diff, null, 2));
   }
 
   // Summary to stdout.
@@ -1057,6 +1071,10 @@ async function main(args: string[]): Promise<number> {
   const newRuntimeImagesStrictCount = diff.newRuntimeImagesFindings.filter(e => e.severity === 'strict').length;
   const newRuntimeFocusStrictCount = diff.newRuntimeFocusFindings.filter(e => e.severity === 'strict').length;
   const newWebVitalsStrictCount = diff.newWebVitalsFindings.filter(e => e.severity === 'strict').length;
+  // T83: aria-drift was missing from the gate. Strict drift (>30%
+  // line delta) is the same severity-class as a runtime contrast
+  // violation — content gone or panels collapsed silently.
+  const newAriaDriftStrictCount = diff.newAriaDriftFindings.filter(e => e.severity === 'strict').length;
   const overBudget =
     diff.newConsoleErrors.length > DEFAULT_BUDGET.newConsoleErrors
     || diff.newPageErrors.length > DEFAULT_BUDGET.newPageErrors
@@ -1069,6 +1087,7 @@ async function main(args: string[]): Promise<number> {
     || newRuntimeFocusStrictCount > DEFAULT_BUDGET.newRuntimeFocusStrict
     || newWebVitalsStrictCount > DEFAULT_BUDGET.newWebVitalsStrict
     || diff.newCspViolations.length > DEFAULT_BUDGET.newCspViolations
+    || newAriaDriftStrictCount > DEFAULT_BUDGET.newAriaDriftStrict
     || diff.newlyBrokenSteps.length > DEFAULT_BUDGET.newlyBrokenSteps;
 
   // T2: positive-signal report — make the silent-pass state legible.
