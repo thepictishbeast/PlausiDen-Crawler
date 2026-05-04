@@ -90,14 +90,21 @@ export async function captureRuntimeContrastSnapshot(page: Page): Promise<Runtim
       let node = el;
       while (node && node.nodeType === 1) {
         const cs = window.getComputedStyle(node);
+        // ANY element with a background-image (gradient, image, etc.)
+        // defeats the calc — return null so the caller skips this
+        // offender. Critical fix 2026-05-04: previously we only
+        // checked background-image after finding an opaque background-color,
+        // which meant buttons with "background: linear-gradient(...)" (and
+        // therefore backgroundColor=transparent) were walked-past and
+        // contrast was computed against the parent panel — false positive.
+        // (Note: this whole function lives inside a template literal,
+        // so any backtick in a comment terminates the string — keep
+        // comments backtick-free.)
+        if (cs.backgroundImage && cs.backgroundImage !== 'none') {
+          return null;
+        }
         const bg = parseColor(cs.backgroundColor);
         if (bg && bg[3] > 0) {
-          // background-image with gradients defeats this — bail and
-          // let the caller skip this offender (we can't compute
-          // contrast against an arbitrary gradient).
-          if (cs.backgroundImage && cs.backgroundImage !== 'none') {
-            return null;
-          }
           stack.unshift(bg);
           if (bg[3] === 1) break;
         }
