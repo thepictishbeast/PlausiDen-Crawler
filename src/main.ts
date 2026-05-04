@@ -342,6 +342,41 @@ async function main(args: string[]): Promise<number> {
     console.log(`[crawler] auto-gatekeeper enabled (voter=${code})`);
   }
 
+  // T54: high-zoom emulation for WCAG 1.4.4 (resize text 200%) and
+  // 1.4.10 (reflow at 320 CSS px). The journey field `zoom` is a
+  // percent (200 = 200%); we override the root font-size proportional
+  // to it so every rem cascades larger. Containers that use raw px
+  // for height/width — instead of rem or fit-content — will visibly
+  // overflow under zoom; the existing uiOverflow/runtimeContrast/
+  // runtimeFocus detectors then fire on the broken state.
+  //
+  // BUG ASSUMPTION: pages that use `body { font-size: 16px }`
+  // explicitly will override the :root override. We hit `:root`,
+  // `html`, AND `body` via a single rule to defeat that, and use
+  // !important since user-agent-stylesheet zoom is itself !important.
+  const zoomPct = (journey as { zoom?: number }).zoom;
+  if (typeof zoomPct === 'number' && zoomPct > 100) {
+    const zoomFactor = zoomPct / 100;
+    const fontSizePx = Math.round(16 * zoomFactor);
+    const inj = `(function(){
+      var s = document.createElement('style');
+      s.id = '__loom_zoom_emul__';
+      s.textContent = ':root, html, body { font-size: ${fontSizePx}px !important; }';
+      function place(){
+        if (document.documentElement && !document.getElementById('__loom_zoom_emul__')) {
+          document.documentElement.appendChild(s);
+        }
+      }
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', place);
+      } else {
+        place();
+      }
+    })();`;
+    await context.addInitScript({ content: inj });
+    console.log(`[crawler] zoom=${zoomPct}% (root font-size: ${fontSizePx}px) — WCAG 1.4.4 text-resize emulation`);
+  }
+
   const page: Page = await context.newPage();
   // Per-screenshot axe results — written to findings.txt at end of run
   // so the user can triage WCAG violations alongside the JSON report.
