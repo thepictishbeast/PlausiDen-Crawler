@@ -24,7 +24,7 @@
 //!
 //! * `viewport`     — render at `{ w, h }` instead of default.
 //! * `throttle`     — `slow-3g | fast-3g | regular-4g | offline`
-//!                    (T53 — CDP `Network.emulateNetworkConditions`).
+//!   (T53 — CDP `Network.emulateNetworkConditions`).
 //! * `zoom`         — text-resize emulation percentage (T54).
 //! * `firstTime`    — wipe storage between navigations (T50).
 //! * `screenReader` — inject SR-ergonomics audit script (T51).

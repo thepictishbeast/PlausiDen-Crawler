@@ -6,7 +6,7 @@
 //! * `broken`       — `complete=true` but `naturalWidth=0`
 //! * `missing_alt`  — `alt` attribute absent (decorative needs `alt=""`)
 //! * `cls_risk`     — visible, no explicit width+height + no
-//!                    `aspect-ratio` CSS — guaranteed CLS
+//!   `aspect-ratio` CSS — guaranteed CLS
 
 use serde::{Deserialize, Serialize};
 
