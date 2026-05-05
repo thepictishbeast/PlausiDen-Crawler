@@ -174,7 +174,7 @@ pub fn detect_link_text_issues(snap: &LinkTextSnapshot) -> Vec<crate::AxisFindin
             continue;
         }
         let lower = name.to_lowercase();
-        if GENERIC_PHRASES.iter().any(|p| *p == lower.as_str()) {
+        if GENERIC_PHRASES.contains(&lower.as_str()) {
             generic_count += 1;
             if generic_examples.len() < 5 {
                 generic_examples.push(format!("'{name}' → href={}", link.href));
