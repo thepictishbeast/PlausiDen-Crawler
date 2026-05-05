@@ -509,6 +509,7 @@ mod tests {
         }
     }
 
+    #[allow(clippy::too_many_arguments)] // intentional 1:1 mirror of StylesheetObservation fields
     fn sheet(
         url: &str,
         status: u16,
