@@ -373,7 +373,7 @@ mod tests {
                 assert_eq!(selector, "#main");
                 assert_eq!(timeout, Some(5000));
             }
-            other => panic!("wrong variant: {other:?}"),
+            other => unreachable!("wrong variant: {other:?}"),
         }
     }
 
