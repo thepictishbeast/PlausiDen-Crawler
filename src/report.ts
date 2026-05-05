@@ -22,7 +22,11 @@ export interface CapturedEvent {
     | 'runtime-images'
     | 'runtime-focus'
     | 'web-vitals'
-    | 'aria-drift';
+    | 'aria-drift'
+    | 'heading-order'
+    | 'runtime-landmarks'
+    | 'link-text'
+    | 'placeholder-text';
   level?: string;
   text: string;
   url?: string;
@@ -151,6 +155,12 @@ export interface Diff {
    * here / read more / etc.). WCAG 2.4.4. T106 (TS port).
    */
   newLinkTextFindings: CapturedEvent[];
+  /**
+   * placeholder-text findings new in this run vs prior. Strict =
+   * Lorem ipsum / TODO|FIXME|XXX|HACK / template instructions in
+   * rendered DOM. Warn = "coming soon" / "TBD". T16 (2026-05-04).
+   */
+  newPlaceholderTextFindings: CapturedEvent[];
   newlyBrokenSteps: StepResult[];
   fixedSteps: StepResult[];
 }
@@ -178,6 +188,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     newHeadingOrderFindings: [],
     newRuntimeLandmarksFindings: [],
     newLinkTextFindings: [],
+    newPlaceholderTextFindings: [],
     newlyBrokenSteps: [],
     fixedSteps: [],
   };
@@ -196,6 +207,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     out.newHeadingOrderFindings = current.events.filter(e => e.kind === 'heading-order');
     out.newRuntimeLandmarksFindings = current.events.filter(e => e.kind === 'runtime-landmarks');
     out.newLinkTextFindings = current.events.filter(e => e.kind === 'link-text');
+    out.newPlaceholderTextFindings = current.events.filter(e => e.kind === 'placeholder-text');
     return out;
   }
   const priorKeys = new Set(prior.events.map(key));
@@ -215,6 +227,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     else if (e.kind === 'heading-order') out.newHeadingOrderFindings.push(e);
     else if (e.kind === 'runtime-landmarks') out.newRuntimeLandmarksFindings.push(e);
     else if (e.kind === 'link-text') out.newLinkTextFindings.push(e);
+    else if (e.kind === 'placeholder-text') out.newPlaceholderTextFindings.push(e);
   }
   const priorStepLabels = new Map(
     prior.steps.map((s, i) => [s.step.label || `${s.step.kind}-${i}`, s])
@@ -307,6 +320,15 @@ export function renderPositiveSignal(report: Report, diff: Diff): string {
       total: report.events.filter((e) => e.kind === 'link-text').length,
       news: diff.newLinkTextFindings.length,
       strictNews: strict(diff.newLinkTextFindings),
+    },
+    {
+      // T16 (Crawler): placeholder-text — Lorem ipsum, dev markers,
+      // template instructions, "coming soon" in rendered DOM.
+      // Catches paste-and-forgot signals across any codebase.
+      name: 'placeholderText',
+      total: report.events.filter((e) => e.kind === 'placeholder-text').length,
+      news: diff.newPlaceholderTextFindings.length,
+      strictNews: strict(diff.newPlaceholderTextFindings),
     },
   ];
   const lines: string[] = [];

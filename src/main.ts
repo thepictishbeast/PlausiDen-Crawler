@@ -31,6 +31,7 @@ import { captureRuntimeFocusSnapshot, detectRuntimeFocusIssues, type RuntimeFocu
 import { captureHeadingOrderSnapshot, detectHeadingOrderIssues, type HeadingOrderFinding } from './headingOrder.js';
 import { captureRuntimeLandmarksSnapshot, detectRuntimeLandmarksIssues, type RuntimeLandmarksFinding } from './runtimeLandmarks.js';
 import { captureLinkTextSnapshot, detectLinkTextIssues, type LinkTextFinding } from './linkText.js';
+import { capturePlaceholderTextSnapshot, detectPlaceholderTextIssues, type PlaceholderTextFinding } from './placeholderText.js';
 
 interface Budget {
   newConsoleErrors: number;
@@ -48,6 +49,15 @@ interface Budget {
   // missing from the gate. Default budget is 0 — any strict drift
   // blocks ship. Warn-band drift (10-30%) stays advisory.
   newAriaDriftStrict: number;
+  // T16: axes that were registered in the positive-signal table but
+  // not wired into the gate. Closing the gap so a strict regression
+  // in any axis blocks ship — otherwise a "REGRESSION (1 strict)"
+  // line in the table coexists with a top-level PASS, which is a
+  // contradiction the operator can't trust.
+  newHeadingOrderStrict: number;
+  newRuntimeLandmarksStrict: number;
+  newLinkTextStrict: number;
+  newPlaceholderTextStrict: number;
   newlyBrokenSteps: number;
 }
 
@@ -64,6 +74,10 @@ const DEFAULT_BUDGET: Budget = {
   newWebVitalsStrict: 0,
   newCspViolations: 0,
   newAriaDriftStrict: 0,
+  newHeadingOrderStrict: 0,
+  newRuntimeLandmarksStrict: 0,
+  newLinkTextStrict: 0,
+  newPlaceholderTextStrict: 0,
   newlyBrokenSteps: 0,
 };
 
@@ -763,6 +777,31 @@ async function main(args: string[]): Promise<number> {
   };
 
   /**
+   * T16: placeholder-text detector. Lorem ipsum / dev-marker / template
+   * leakage in the rendered DOM. One finding per category per page.
+   */
+  const placeholderTextFindingsByStep: Array<{ stepLabel: string; pageUrl: string; findings: PlaceholderTextFinding[] }> = [];
+  const checkPlaceholderText = async (afterLabel: string) => {
+    try {
+      const snap = await capturePlaceholderTextSnapshot(page);
+      const findings = detectPlaceholderTextIssues(snap);
+      placeholderTextFindingsByStep.push({ stepLabel: afterLabel, pageUrl: snap.pageUrl, findings });
+      for (const f of findings) {
+        log({
+          kind: 'placeholder-text',
+          text: `[${f.kind}] ${f.detail}`,
+          url: snap.pageUrl,
+          severity: f.severity,
+          ruleId: f.kind,
+          impact: f.severity === 'strict' ? 'serious' : 'minor',
+        });
+      }
+    } catch (e) {
+      log({ kind: 'pageerror', text: `[placeholderText] detector threw on ${afterLabel}: ${(e as Error).message}` });
+    }
+  };
+
+  /**
    * T75: runtime image-health detector. Catches broken / empty /
    * missing-alt / CLS-risk images at the rendered DOM level.
    */
@@ -1138,6 +1177,7 @@ async function main(args: string[]): Promise<number> {
       await checkHeadingOrder(step.label || `goto-${i}`);
       await checkRuntimeLandmarks(step.label || `goto-${i}`);
       await checkLinkText(step.label || `goto-${i}`);
+      await checkPlaceholderText(step.label || `goto-${i}`);
       await checkWebVitals(step.label || `goto-${i}`);
     }
     // Memory snapshot at end of each step so the report shows heap growth
@@ -1379,6 +1419,14 @@ async function main(args: string[]): Promise<number> {
   // line delta) is the same severity-class as a runtime contrast
   // violation — content gone or panels collapsed silently.
   const newAriaDriftStrictCount = diff.newAriaDriftFindings.filter(e => e.severity === 'strict').length;
+  // T16: previously-unmetered axes — strict regressions used to print
+  // "REGRESSION" in the positive-signal table while the top-line gate
+  // emitted PASS. Hooking each one through the gate so a strict
+  // regression in any registered axis fails ship.
+  const newHeadingOrderStrictCount = diff.newHeadingOrderFindings.filter(e => e.severity === 'strict').length;
+  const newRuntimeLandmarksStrictCount = diff.newRuntimeLandmarksFindings.filter(e => e.severity === 'strict').length;
+  const newLinkTextStrictCount = diff.newLinkTextFindings.filter(e => e.severity === 'strict').length;
+  const newPlaceholderTextStrictCount = diff.newPlaceholderTextFindings.filter(e => e.severity === 'strict').length;
   const overBudget =
     diff.newConsoleErrors.length > DEFAULT_BUDGET.newConsoleErrors
     || diff.newPageErrors.length > DEFAULT_BUDGET.newPageErrors
@@ -1392,6 +1440,10 @@ async function main(args: string[]): Promise<number> {
     || newWebVitalsStrictCount > DEFAULT_BUDGET.newWebVitalsStrict
     || diff.newCspViolations.length > DEFAULT_BUDGET.newCspViolations
     || newAriaDriftStrictCount > DEFAULT_BUDGET.newAriaDriftStrict
+    || newHeadingOrderStrictCount > DEFAULT_BUDGET.newHeadingOrderStrict
+    || newRuntimeLandmarksStrictCount > DEFAULT_BUDGET.newRuntimeLandmarksStrict
+    || newLinkTextStrictCount > DEFAULT_BUDGET.newLinkTextStrict
+    || newPlaceholderTextStrictCount > DEFAULT_BUDGET.newPlaceholderTextStrict
     || diff.newlyBrokenSteps.length > DEFAULT_BUDGET.newlyBrokenSteps;
 
   // T2: positive-signal report — make the silent-pass state legible.
