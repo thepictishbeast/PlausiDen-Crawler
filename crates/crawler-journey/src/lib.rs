@@ -65,6 +65,7 @@ pub enum Throttle {
 /// * `{ "w": 1280, "h": 800 }`        — modern SkillShots (T39+)
 /// * `{ "width": 1280, "height": 800 }` — legacy (css-health
 ///   fixtures, sacred-vote pre-2026-04).
+///
 /// We accept both via `#[serde(alias)]` so the runner is liberal
 /// in what it parses; serialization always writes the modern
 /// short form.
