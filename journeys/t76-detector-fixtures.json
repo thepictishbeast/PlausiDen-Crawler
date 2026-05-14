@@ -37,7 +37,9 @@
     { "kind": "goto", "url": "http://127.0.0.1:8771/no-favicon/", "label": "no-favicon" },
     { "kind": "goto", "url": "http://127.0.0.1:8771/link-color-only/", "label": "link-color-only" },
     { "kind": "goto", "url": "http://127.0.0.1:8771/link-in-chrome/", "label": "link-in-chrome" },
-    { "kind": "goto", "url": "http://127.0.0.1:8771/font-no-display/", "label": "font-no-display" }
+    { "kind": "goto", "url": "http://127.0.0.1:8771/font-no-display/", "label": "font-no-display" },
+    { "kind": "goto", "url": "http://127.0.0.1:8771/login-no-autocomplete/", "label": "login-no-autocomplete" },
+    { "kind": "goto", "url": "http://127.0.0.1:8771/login-with-autocomplete/", "label": "login-with-autocomplete" }
   ],
   "expectedFindingsByLabel": {
     "control": [],
@@ -73,6 +75,8 @@
     "no-favicon": ["favicon.missing-link"],
     "link-color-only": ["link.color-only-distinction"],
     "link-in-chrome": [],
-    "font-no-display": ["font-loading.no-display"]
+    "font-no-display": ["font-loading.no-display"],
+    "login-no-autocomplete": ["autocomplete.missing-credentials"],
+    "login-with-autocomplete": []
   }
 }

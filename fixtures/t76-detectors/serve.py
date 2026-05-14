@@ -353,6 +353,50 @@ def link_in_chrome():
     return page(body)
 
 
+# ----- login-form / autocomplete-credentials family -----
+# These routes exercise the autocomplete.missing-credentials
+# detector (queued since cycle 9). Without a fixture page that
+# HAS a real login form, the credential-class autocomplete
+# detector could never fire on the http gate — only the http
+# fixtures had no auth forms.
+
+@route('/login-no-autocomplete/')
+def login_no_autocomplete():
+    # Email + password inputs WITHOUT autocomplete attrs.
+    # Detector should fire autocomplete.missing-credentials (strict).
+    body = (
+        '<h1>Sign in</h1>'
+        '<form>'
+        '<label for=email>Email</label>'
+        '<input id=email name=email type=email required>'
+        '<label for=pw>Password</label>'
+        '<input id=pw name=password type=password required>'
+        '<button type=submit>Sign in</button>'
+        '</form>'
+    )
+    return page(body)
+
+
+@route('/login-with-autocomplete/')
+def login_with_autocomplete():
+    # Same form WITH proper autocomplete attrs. Control case —
+    # detector should NOT fire. Inline-styled button to clear
+    # tap.too-small + asterisks on labels to clear
+    # form.required-no-indicator. The route's only signal is
+    # "autocomplete is correctly set on credential fields".
+    body = (
+        '<h1>Sign in (with autocomplete)</h1>'
+        '<form>'
+        '<label for=email2>Email *</label>'
+        '<input id=email2 name=email type=email autocomplete=email required>'
+        '<label for=pw2>Password *</label>'
+        '<input id=pw2 name=password type=password autocomplete=current-password required>'
+        '<button type=submit style="display:inline-block;padding:12px 16px;min-width:44px;min-height:44px">Sign in</button>'
+        '</form>'
+    )
+    return page(body)
+
+
 # ----- font-loading family -----
 @route('/font-no-display/')
 def font_no_display():

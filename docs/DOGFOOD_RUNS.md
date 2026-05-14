@@ -1023,12 +1023,85 @@ surfaces (a real bug found, an audit gap noticed). The
 - [ ] Extract `headerDetector` helper when permissionsPolicy
       lands (at least 4 response-header detectors needed for
       the abstraction to pay).
-- [ ] login-flow fixture (still queued — credential-class
-      autocomplete needs a login form to fire).
+- [x] **DONE 2026-05-14 (nineteenth cycle)**: login-flow fixture.
+      See nineteenth entry below. autocomplete.missing-credentials
+      now has live coverage.
 - [ ] T76 has shipped 27 detector axes; consider whether to
       mark the umbrella task complete and let new detectors
       come from real-world dogfood findings rather than a
       pre-planned roadmap.
+
+---
+
+## 2026-05-14 (nineteenth entry) — login-flow fixture closes the autocomplete gap
+
+### What's new since last cycle (eighteenth entry)
+- 2 new fixture routes: `/login-no-autocomplete/`,
+  `/login-with-autocomplete/`. Liveness gate validates 36/36
+  routes (was 34/34).
+- `autocomplete.missing-credentials` now has live coverage.
+- No new detectors; this cycle is pure infrastructure
+  (closes the longest-queued action item, dating to cycle 9).
+
+### Why a login-flow fixture
+
+`autocomplete.missing-credentials` (strict) was the last T76
+axis without a fixture. The old http fixture had no auth forms
+— the detector's credential-classifier needed to see
+`<input type=email>` or `<input type=password>` to fire, and
+the existing fixture pages were content-only.
+
+### Fixture design
+
+Two routes:
+- `/login-no-autocomplete/` — email + password inputs without
+  `autocomplete` attrs → fires `autocomplete.missing-credentials`
+  strict.
+- `/login-with-autocomplete/` — same form with
+  `autocomplete=email` + `autocomplete=current-password`. Control
+  — should be clean.
+
+The control needed a small fixture-cleanup pass: required-field
+markers (`*` in labels) + inline padding on the submit button
+(>=44×44 for tap-targets). Without these, the OTHER detectors
+correctly fired and added noise to the control's report. Now
+the only residual on this control is the predictable
+`css.no-stylesheets-declared` (every fixture page has it — one-
+signal-per-route doctrine includes "no extra CSS").
+
+### Verified
+
+- HTTP gate: 36/36 PASS (was 34; +2 routes).
+- HTTPS gate: 12/12 unchanged.
+- SkillShots audit: ALL 34 DETECTION AXES SILENT.
+
+### Coverage status snapshot (post-cycle 19)
+
+  Per-page DOM detectors:           17 axes
+  Aggregates-layer detectors:        2 axes
+  Response-header detectors:         3 axes
+  Existing pre-T76 axes:             5 axes (cssHealth,
+                                            uiOverflow,
+                                            runtimeContrast,
+                                            runtimeImages,
+                                            runtimeFocus)
+  Total:                            27 axes
+
+  Liveness gates:
+    HTTP:    36/36 routes
+    HTTPS:   12/12 routes
+    Total:   48 routes
+
+  Unit + Rust tests: ~280 across the surface.
+
+### Action items
+
+- [ ] Extract `headerDetector` helper on the FOURTH response-
+      header detector (permissionsPolicy candidate).
+- [ ] Mark T641 / T76 umbrella task complete: the original
+      "massive expansion" goal is achieved. New detectors can
+      be added per-need from real findings, not a pre-planned
+      roadmap.
 
 ---
 
