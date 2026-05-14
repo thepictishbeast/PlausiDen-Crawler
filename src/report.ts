@@ -53,6 +53,7 @@ export interface CapturedEvent {
     | 'cache-control'
     | 'vary'
     | 'inline-script'
+    | 'reporting-endpoints'
     | 'link-underline'
     | 'cross-page-title'
     | 'cross-page-meta-description';
@@ -142,6 +143,8 @@ export interface Report {
     varyFindingsStrict: number;
     inlineScriptFindings: number;
     inlineScriptFindingsStrict: number;
+    reportingEndpointsFindings: number;
+    reportingEndpointsFindingsStrict: number;
     linkUnderlineFindings: number;
     linkUnderlineFindingsStrict: number;
     crossPageTitleFindings: number;
@@ -417,6 +420,13 @@ export interface Diff {
    */
   newInlineScriptFindings: CapturedEvent[];
   /**
+   * reporting-endpoints findings new in this run vs prior.
+   * All warn — Reporting API endpoint configuration. Missing
+   * endpoints / Report-To-only legacy / CSP-report-uri
+   * orphaned / invalid. T76 cycle 31.
+   */
+  newReportingEndpointsFindings: CapturedEvent[];
+  /**
    * link-underline findings new in this run vs prior. Warn-only:
    * inline link inside running text distinguished only by colour.
    * WCAG 1.4.1 Level A. T76.
@@ -487,6 +497,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     newCacheControlFindings: [],
     newVaryFindings: [],
     newInlineScriptFindings: [],
+    newReportingEndpointsFindings: [],
     newLinkUnderlineFindings: [],
     newCrossPageTitleFindings: [],
     newCrossPageMetaDescriptionFindings: [],
@@ -535,6 +546,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     out.newCacheControlFindings = current.events.filter(e => e.kind === 'cache-control');
     out.newVaryFindings = current.events.filter(e => e.kind === 'vary');
     out.newInlineScriptFindings = current.events.filter(e => e.kind === 'inline-script');
+    out.newReportingEndpointsFindings = current.events.filter(e => e.kind === 'reporting-endpoints');
     out.newLinkUnderlineFindings = current.events.filter(e => e.kind === 'link-underline');
     out.newCrossPageTitleFindings = current.events.filter(e => e.kind === 'cross-page-title');
     out.newCrossPageMetaDescriptionFindings = current.events.filter(e => e.kind === 'cross-page-meta-description');
@@ -584,6 +596,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     else if (e.kind === 'cache-control') out.newCacheControlFindings.push(e);
     else if (e.kind === 'vary') out.newVaryFindings.push(e);
     else if (e.kind === 'inline-script') out.newInlineScriptFindings.push(e);
+    else if (e.kind === 'reporting-endpoints') out.newReportingEndpointsFindings.push(e);
     else if (e.kind === 'link-underline') out.newLinkUnderlineFindings.push(e);
     else if (e.kind === 'cross-page-title') out.newCrossPageTitleFindings.push(e);
     else if (e.kind === 'cross-page-meta-description') out.newCrossPageMetaDescriptionFindings.push(e);
@@ -938,6 +951,17 @@ export function renderPositiveSignal(report: Report, diff: Diff): string {
       total: report.events.filter((e) => e.kind === 'inline-script').length,
       news: diff.newInlineScriptFindings.length,
       strictNews: strict(diff.newInlineScriptFindings),
+    },
+    {
+      // T76 cycle 31 (Crawler): reporting-endpoints —
+      // Reporting API endpoint configuration audit. Without
+      // endpoints, ALL browser-emitted security reports
+      // (CSP violations, COEP violations, crash reports,
+      // intervention/deprecation warnings) are LOST.
+      name: 'reportingEndpoints',
+      total: report.events.filter((e) => e.kind === 'reporting-endpoints').length,
+      news: diff.newReportingEndpointsFindings.length,
+      strictNews: strict(diff.newReportingEndpointsFindings),
     },
     {
       // T76 (Crawler): link-underline — WCAG 1.4.1 (Use of Color, A).

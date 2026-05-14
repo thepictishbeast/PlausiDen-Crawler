@@ -225,6 +225,20 @@ Multi-token policies are honored per the W3C spec — the LAST recognised token 
 
 **Third response-header detector.** Reads from the same `topLevelResponseHeaders` Map as hsts + xFrameOptions. With three concrete examples now in hand, the ~70% structural overlap is a candidate for a generic `headerDetector(headerName, parser, classifier)` helper — extract on the next addition.
 
+### `reportingEndpoints` — Reporting API endpoint configuration *(T76 cycle 31 — added 2026-05-14)*
+Source: `src/reportingEndpoints.ts`
+
+| Finding | Sev | Catches |
+|---|---|---|
+| `reporting.no-endpoints` | warn | Neither `Reporting-Endpoints` nor `Report-To` header is present. ALL browser-emitted security reports (CSP violations, COEP violations, crash reports, intervention reports, deprecation warnings) are LOST. |
+| `reporting.report-to-only` | warn | Legacy `Report-To` set but no modern `Reporting-Endpoints`. Modern browsers prefer Reporting-Endpoints (W3C 2023); they may emit deprecation warnings and stop honouring Report-To in future versions. |
+| `reporting.csp-report-uri-no-endpoints` | warn | Content-Security-Policy includes `report-uri` or `report-to` directive but no Reporting-Endpoints / Report-To header is set up to receive them. Reports go nowhere. |
+| `reporting.invalid` | warn | Reporting-Endpoints header is present but no valid `name=URL` pair could be parsed. Browsers ignore — entire reporting pipeline silently broken. |
+
+Out of scope: verifying endpoint URLs accept reports (would require sending test reports — too invasive for a passive audit); endpoint TLS / origin / CORS checks; per-feature opt-ins; localhost.
+
+**Twelfth response-header detector.** Uses the cycle-24 `responseHeaderDetector` helper. The detector reads BOTH `Reporting-Endpoints` and `Report-To` AND `Content-Security-Policy` from the same headers Map — the cross-cutting CSP-orphan check is novel (similar shape to cycle-30 `inline-script.no-csp-but-inline` composite, but with response-header inputs instead of DOM).
+
 ### `vary` — Vary header correctness audit *(T76 cycle 29 — added 2026-05-14)*
 Source: `src/varyHeader.ts`
 

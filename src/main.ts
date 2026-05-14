@@ -62,6 +62,7 @@ import { buildCorpSnapshot, detectCorpIssues, type CorpFinding } from './corp.js
 import { buildCacheControlSnapshot, detectCacheControlIssues, type CacheControlFinding } from './cacheControl.js';
 import { buildVarySnapshot, detectVaryIssues, type VaryFinding } from './varyHeader.js';
 import { detectInlineScriptIssues, INLINE_SCRIPT_DOM_CAPTURE_JS, type InlineScriptFinding, type InlineScriptSnapshot } from './inlineScript.js';
+import { buildReportingEndpointsSnapshot, detectReportingEndpointsIssues, type ReportingEndpointsFinding } from './reportingEndpoints.js';
 
 interface Budget {
   newConsoleErrors: number;
@@ -1221,6 +1222,26 @@ async function main(args: string[]): Promise<number> {
   };
 
   /**
+   * T76 cycle 31: Reporting API endpoint configuration audit.
+   * Without endpoints configured, ALL browser-emitted security
+   * reports (CSP violations, COEP violations, crash reports,
+   * intervention reports, deprecation warnings) are LOST.
+   * Catches missing endpoints, legacy-only Report-To, CSP
+   * report-uri/report-to references with no matching
+   * Reporting-Endpoints header, and unparseable values.
+   */
+  const reportingEndpointsFindingsByStep: Array<PerStepRecord<ReportingEndpointsFinding>> = [];
+  const checkReportingEndpoints = makeResponseHeaderCheck({
+    detectorName: 'reportingEndpoints',
+    eventKind: 'reporting-endpoints',
+    page, topLevelResponseHeaders, disableLocalhostExemption,
+    findingsByStep: reportingEndpointsFindingsByStep,
+    log,
+    buildSnapshot: buildReportingEndpointsSnapshot,
+    detectIssues: detectReportingEndpointsIssues,
+  });
+
+  /**
    * T76 cycle 29: Vary header correctness audit. Sister to
    * cacheControl. Catches the second class of cache-poisoning:
    * response has Set-Cookie + allows shared caching + Vary
@@ -2058,6 +2079,7 @@ async function main(args: string[]): Promise<number> {
       await checkCorp(step.label || `goto-${i}`);
       await checkCacheControl(step.label || `goto-${i}`);
       await checkVary(step.label || `goto-${i}`);
+      await checkReportingEndpoints(step.label || `goto-${i}`);
       await checkWebVitals(step.label || `goto-${i}`);
     }
     // Memory snapshot at end of each step so the report shows heap growth
@@ -2216,6 +2238,8 @@ async function main(args: string[]): Promise<number> {
       varyFindingsStrict: events.filter(e => e.kind === 'vary' && e.severity === 'strict').length,
       inlineScriptFindings: events.filter(e => e.kind === 'inline-script').length,
       inlineScriptFindingsStrict: events.filter(e => e.kind === 'inline-script' && e.severity === 'strict').length,
+      reportingEndpointsFindings: events.filter(e => e.kind === 'reporting-endpoints').length,
+      reportingEndpointsFindingsStrict: events.filter(e => e.kind === 'reporting-endpoints' && e.severity === 'strict').length,
       linkUnderlineFindings: events.filter(e => e.kind === 'link-underline').length,
       linkUnderlineFindingsStrict: events.filter(e => e.kind === 'link-underline' && e.severity === 'strict').length,
       crossPageTitleFindings: events.filter(e => e.kind === 'cross-page-title').length,
@@ -2421,6 +2445,12 @@ async function main(args: string[]): Promise<number> {
       JSON.stringify(varyFindingsByStep, null, 2),
     );
   }
+  if (reportingEndpointsFindingsByStep.length > 0) {
+    writeFileSync(
+      join(outDir, 'reporting-endpoints.json'),
+      JSON.stringify(reportingEndpointsFindingsByStep, null, 2),
+    );
+  }
   if (inlineScriptFindingsByStep.length > 0) {
     writeFileSync(
       join(outDir, 'inline-script.json'),
@@ -2537,6 +2567,7 @@ async function main(args: string[]): Promise<number> {
   console.log(`  cache-control:     ${report.counts.cacheControlFindings} (strict ${report.counts.cacheControlFindingsStrict})`);
   console.log(`  vary:              ${report.counts.varyFindings} (strict ${report.counts.varyFindingsStrict})`);
   console.log(`  inline-script:     ${report.counts.inlineScriptFindings} (strict ${report.counts.inlineScriptFindingsStrict})`);
+  console.log(`  reporting:         ${report.counts.reportingEndpointsFindings} (strict ${report.counts.reportingEndpointsFindingsStrict})`);
   console.log(`  link underline:    ${report.counts.linkUnderlineFindings} (strict ${report.counts.linkUnderlineFindingsStrict})`);
   console.log(`  cross-page title:  ${report.counts.crossPageTitleFindings} (strict ${report.counts.crossPageTitleFindingsStrict})`);
   console.log(`  cross-page meta:   ${report.counts.crossPageMetaDescriptionFindings} (strict ${report.counts.crossPageMetaDescriptionFindingsStrict})`);
@@ -2645,6 +2676,9 @@ async function main(args: string[]): Promise<number> {
     const newIsStrict = diff.newInlineScriptFindings.filter(e => e.severity === 'strict').length;
     const newIsWarn = diff.newInlineScriptFindings.length - newIsStrict;
     console.log(`    NEW inline-script:    ${diff.newInlineScriptFindings.length} (strict ${newIsStrict}, warn ${newIsWarn})`);
+    const newReStrict = diff.newReportingEndpointsFindings.filter(e => e.severity === 'strict').length;
+    const newReWarn = diff.newReportingEndpointsFindings.length - newReStrict;
+    console.log(`    NEW reporting:        ${diff.newReportingEndpointsFindings.length} (strict ${newReStrict}, warn ${newReWarn})`);
     const newLinkUnderlineStrict = diff.newLinkUnderlineFindings.filter(e => e.severity === 'strict').length;
     const newLinkUnderlineWarn = diff.newLinkUnderlineFindings.length - newLinkUnderlineStrict;
     console.log(`    NEW link underline:   ${diff.newLinkUnderlineFindings.length} (strict ${newLinkUnderlineStrict}, warn ${newLinkUnderlineWarn})`);

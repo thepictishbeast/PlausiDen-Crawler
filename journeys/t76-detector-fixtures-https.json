@@ -58,7 +58,12 @@
     { "kind": "goto", "url": "https://127.0.0.1:8773/vary-star/", "label": "vary-star" },
     { "kind": "goto", "url": "https://127.0.0.1:8773/vary-invalid/", "label": "vary-invalid" },
     { "kind": "goto", "url": "https://127.0.0.1:8773/vary-duplicate/", "label": "vary-duplicate" },
-    { "kind": "goto", "url": "https://127.0.0.1:8773/vary-clean/", "label": "vary-clean" }
+    { "kind": "goto", "url": "https://127.0.0.1:8773/vary-clean/", "label": "vary-clean" },
+    { "kind": "goto", "url": "https://127.0.0.1:8773/reporting-no-endpoints/", "label": "reporting-no-endpoints" },
+    { "kind": "goto", "url": "https://127.0.0.1:8773/reporting-report-to-only/", "label": "reporting-report-to-only" },
+    { "kind": "goto", "url": "https://127.0.0.1:8773/reporting-invalid/", "label": "reporting-invalid" },
+    { "kind": "goto", "url": "https://127.0.0.1:8773/reporting-csp-orphan/", "label": "reporting-csp-orphan" },
+    { "kind": "goto", "url": "https://127.0.0.1:8773/reporting-clean/", "label": "reporting-clean" }
   ],
   "expectedFindingsByLabel": {
     "control": [],
@@ -115,6 +120,11 @@
     "vary-star": ["vary.star"],
     "vary-invalid": ["vary.invalid"],
     "vary-duplicate": ["vary.duplicate-tokens"],
-    "vary-clean": []
+    "vary-clean": [],
+    "reporting-no-endpoints": ["reporting.no-endpoints"],
+    "reporting-report-to-only": ["reporting.report-to-only"],
+    "reporting-invalid": ["reporting.invalid"],
+    "reporting-csp-orphan": ["reporting.csp-report-uri-no-endpoints"],
+    "reporting-clean": []
   }
 }

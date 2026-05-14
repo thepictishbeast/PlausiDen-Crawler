@@ -144,6 +144,11 @@ DEFAULT_HEADERS = {
     'Content-Security-Policy': _DEFAULT_CSP,
     'Cross-Origin-Opener-Policy': 'same-origin',
     'Cross-Origin-Embedder-Policy': 'require-corp',
+    # cycle 31: Reporting API endpoint stub so unrelated routes
+    # don't all leak reporting.no-endpoints. The URL is a
+    # plausible-looking placeholder; the detector doesn't try
+    # to validate the endpoint reachability.
+    'Reporting-Endpoints': 'csp-default="https://reports.example.com/csp"',
     'Content-Type': 'text/html; charset=utf-8',
     # Cache-Control: 'no-store' alone (without 'no-cache' or
     # 'max-age=0') is the canonical "do not cache" directive
@@ -302,6 +307,60 @@ def csp_clean():
         page('<h1>CSP hardened — clean baseline.</h1>'),
         {'Content-Security-Policy': _CSP_HARDENED},
     )
+
+
+# ----- Reporting API endpoints -----
+@route('/reporting-no-endpoints/')
+def reporting_no_endpoints():
+    return (
+        page('<h1>No Reporting-Endpoints, no Report-To.</h1>'),
+        {'Reporting-Endpoints': None},
+    )
+
+
+@route('/reporting-report-to-only/')
+def reporting_report_to_only():
+    return (
+        page('<h1>Legacy Report-To only.</h1>'),
+        {
+            'Reporting-Endpoints': None,
+            'Report-To': '{"group":"csp","max_age":86400,"endpoints":[{"url":"https://reports.example.com/csp"}]}',
+        },
+    )
+
+
+@route('/reporting-invalid/')
+def reporting_invalid():
+    return (
+        page('<h1>Reporting-Endpoints garbage.</h1>'),
+        {'Reporting-Endpoints': '   ,   ,   '},
+    )
+
+
+@route('/reporting-csp-orphan/')
+def reporting_csp_orphan():
+    # CSP references report-to but no Reporting-Endpoints.
+    # Override the default CSP to add the orphan report-to,
+    # AND null out Reporting-Endpoints to expose the orphan.
+    csp_with_report = (
+        "default-src 'self'; object-src 'none'; base-uri 'self'; "
+        "form-action 'self'; frame-ancestors 'none'; "
+        "require-trusted-types-for 'script'; script-src 'self'; "
+        "report-to csp-default"
+    )
+    return (
+        page('<h1>CSP report-to references orphan endpoint.</h1>'),
+        {
+            'Content-Security-Policy': csp_with_report,
+            'Reporting-Endpoints': None,
+        },
+    )
+
+
+@route('/reporting-clean/')
+def reporting_clean():
+    # Default Reporting-Endpoints from DEFAULT_HEADERS — passes.
+    return page('<h1>Reporting-Endpoints clean.</h1>'), {}
 
 
 # ----- Vary correctness -----

@@ -1033,6 +1033,120 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (thirty-first entry) — Reporting API endpoint configuration audit
+
+### What's new since last cycle (thirtieth entry)
+- 1 new detector axis: **`reportingEndpoints`** — Reporting
+  API endpoint configuration audit. Brings the active-axis
+  count to **43** (46 with the three legacy event kinds
+  counted separately). Four finding kinds, all warn.
+- 5 new HTTPS fixture routes (4 finding-specific + 1 clean
+  control). HTTPS gate now validates **60/60** routes (was
+  55/55).
+- DEFAULT_HEADERS in the HTTPS fixture now sets
+  `Reporting-Endpoints: csp-default="https://reports.example.com/csp"`
+  so unrelated routes don't leak `reporting.no-endpoints`.
+- 18 unit tests in `reportingEndpoints.test.ts`, all passing.
+- Twelfth response-header detector wired through the cycle-24
+  helper.
+
+### Why reportingEndpoints now — closing the observability gap
+The crawler has been adding security DETECTION axes for many
+cycles (33 of them now: hsts, xframeOptions, referrerPolicy,
+coop, coep, csp, permissionsPolicy, cookieSecurity, infoLeak,
+corp, cacheControl, vary, sri, inlineScript, etc.). These all
+detect what the OPERATOR can audit at deploy time. But the
+runtime side — when CSP fires on an actual user, when COEP
+blocks an embed, when the browser hits an OOM-crash, when an
+intervention overrides the page — needs the Reporting API to
+reach the operator at all.
+
+A site with strict CSP + zero reporting endpoints is flying
+blind: every violation in production is invisible. The
+reportingEndpoints detector flags the configuration gap
+proactively.
+
+### Detector design
+Four findings, all warn:
+
+  - reporting.no-endpoints
+    Neither modern Reporting-Endpoints nor legacy Report-To.
+    All reports lost.
+
+  - reporting.report-to-only
+    Legacy Report-To set but no modern Reporting-Endpoints.
+    Modern browsers prefer Reporting-Endpoints; deprecation
+    risk.
+
+  - reporting.csp-report-uri-no-endpoints
+    CSP includes report-uri/report-to directive but no
+    Reporting-Endpoints/Report-To header configured. Cross-
+    cutting check — sister to cycle-30 inline-script.no-csp-
+    but-inline composite.
+
+  - reporting.invalid
+    Reporting-Endpoints present but unparseable. Pipeline
+    silently broken.
+
+The Reporting-Endpoints parser handles RFC 8941 structured-
+fields Dictionary syntax: `name="quoted-url"` pairs separated
+by commas. Tolerates unquoted URLs and whitespace.
+
+### DEFAULT_HEADERS update
+Added `Reporting-Endpoints` stub to the HTTPS fixture's
+DEFAULT_HEADERS so unrelated routes don't all fire
+`reporting.no-endpoints`. Same pattern as cycle-21 added
+Permissions-Policy and cycle-22 added CSP. The fixture's
+default-headers now demonstrate ALL 12 of the recommended
+modern security headers + a clean Reporting-Endpoints stub:
+
+  - HSTS (Strict-Transport-Security)
+  - X-Frame-Options
+  - Referrer-Policy
+  - Permissions-Policy (deny-all for high-risk APIs)
+  - Content-Security-Policy (hardened with Trusted Types)
+  - Cross-Origin-Opener-Policy: same-origin
+  - Cross-Origin-Embedder-Policy: require-corp
+  - Reporting-Endpoints (NEW this cycle)
+  - Cache-Control: no-store
+
+This is a great reference baseline for any operator wanting to
+see what a fully-hardened response looks like.
+
+### Verified
+- HTTP gate: 47/47 routes pass.
+- HTTPS gate: **60/60** routes pass (was 55/55; 5 new
+  reporting routes).
+- SkillShots audit: 46 axes total, all silent vs prior. Site
+  on localhost so the exemption short-circuits — though the
+  Python SimpleHTTPServer doesn't set Reporting-Endpoints,
+  which would fire `reporting.no-endpoints` on a non-localhost
+  site.
+
+### Action items
+- [ ] CSP report-only header parser — pairs with existing CSP
+      detector. Single-value, helper applies.
+- [ ] Trusted Types runtime violation detector — page.on
+      hooks for securitypolicyviolation events.
+- [ ] Mixed-content sub-resources via the cycle-27
+      `allResponseHeaders` Map (still unused for anything but
+      CORP).
+- [ ] End-to-end CORP fixture verification (still queued
+      from cycle 27).
+- [ ] Document-Policy header detector — newer than
+      Permissions-Policy, stricter scope.
+- [ ] Origin-Agent-Cluster header detector — process-level
+      isolation request.
+- [ ] Pivot consideration: 31 cycles in, the marginal value
+      of each new response-header detector is decreasing.
+      Worth considering a higher-leverage move next cycle:
+        * Forge T33 phase_visual_diff (4-theme × 3-viewport
+          snapshot grid)
+        * Loom T46 Claude Code SSH bridge
+        * Crawler T75 chromiumoxide port (TS → Rust)
+
+---
+
 ## 2026-05-14 (thirtieth entry) — inline-script + event-handler + javascript: URI per-element audit
 
 ### What's new since last cycle (twenty-ninth entry)
