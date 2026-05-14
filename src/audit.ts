@@ -14,6 +14,34 @@ import type { CapturedEvent } from './report.js';
 const require_ = createRequire(import.meta.url);
 const AXE_PATH: string = require_.resolve('axe-core/axe.min.js');
 
+/**
+ * Axe rule IDs that are SUPERSEDED by a first-class PlausiDen
+ * detector with richer aggregation. We drop these from the
+ * a11y-violation stream so the user sees the issue once, in the
+ * detector axis, not twice.
+ *
+ * Rationale per rule:
+ *   - `label`                       → src/formLabels.ts T76 (form.no-label
+ *                                     strict + placeholder-only warn +
+ *                                     required-no-indicator warn)
+ *   - `label-title-only`            → covered by formLabels (treats title as
+ *                                     last-ditch source, not a real label)
+ *   - `form-field-multiple-labels`  → still covered ONLY by axe (rare;
+ *                                     not in this list — keep emitting)
+ *   - `target-size`                 → src/tapTargets.ts T76 (tap.too-small
+ *                                     strict + tap.below-recommended warn,
+ *                                     with WCAG inline-in-sentence exception)
+ *
+ * Add a rule here ONLY when the replacement detector covers the same
+ * conceptual failure with at least equivalent breadth. Otherwise leave
+ * axe to do its job.
+ */
+const AXE_RULES_SUPERSEDED = new Set<string>([
+  'label',
+  'label-title-only',
+  'target-size',
+]);
+
 export interface AxeNode {
   html: string;
   target: string[];
@@ -232,6 +260,12 @@ export function axeEventsFor(
     return out;
   }
   for (const v of result.violations) {
+    // T76 (2026-05-14) DE-DUPE: skip rules that are already covered
+    // by first-class detectors with richer aggregation. Removing
+    // the axe duplicate stops the audit reader from seeing the
+    // same root-cause issue twice (once with axe's per-element
+    // shape, once with the detector's aggregated finding).
+    if (AXE_RULES_SUPERSEDED.has(v.id)) continue;
     for (const n of v.nodes) {
       const target = n.target.join(' ');
       out.push({

@@ -1,7 +1,6 @@
 /**
- * uiOverflow.ts — detect viewport-overflow + small-tap-target bugs
- * the way a real visitor would experience them, at the configured
- * viewport. T28.
+ * uiOverflow.ts — detect viewport-overflow bugs the way a real
+ * visitor would experience them, at the configured viewport. T28.
  *
  * Operates strictly on the rendered DOM via page.evaluate() — never
  * reads project source files. Mirrors the cssHealth.ts pattern.
@@ -28,13 +27,15 @@
  *       overflow-x is not 'auto' or 'scroll' (so the user genuinely
  *       cannot see the content).
  *
- *   TAP TARGETS (strict on mobile viewports, warn on desktop):
- *     overflow.tap-target-too-small
- *       Interactive element with width < 44 OR height < 44 (CSS
- *       pixels). WCAG 2.5.5 (AAA) + iOS/Android HIG floor.
- *       Only fires for viewport.width <= 1024 to avoid false-positives
- *       on hover-driven desktop UIs (where icon buttons can be
- *       smaller without harming usability).
+ * 2026-05-14 (T76): tap-target detection MOVED OUT of this file
+ * into src/tapTargets.ts. The new module is WCAG-conformant
+ * (handles SC 2.5.8 inline-in-sentence exception, two severity
+ * tiers for AA-min vs AAA-recommendation, wider selector set
+ * including input[type=checkbox|radio|file|...], role=switch,
+ * role=menuitem). The smallTapTargets array on the snapshot is
+ * retained for one release as a transitional shape but the
+ * detector no longer emits the 'overflow.tap-target-too-small'
+ * finding — see tapTargets.ts for the canonical replacement.
  *
  * The detector returns UIOverflowFinding[]. Pure-function fingerprint
  * (snapshot + detect) so the unit tests can hand-craft DOM states.
@@ -272,21 +273,10 @@ export function detectUIOverflowIssues(snap: UIOverflowSnapshot): UIOverflowFind
     });
   }
 
-  if (snap.smallTapTargets.length > 0) {
-    // Mobile viewports: strict; desktop: warn (icon-only buttons are
-    // common and acceptable on hover-driven UIs).
-    const severity = snap.viewport.width <= 1024 ? 'strict' : 'warn';
-    out.push({
-      severity,
-      kind: 'overflow.tap-target-too-small',
-      detail: `${snap.smallTapTargets.length} interactive element(s) smaller than 44×44 px (WCAG 2.5.5 / iOS HIG floor) at viewport ${snap.viewport.width}×${snap.viewport.height}.`,
-      evidence: {
-        viewport: snap.viewport,
-        offenderCount: snap.smallTapTargets.length,
-        offenders: snap.smallTapTargets.slice(0, 10),
-      },
-    });
-  }
+  // T76 2026-05-14: tap-target finding moved to tapTargets.ts.
+  // Kept the snapshot field above so downstream tooling can still
+  // serialize/deserialize the legacy shape; the new detector is
+  // the single source of truth for tap-target findings.
 
   return out;
 }

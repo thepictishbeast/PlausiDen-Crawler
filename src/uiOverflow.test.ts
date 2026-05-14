@@ -74,37 +74,20 @@ const cleanSnap = (vp = { width: 375, height: 812 }): UIOverflowSnapshot => ({
   );
 }
 
-// 5. Small tap targets on mobile → strict.
-{
-  const snap = cleanSnap({ width: 375, height: 812 });
-  snap.smallTapTargets = [
-    { selector: 'body > nav > a', left: 10, top: 10, width: 24, height: 24, right: 34, text: 'X' },
-  ];
-  const findings = detectUIOverflowIssues(snap);
-  const tap = findings.find((f) => f.kind === 'overflow.tap-target-too-small');
-  assert(!!tap, 'tap-target-too-small triggers on mobile', 'no finding emitted');
-  assert(tap?.severity === 'strict', 'tap-target severity is strict on mobile viewport', `got ${tap?.severity}`);
-}
+// T76 2026-05-14: tap-target tests removed — that detection moved
+// to src/tapTargets.ts (WCAG 2.5.8 + 2.5.5, two severity tiers,
+// inline-in-sentence exception). See tapTargets.test.ts for
+// canonical tap-target test coverage.
 
-// 6. Small tap targets on desktop → warn.
-{
-  const snap = cleanSnap({ width: 1280, height: 800 });
-  snap.smallTapTargets = [
-    { selector: 'body > nav > button.icon', left: 10, top: 10, width: 28, height: 28, right: 38, text: '' },
-  ];
-  const findings = detectUIOverflowIssues(snap);
-  const tap = findings.find((f) => f.kind === 'overflow.tap-target-too-small');
-  assert(!!tap, 'tap-target-too-small triggers on desktop', 'no finding emitted');
-  assert(tap?.severity === 'warn', 'tap-target severity is warn on desktop viewport', `got ${tap?.severity}`);
-}
-
-// 7. Combined breakage produces multiple findings.
+// 5. Combined breakage (overflow + bleed + clip) produces multiple
+//    findings. (Was test #7; renumbered after tap-target tests
+//    were removed.)
 {
   const snap = cleanSnap();
   snap.documentScrollWidth = 500;
   snap.pageHasHorizontalScroll = true;
   snap.bleedingElements = [{ selector: 'body > img', left: 0, top: 100, width: 500, height: 200, right: 500, text: '' }];
-  snap.smallTapTargets = [{ selector: 'body > a', left: 0, top: 0, width: 20, height: 20, right: 20, text: 'x' }];
+  snap.textClippedElements = [{ selector: 'body > p', left: 0, top: 200, width: 200, height: 30, right: 200, text: 'truncated' }];
   const findings = detectUIOverflowIssues(snap);
   assert(findings.length >= 3, 'combined snapshot produces 3+ findings', `got ${findings.length}`);
 }
