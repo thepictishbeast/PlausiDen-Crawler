@@ -36,7 +36,8 @@ export interface CapturedEvent {
     | 'outbound-links'
     | 'autocomplete'
     | 'meta-description'
-    | 'favicon';
+    | 'favicon'
+    | 'mixed-content';
   level?: string;
   text: string;
   url?: string;
@@ -91,6 +92,8 @@ export interface Report {
     metaDescriptionFindingsStrict: number;
     faviconFindings: number;
     faviconFindingsStrict: number;
+    mixedContentFindings: number;
+    mixedContentFindingsStrict: number;
     cspViolations: number;
     total: number;
     stepsOk: number;
@@ -246,6 +249,12 @@ export interface Diff {
    * missing icon link in head. T76.
    */
   newFaviconFindings: CapturedEvent[];
+  /**
+   * mixed-content findings new in this run vs prior. Strict =
+   * active (script/css/iframe) or form-action over http on https
+   * page. Warn = passive (img/audio/video). T76.
+   */
+  newMixedContentFindings: CapturedEvent[];
   newlyBrokenSteps: StepResult[];
   fixedSteps: StepResult[];
 }
@@ -284,6 +293,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     newAutocompleteFindings: [],
     newMetaDescriptionFindings: [],
     newFaviconFindings: [],
+    newMixedContentFindings: [],
     newlyBrokenSteps: [],
     fixedSteps: [],
   };
@@ -313,6 +323,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     out.newAutocompleteFindings = current.events.filter(e => e.kind === 'autocomplete');
     out.newMetaDescriptionFindings = current.events.filter(e => e.kind === 'meta-description');
     out.newFaviconFindings = current.events.filter(e => e.kind === 'favicon');
+    out.newMixedContentFindings = current.events.filter(e => e.kind === 'mixed-content');
     return out;
   }
   const priorKeys = new Set(prior.events.map(key));
@@ -343,6 +354,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     else if (e.kind === 'autocomplete') out.newAutocompleteFindings.push(e);
     else if (e.kind === 'meta-description') out.newMetaDescriptionFindings.push(e);
     else if (e.kind === 'favicon') out.newFaviconFindings.push(e);
+    else if (e.kind === 'mixed-content') out.newMixedContentFindings.push(e);
   }
   const priorStepLabels = new Map(
     prior.steps.map((s, i) => [s.step.label || `${s.step.kind}-${i}`, s])
@@ -527,6 +539,14 @@ export function renderPositiveSignal(report: Report, diff: Diff): string {
       total: report.events.filter((e) => e.kind === 'favicon').length,
       news: diff.newFaviconFindings.length,
       strictNews: strict(diff.newFaviconFindings),
+    },
+    {
+      // T76 (Crawler): mixed-content — security defence in depth.
+      // active/form (strict), passive (warn).
+      name: 'mixedContent',
+      total: report.events.filter((e) => e.kind === 'mixed-content').length,
+      news: diff.newMixedContentFindings.length,
+      strictNews: strict(diff.newMixedContentFindings),
     },
   ];
   const lines: string[] = [];

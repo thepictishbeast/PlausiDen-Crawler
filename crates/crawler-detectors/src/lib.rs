@@ -48,6 +48,7 @@ pub mod heading_order;
 pub mod html_lang;
 pub mod link_text;
 pub mod meta_description;
+pub mod mixed_content;
 pub mod outbound_links;
 pub mod runtime_contrast;
 pub mod runtime_focus;

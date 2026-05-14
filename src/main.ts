@@ -42,6 +42,7 @@ import { captureOutboundLinksSnapshot, detectOutboundLinkIssues, type OutboundLi
 import { captureAutocompleteSnapshot, detectAutocompleteIssues, type AutocompleteFinding } from './autocomplete.js';
 import { captureMetaDescriptionSnapshot, detectMetaDescriptionIssues, type MetaDescriptionFinding } from './metaDescription.js';
 import { captureFaviconSnapshot, detectFaviconIssues, type FaviconFinding } from './favicon.js';
+import { captureMixedContentSnapshot, detectMixedContentIssues, type MixedContentFinding } from './mixedContent.js';
 
 interface Budget {
   newConsoleErrors: number;
@@ -923,6 +924,37 @@ async function main(args: string[]): Promise<number> {
   };
 
   /**
+   * T76: mixed-content detector. SECURITY-flavoured. Catches
+   * https pages loading http resources via static markup
+   * analysis — more reliable than the runtime browser signal
+   * since browsers inconsistently auto-upgrade vs warn vs
+   * block.
+   */
+  const mixedContentFindingsByStep: Array<{ stepLabel: string; pageUrl: string; findings: MixedContentFinding[] }> = [];
+  const checkMixedContent = async (afterLabel: string) => {
+    try {
+      const snap = await captureMixedContentSnapshot(page);
+      const findings = detectMixedContentIssues(snap);
+      mixedContentFindingsByStep.push({ stepLabel: afterLabel, pageUrl: snap.pageUrl, findings });
+      for (const f of findings) {
+        log({
+          kind: 'mixed-content',
+          text: `[${f.kind}] ${f.detail}`,
+          url: snap.pageUrl,
+          severity: f.severity,
+          ruleId: f.kind,
+          impact: f.severity === 'strict' ? 'serious' : 'minor',
+        });
+      }
+    } catch (e) {
+      log({
+        kind: 'pageerror',
+        text: `[mixedContent] detector threw on step ${afterLabel}: ${(e as Error).message}`,
+      });
+    }
+  };
+
+  /**
    * T76: favicon detector. warn-only — missing favicon doesn't
    * break the page but ships a generic browser-tab glyph and
    * reads as unfinished. Companion finding (broken icon URL)
@@ -1511,6 +1543,7 @@ async function main(args: string[]): Promise<number> {
       await checkAutocomplete(step.label || `goto-${i}`);
       await checkMetaDescription(step.label || `goto-${i}`);
       await checkFavicon(step.label || `goto-${i}`);
+      await checkMixedContent(step.label || `goto-${i}`);
       await checkWebVitals(step.label || `goto-${i}`);
     }
     // Memory snapshot at end of each step so the report shows heap growth
@@ -1608,6 +1641,8 @@ async function main(args: string[]): Promise<number> {
       metaDescriptionFindingsStrict: events.filter(e => e.kind === 'meta-description' && e.severity === 'strict').length,
       faviconFindings: events.filter(e => e.kind === 'favicon').length,
       faviconFindingsStrict: events.filter(e => e.kind === 'favicon' && e.severity === 'strict').length,
+      mixedContentFindings: events.filter(e => e.kind === 'mixed-content').length,
+      mixedContentFindingsStrict: events.filter(e => e.kind === 'mixed-content' && e.severity === 'strict').length,
       cspViolations: events.filter(e => e.kind === 'csp-violation').length,
       total: events.length,
       stepsOk: stepResults.filter(s => s.ok).length,
@@ -1717,6 +1752,12 @@ async function main(args: string[]): Promise<number> {
       JSON.stringify(faviconFindingsByStep, null, 2),
     );
   }
+  if (mixedContentFindingsByStep.length > 0) {
+    writeFileSync(
+      join(outDir, 'mixed-content.json'),
+      JSON.stringify(mixedContentFindingsByStep, null, 2),
+    );
+  }
   writeFileSync(join(outDir, 'report.json'), JSON.stringify(report, null, 2));
   // Write a terminal-friendly summary too so CI output is useful at a glance.
   writeFileSync(join(outDir, 'summary.txt'), renderSummary(agg));
@@ -1805,6 +1846,7 @@ async function main(args: string[]): Promise<number> {
   console.log(`  autocomplete:      ${report.counts.autocompleteFindings} (strict ${report.counts.autocompleteFindingsStrict})`);
   console.log(`  meta description:  ${report.counts.metaDescriptionFindings} (strict ${report.counts.metaDescriptionFindingsStrict})`);
   console.log(`  favicon:           ${report.counts.faviconFindings} (strict ${report.counts.faviconFindingsStrict})`);
+  console.log(`  mixed content:     ${report.counts.mixedContentFindings} (strict ${report.counts.mixedContentFindingsStrict})`);
   console.log(`  web vitals:        ${report.counts.webVitalsFindings} (strict ${report.counts.webVitalsFindingsStrict})`);
   console.log(`  csp violations:    ${report.counts.cspViolations}`);
   console.log(`  steps ok/failed:   ${report.counts.stepsOk}/${report.counts.stepsFailed}`);
@@ -1862,6 +1904,9 @@ async function main(args: string[]): Promise<number> {
     const newFaviconStrict = diff.newFaviconFindings.filter(e => e.severity === 'strict').length;
     const newFaviconWarn = diff.newFaviconFindings.length - newFaviconStrict;
     console.log(`    NEW favicon:          ${diff.newFaviconFindings.length} (strict ${newFaviconStrict}, warn ${newFaviconWarn})`);
+    const newMixedStrict = diff.newMixedContentFindings.filter(e => e.severity === 'strict').length;
+    const newMixedWarn = diff.newMixedContentFindings.length - newMixedStrict;
+    console.log(`    NEW mixed content:    ${diff.newMixedContentFindings.length} (strict ${newMixedStrict}, warn ${newMixedWarn})`);
     console.log(`    NEW csp violations:   ${diff.newCspViolations.length}`);
     console.log(`    newly broken steps:   ${diff.newlyBrokenSteps.length}`);
     console.log(`    fixed steps:          ${diff.fixedSteps.length}`);

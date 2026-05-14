@@ -500,8 +500,69 @@ the contract:
       fails (e.g. a broken cms/*.json after future schema
       change), `static/` could go stale. Mitigation: render phase
       already emits a STRICT finding on schema drift.
-- [ ] mixedContent detector still queued.
+- [x] **DONE 2026-05-14**: mixedContent detector landed. See
+      ninth entry below.
 - [ ] login-flow fixture still queued.
+
+---
+
+## 2026-05-14 (ninth entry) — mixedContent security detector
+
+### What's new since last cycle (eighth entry)
+- `mixedContent` detector landed in pipeline (3 finding kinds).
+- Total active detector axes: 20 (was 19).
+- T76 now covers ten new detector axes since session start
+  (tap-targets, form-labels, viewport-meta, doc-title, html-lang,
+  skip-link, outbound-links, autocomplete, meta-description,
+  favicon, mixed-content) — each with TS detector + Rust mirror
+  + unit tests.
+
+### Detector design
+
+Static markup analysis (not runtime browser signal). Browsers
+inconsistently auto-upgrade vs warn vs block mixed content; the
+markup is wrong regardless. Per the project's state-actor threat
+model (CLAUDE.md), defence in depth: surface the bug at the
+source.
+
+  - `mixed-content.active`      strict   script/css/iframe/embed/object
+                                         over http on https page.
+                                         Browsers BLOCK these.
+  - `mixed-content.passive`     warn     img/audio/video/srcset
+                                         over http on https page.
+  - `mixed-content.form-action` strict   `<form action="http://…">`
+                                         on an https page —
+                                         credentials/PII in the clear.
+
+The detector short-circuits when the page itself is http —
+mixed-content concept doesn't apply.
+
+### Coverage gap
+
+The `t76-detector-fixtures` server runs on http, so the page-is-
+https short-circuit fires and no live integration is possible
+via the gate. Coverage is via 17 TS+Rust unit tests covering
+boundaries (clean https, http-page short-circuit, all 3 finding
+kinds, aggregation, examples cap). Documented in DETECTORS.md.
+
+Future: HTTPS variant of the fixture server with a self-signed
+cert (Playwright's `ignoreHTTPSErrors: true` would let the
+crawler trust it). Out of scope this cycle.
+
+### SkillShots dogfood
+
+Site is http — `mixedContent` can't fire and stays silent
+(correct behaviour). Re-audit produced **ALL 27 DETECTION
+AXES SILENT**, +1 axis vs last cycle. Liveness gate (31/31
+fixture routes) still PASS.
+
+### Action items
+
+- [ ] HTTPS fixture variant for mixedContent live integration.
+- [ ] login-flow fixture (still queued).
+- [ ] Pick from remaining roadmap: `linkUnderline`,
+      `fontLoading`, `hstsHeader`, `xFrameOptions`,
+      `mixedFormSubmission`, `crossPageTitleDup`.
 
 ---
 

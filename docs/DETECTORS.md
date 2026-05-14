@@ -149,6 +149,19 @@ Source: `src/formLabels.ts` · Rust: `form_labels.rs`
 | `form.placeholder-only-label` | warn | Placeholder is the ONLY label. WCAG 3.3.2. |
 | `form.required-no-indicator` | warn | `required` / `aria-required="true"` set but no `*` or "required" in the visible label. |
 
+### `mixedContent` — HTTPS-page-loads-HTTP-resource *(T76 — added 2026-05-14)*
+Source: `src/mixedContent.ts` · Rust: `mixed_content.rs`
+
+| Finding | Sev | Catches |
+|---|---|---|
+| `mixed-content.active` | strict | `<script>`, `<link rel=stylesheet>`, `<link rel=preload>`, `<iframe>`, `<embed>`, `<object>` with http:// URL on an https page. Browsers BLOCK these. |
+| `mixed-content.passive` | warn | `<img>`, `<audio>`, `<video>`, `<source>`, `<picture>`, srcset, video poster with http:// URL on an https page. Browsers may auto-upgrade or block. |
+| `mixed-content.form-action` | strict | `<form action="http://…">` on an https page — credentials/PII over the wire in the clear. |
+
+The detector short-circuits when the page itself is http — mixed-content concept doesn't apply. Static markup analysis catches the bug even when browsers silently auto-upgrade (which they do inconsistently).
+
+**Note:** This axis has no fixture route in `t76-detector-fixtures` — the fixture server runs on HTTP, so the page-is-https short-circuit fires and no findings can be observed via the gate. Coverage is via the 17 TS+Rust unit tests. Future: HTTPS fixture variant for full integration.
+
 ### `favicon` — page favicon link *(T76 — added 2026-05-14)*
 Source: `src/favicon.ts` · Rust: `favicon.rs`
 
@@ -390,9 +403,6 @@ Wire to CI: any pre-merge check or scheduled job can shell out to
 Detectors queued for future T76 firings — each is high-leverage,
 zero-overlap with existing axes:
 
-- **`mixedContent`** — `https://` page loading `http://` resources.
-  (Partial overlap with browser's built-in mixed-content blocker
-  + CSP-violation events; need to design dedupe.)
 - **`linkUnderline`** — links indistinguishable from surrounding
   text (no underline + colour-only differentiation, fails WCAG 1.4.1).
 - **`fontLoading`** — `font-display: swap` missing → invisible-text
