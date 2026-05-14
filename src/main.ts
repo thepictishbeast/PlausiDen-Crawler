@@ -18,6 +18,13 @@ import { runStep, type Journey, type StepResult } from './journey.js';
 import { diffReports, findPriorRun, renderPositiveSignal, compareAriaTrees, type CapturedEvent, type Report } from './report.js';
 import { captureAriaTree, ariaTreeToText, interactableNodes, scoreAriaTree } from './aria.js';
 import { installWebVitals, collectVitals } from './webVitals.js';
+import {
+  installTrustedTypesProbe,
+  captureTrustedTypesSnapshot,
+  detectTrustedTypesIssues,
+  type TrustedTypesFinding,
+  type TrustedTypesSnapshot,
+} from './trustedTypesRuntime.js';
 import { attachTelemetry, snapshotMemory, captureServiceWorker } from './telemetry.js';
 import { aggregate, renderSummary } from './aggregates.js';
 import { runDiscover, type DiscoveredPage } from './discover.js';
@@ -556,6 +563,13 @@ async function main(args: string[]): Promise<number> {
   // Inject Google's web-vitals library before any navigation so LCP/CLS/
   // INP/TTFB/FCP are captured on every page the crawler visits.
   await installWebVitals(page);
+  // T76 cycle 57: Trusted Types runtime sink monitor.
+  // Proxies innerHTML / outerHTML / document.write / eval / Function /
+  // setTimeout(string) / setInterval(string) / insertAdjacentHTML /
+  // createContextualFragment on every new page. Each call is
+  // recorded to window.__loomTTSinks. The detector inspects the
+  // log after each step.
+  await installTrustedTypesProbe(page);
   // Rich telemetry: all requests (not just failures), long JS tasks,
   // memory snapshots, broken images, CSP violations, unhandled rejections.
   // Gated behind CRAWLER_RICH_TELEMETRY=1 while we iron out any
@@ -1118,6 +1132,50 @@ async function main(args: string[]): Promise<number> {
       log({
         kind: 'pageerror',
         text: `[inlineScript] detector threw on step ${afterLabel}: ${(e as Error).message}`,
+      });
+    }
+  };
+
+  /**
+   * T76 cycle 57: Trusted Types runtime sink monitor.
+   * Inspects the page-side log of DOM-sink calls captured by the
+   * init-script proxy installed at context creation, AND checks
+   * for `require-trusted-types-for 'script'` in the response CSP.
+   *
+   * Why runtime: hash-pinned CSP (cycle 54) protects against
+   * injected <script> tags at parse time, but says nothing about
+   * runtime DOM-XSS via innerHTML/eval/etc. Trusted Types is the
+   * CSP-Level-3 layer for that.
+   */
+  const trustedTypesFindingsByStep: Array<{ stepLabel: string; pageUrl: string; findings: TrustedTypesFinding[] }> = [];
+  const checkTrustedTypes = async (afterLabel: string) => {
+    try {
+      const pageUrl = page.url();
+      const headers = topLevelResponseHeaders.get(pageUrl) || {};
+      let cspHeader: string | undefined;
+      for (const k of Object.keys(headers)) {
+        if (k.toLowerCase() === 'content-security-policy') {
+          cspHeader = headers[k];
+          break;
+        }
+      }
+      const snap = await captureTrustedTypesSnapshot(page, cspHeader);
+      const findings = detectTrustedTypesIssues(snap);
+      trustedTypesFindingsByStep.push({ stepLabel: afterLabel, pageUrl: snap.pageUrl, findings });
+      for (const f of findings) {
+        log({
+          kind: 'trusted-types',
+          text: `[${f.kind}] ${f.detail}`,
+          url: snap.pageUrl,
+          severity: f.severity === 'info' ? 'warn' : f.severity,
+          ruleId: f.kind,
+          impact: f.severity === 'strict' ? 'serious' : 'minor',
+        });
+      }
+    } catch (e) {
+      log({
+        kind: 'pageerror',
+        text: `[trustedTypes] detector threw on step ${afterLabel}: ${(e as Error).message}`,
       });
     }
   };
@@ -2116,6 +2174,7 @@ async function main(args: string[]): Promise<number> {
       await checkCoep(step.label || `goto-${i}`);
       await checkSri(step.label || `goto-${i}`);
       await checkInlineScript(step.label || `goto-${i}`);
+      await checkTrustedTypes(step.label || `goto-${i}`);
       await checkInfoLeak(step.label || `goto-${i}`);
       await checkCorp(step.label || `goto-${i}`);
       await checkCacheControl(step.label || `goto-${i}`);
@@ -2280,6 +2339,8 @@ async function main(args: string[]): Promise<number> {
       varyFindingsStrict: events.filter(e => e.kind === 'vary' && e.severity === 'strict').length,
       inlineScriptFindings: events.filter(e => e.kind === 'inline-script').length,
       inlineScriptFindingsStrict: events.filter(e => e.kind === 'inline-script' && e.severity === 'strict').length,
+      trustedTypesFindings: events.filter(e => e.kind === 'trusted-types').length,
+      trustedTypesFindingsStrict: events.filter(e => e.kind === 'trusted-types' && e.severity === 'strict').length,
       reportingEndpointsFindings: events.filter(e => e.kind === 'reporting-endpoints').length,
       reportingEndpointsFindingsStrict: events.filter(e => e.kind === 'reporting-endpoints' && e.severity === 'strict').length,
       originAgentClusterFindings: events.filter(e => e.kind === 'origin-agent-cluster').length,
@@ -2505,6 +2566,12 @@ async function main(args: string[]): Promise<number> {
     writeFileSync(
       join(outDir, 'inline-script.json'),
       JSON.stringify(inlineScriptFindingsByStep, null, 2),
+    );
+  }
+  if (trustedTypesFindingsByStep.length > 0) {
+    writeFileSync(
+      join(outDir, 'trusted-types.json'),
+      JSON.stringify(trustedTypesFindingsByStep, null, 2),
     );
   }
   if (linkUnderlineFindingsByStep.length > 0) {

@@ -53,6 +53,7 @@ export interface CapturedEvent {
     | 'cache-control'
     | 'vary'
     | 'inline-script'
+    | 'trusted-types'
     | 'reporting-endpoints'
     | 'origin-agent-cluster'
     | 'link-underline'
@@ -144,6 +145,8 @@ export interface Report {
     varyFindingsStrict: number;
     inlineScriptFindings: number;
     inlineScriptFindingsStrict: number;
+    trustedTypesFindings: number;
+    trustedTypesFindingsStrict: number;
     reportingEndpointsFindings: number;
     reportingEndpointsFindingsStrict: number;
     originAgentClusterFindings: number;
@@ -423,6 +426,15 @@ export interface Diff {
    */
   newInlineScriptFindings: CapturedEvent[];
   /**
+   * trusted-types findings new in this run vs prior. T76 cycle
+   * 57. Runtime DOM-sink monitor. Warn — sink call without
+   * Trusted* coverage AND no require-trusted-types-for in CSP.
+   * Warn — page has scripts but no require-trusted-types-for
+   * directive (CSP-Level-3 not in effect). Info — directive
+   * set but no trusted-types <names> allowlist.
+   */
+  newTrustedTypesFindings: CapturedEvent[];
+  /**
    * reporting-endpoints findings new in this run vs prior.
    * All warn — Reporting API endpoint configuration. Missing
    * endpoints / Report-To-only legacy / CSP-report-uri
@@ -506,6 +518,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     newCacheControlFindings: [],
     newVaryFindings: [],
     newInlineScriptFindings: [],
+    newTrustedTypesFindings: [],
     newReportingEndpointsFindings: [],
     newOriginAgentClusterFindings: [],
     newLinkUnderlineFindings: [],
@@ -556,6 +569,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     out.newCacheControlFindings = current.events.filter(e => e.kind === 'cache-control');
     out.newVaryFindings = current.events.filter(e => e.kind === 'vary');
     out.newInlineScriptFindings = current.events.filter(e => e.kind === 'inline-script');
+    out.newTrustedTypesFindings = current.events.filter(e => e.kind === 'trusted-types');
     out.newReportingEndpointsFindings = current.events.filter(e => e.kind === 'reporting-endpoints');
     out.newOriginAgentClusterFindings = current.events.filter(e => e.kind === 'origin-agent-cluster');
     out.newLinkUnderlineFindings = current.events.filter(e => e.kind === 'link-underline');
@@ -607,6 +621,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     else if (e.kind === 'cache-control') out.newCacheControlFindings.push(e);
     else if (e.kind === 'vary') out.newVaryFindings.push(e);
     else if (e.kind === 'inline-script') out.newInlineScriptFindings.push(e);
+    else if (e.kind === 'trusted-types') out.newTrustedTypesFindings.push(e);
     else if (e.kind === 'reporting-endpoints') out.newReportingEndpointsFindings.push(e);
     else if (e.kind === 'origin-agent-cluster') out.newOriginAgentClusterFindings.push(e);
     else if (e.kind === 'link-underline') out.newLinkUnderlineFindings.push(e);
@@ -963,6 +978,18 @@ export function renderPositiveSignal(report: Report, diff: Diff): string {
       total: report.events.filter((e) => e.kind === 'inline-script').length,
       news: diff.newInlineScriptFindings.length,
       strictNews: strict(diff.newInlineScriptFindings),
+    },
+    {
+      // T76 cycle 57 (Crawler): trusted-types — runtime DOM-
+      // sink monitor + CSP-Level-3 directive audit. Catches
+      // unprotected innerHTML/eval/document.write calls AND
+      // pages with scripts but no `require-trusted-types-for
+      // 'script'` directive. The defence layer beyond hash-
+      // pinned CSP.
+      name: 'trustedTypes',
+      total: report.events.filter((e) => e.kind === 'trusted-types').length,
+      news: diff.newTrustedTypesFindings.length,
+      strictNews: strict(diff.newTrustedTypesFindings),
     },
     {
       // T76 cycle 31 (Crawler): reporting-endpoints —

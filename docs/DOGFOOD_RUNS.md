@@ -1033,6 +1033,105 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (fifty-seventh entry) — Trusted Types runtime monitor detector
+
+### What's new since last cycle (fifty-sixth entry)
+- **New detector — `trustedTypesRuntime`** (this commit): the
+  48th detection axis. Proxies DOM sinks (innerHTML, outerHTML,
+  insertAdjacentHTML, document.write/writeln, setTimeout/Interval
+  string-form, createContextualFragment) via addInitScript and
+  records every call. The detector inspects the call log AND
+  the page's CSP for `require-trusted-types-for 'script'` —
+  emits warnings for pages-with-scripts missing the directive
+  and untrusted sink calls without enforcement.
+- **Cross-repo Loom fix** (commit 9f24fc7): /about edit form's
+  CSP now includes `require-trusted-types-for 'script'; trusted-
+  types loom-editor`. The inline editor JS calls no sinks so
+  the directive is safe to add today; future regression
+  resistance is the point.
+- **Score holds at A 100/100** (1 acknowledged warn).
+- 20th cross-repo Loom commit + 4th crawler detector since
+  cycle 38.
+- Active named-detector axis count: **47 → 48**.
+
+### Why runtime monitoring matters
+Hash-pinned CSP (cycle 54) protects against injected `<script>`
+tags at parse time. But CSP says nothing about runtime DOM-XSS:
+
+```javascript
+// CSP-Level-2 hash pin allows THIS exact script to run.
+// But once it runs, IT can be poisoned:
+fetch(userInput).then(r => r.text()).then(html => {
+  document.getElementById('output').innerHTML = html;  // ← DOM-XSS sink
+});
+```
+
+CSP cannot block that innerHTML assignment. Trusted Types
+(CSP-Level-3) makes it a runtime error unless `html` was issued
+by a registered Trusted Types policy.
+
+The detector now flags this risk: any page with scripts AND no
+`require-trusted-types-for 'script'` directive gets a warn,
+because the sink-bypass attack surface is open.
+
+### What the detector caught on Loom
+Pre-fix: /about page (the only Loom admin page with inline JS)
+got `tt.directive-missing` warn — composite drop to A 99/100.
+
+Post-fix (Loom commit 9f24fc7 added the directive): clean.
+The directive is safe because the editor JS calls no sinks; if
+it later added one without going through a Trusted Types
+policy, the browser would block at runtime.
+
+### Implementation notes
+- `eval` and `Function` constructor NOT proxied. Playwright's
+  own `page.evaluate(fn)` API serialises functions and invokes
+  eval inside the page context, producing 30+ false positives
+  per audit step. Discriminating Playwright-internal eval from
+  app-level eval would require call-site introspection that
+  isn't reliable. The DOM-sink proxies are the primary value.
+- Each sink call records a 200-char preview + the `trusted`
+  flag (`isTrusted` checks the value's class against
+  `TrustedHTML / TrustedScript / TrustedScriptURL`).
+- 10 unit tests pass in `trustedTypesRuntime.test.ts`:
+  - Empty page → clean
+  - Scripts without TT directive → `tt.directive-missing` warn
+  - Scripts WITH directive + allowlist → clean
+  - Untrusted sink + no TT directive → both warns
+  - Trusted sink → only directive-missing
+  - Untrusted sink WITH TT directive + allowlist → clean
+    (defers to runtime enforcement)
+  - TT directive without allowlist → `tt.policy-undeclared` info
+  - Full coverage → clean
+  - Multi-sink aggregation: count and byKind correct
+
+### Score arc (cycles 41-57)
+  C56:  A 100, 0 strict, 1 acknowledged warn.
+  C57:  A 100, 0 strict, 1 acknowledged warn (new axis
+                                              passes immediately
+                                              after Loom directive
+                                              fix).
+
+### Cumulative cross-repo dogfood scoreboard (cycles 38-57)
+  20 cross-repo Loom commits + 1 Forge + 4 crawler detectors/
+  enhancements. Cycle 57 is the second new detector (after
+  cycle 54's hash-pinning enhancement). 48 detection axes
+  active, supersociety dashboard composite 100/100 against
+  the Loom edit-serve surface.
+
+### Action items
+- [ ] Cycle 58: open same dogfood loop on PlausiDen-Forge's
+      static SkillShots output (the user-facing surface).
+- [ ] Cycle 59: CSP `report-uri` collector endpoint in
+      loom-cli so violations are observable in production.
+- [ ] Cycle 60: supersociety badge SVG auto-published on every
+      push, embeddable in README/PRs.
+- [ ] Cycle 61: detector — `Document-Policy` header (Tier 3
+      modern security; controls iframe / sandbox / origin
+      policies).
+
+---
+
 ## 2026-05-14 (fifty-sixth entry) — CSP defence-in-depth + --no-baseline mode
 
 ### What's new since last cycle (fifty-fifth entry)
