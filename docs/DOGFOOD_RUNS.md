@@ -1033,6 +1033,82 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (seventy-seventh entry) — SUPERSOCIETY_OBSERVABILITY.md — design + ops manual
+
+### What's new since last cycle (seventy-sixth entry)
+- **`docs/SUPERSOCIETY_OBSERVABILITY.md`** (513 lines):
+  knowledge-transfer doc explaining the full 6-layer
+  detect→enforce→report→COLLECT→audit→REVIEW pipeline.
+  Written for an operator who's never seen the code.
+- The user explicitly requested in cycle 1's standing prompt:
+  "make docs explaining how to use it and its overall design".
+  This cycle delivers; deferred for ~70 cycles in favour of
+  shipping cumulative code, now caught up.
+- Aggregate badge holds at **A 100/100 (16)**.
+
+### What the doc covers
+- TL;DR diagram of the 6-layer pipeline.
+- Layer-by-layer breakdown: where the code lives, what cycle
+  introduced it, what to look for when it fires.
+- Layer 1 (DETECT): table of all 14 response headers + meta
+  directives the PlausiDen surfaces emit.
+- Layer 4 (COLLECT): file layout, threat→defence table,
+  hardening cycle history.
+- Layer 5 (AUDIT): the 10-category score model, the 50 axes,
+  the 4-layer Tier-6 validation stack.
+- Layer 6 (REVIEW): operator-readable views (`report-tail`,
+  `report-stats`).
+- "Adding a new detector" walkthrough (7 steps, with a drift-
+  detector gate at step 5 that catches forgotten map updates).
+- "Adding a new audited surface" walkthrough (5 steps + the
+  cumulative fix-pattern library link).
+- "Operating the system" runbook for 4 common ops questions:
+  did I break it, are there frozen issues, did the browser
+  enforce, what's the current state.
+- "What this still isn't" — explicit named gaps (no SIEM
+  integration, no log encryption, no replay protection, no
+  alarming, Atrium not covered). AVP-2 doctrine: ship
+  explicit risk acceptance, not silent omission.
+- File index mapping every cited file to its purpose +
+  introducing cycle.
+
+### Why the doc matters
+By cycle 77, the PlausiDen-Crawler + Loom + Sentinel-GUI
+codebase encodes ~40 cycles of incremental supersociety
+hardening. A new operator reading the source cold would need
+weeks to reconstruct the design intent. The doc compresses
+that into one read.
+
+The design intent itself was previously visible only through
+the `git log` archaeology of `DOGFOOD_RUNS.md` — that file is
+now ~3000 lines of cycle-by-cycle history. SUPERSOCIETY_
+OBSERVABILITY.md is the same information, restructured for
+NEW READERS instead of historical playback.
+
+### Score arc (cycles 41-77)
+  C76: aggregate A 100/100 (16) — property suite mutation-complete.
+  C77: aggregate A 100/100 (16) — knowledge transfer doc shipped.
+
+### Cumulative cross-repo dogfood scoreboard (cycles 38-77)
+  32 Loom commits + 3 Forge + 1 Sentinel-GUI + **12 crawler
+  enhancements** + 3 E2E suites + property + mutation + drift
+  test suites + meta-runner + design+ops manual.
+
+### Action items
+- [ ] Cycle 78: dogfood loop pivot — extend to a new HTTP
+      surface OR extend the AUDIT stack to cover a new spec
+      (Trusted Types policy enforcement runtime detector
+      already exists; consider Subresource Integrity at
+      runtime, not just static).
+- [ ] Cycle 79: pre-push git hook for `npm run test:meta`
+      (operator opt-in via `loom hooks-install`).
+- [ ] Cycle 80: extend the drift detector to also verify
+      CapturedEvent's `kind` union in report.ts matches the
+      KIND_TO_CATEGORY map (catches the OTHER class of
+      forgotten-update bugs).
+
+---
+
 ## 2026-05-14 (seventy-sixth entry) — Property 5 tightened + report-log helpers deduped
 
 ### What's new since last cycle (seventy-fifth entry)
