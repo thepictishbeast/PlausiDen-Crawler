@@ -49,11 +49,22 @@ export interface CapturedFormControl {
   /** how the name was derived: label-for | label-wrap | aria-label
    *  | aria-labelledby | title | placeholder | none */
   nameSource: string;
+  /**
+   * The actual VISIBLE label text — `<label for=id>` or wrapping
+   * `<label>` textContent. Captured independently of accessibleName
+   * because aria-label typically holds the bare field name (no
+   * required marker) while the visible label is where sighted users
+   * see indicators like '*' or '(required)'.
+   *
+   * Empty string when no visible label exists (e.g. aria-label-only
+   * or placeholder-only fields).
+   */
+  visibleLabelText: string;
   /** placeholder attribute value, '' if absent */
   placeholder: string;
   /** required attribute or aria-required="true" */
   required: boolean;
-  /** label text contains '*' or 'required' (case-insensitive) */
+  /** VISIBLE label text contains '*' or 'required' (case-insensitive) */
   requiredIndicated: boolean;
 }
 
@@ -124,6 +135,28 @@ export async function captureFormLabelsSnapshot(
      *   5. placeholder (FALLBACK only — explicitly NOT a label
      *      per WCAG 3.3.2; we record it to surface a warn)
      */
+    // visibleLabelText — read the actual VISIBLE label text
+    // (label-for / wrapping label textContent), independent of
+    // aria-*. This is what sighted users see; the required-
+    // indicator check uses this rather than accessibleName since
+    // the common doctrine is to put the visible indicator (asterisk
+    // or "(required)") in the label and leave aria-label as the
+    // bare field purpose.
+    const visibleLabelText = function(el) {
+      if (el.id) {
+        const lab = document.querySelector('label[for="' + CSS.escape(el.id) + '"]');
+        if (lab) return (lab.textContent || '').trim();
+      }
+      let parent = el.parentElement;
+      let hops = 0;
+      while (parent && hops < 4) {
+        if (parent.tagName === 'LABEL') return (parent.textContent || '').trim();
+        parent = parent.parentElement;
+        hops += 1;
+      }
+      return '';
+    };
+
     const nameAndSource = function(el) {
       const labelledby = el.getAttribute('aria-labelledby');
       if (labelledby) {
@@ -180,15 +213,19 @@ export async function captureFormLabelsSnapshot(
         if (skip.indexOf(type) >= 0) continue;
       }
       const ns = nameAndSource(el);
+      const visLabel = visibleLabelText(el);
       const required = el.hasAttribute('required') ||
                        el.getAttribute('aria-required') === 'true';
-      // requiredIndicated: visible '*' or the word 'required' in
-      // the visible label text (case-insensitive). aria-required
-      // alone is not a VISIBLE indicator.
+      // requiredIndicated: visible '*' or the word 'required' in the
+      // VISIBLE LABEL text (label-for / wrapping label). NOT the
+      // accessibleName, because aria-label commonly holds the bare
+      // field purpose and the visible label is where designers
+      // actually put the indicator. aria-required alone doesn't
+      // count — sighted users can't see ARIA state.
       let requiredIndicated = false;
-      if (required && ns.name) {
-        const lower = ns.name.toLowerCase();
-        if (ns.name.indexOf('*') >= 0 || lower.indexOf('required') >= 0) {
+      if (required && visLabel) {
+        const lower = visLabel.toLowerCase();
+        if (visLabel.indexOf('*') >= 0 || lower.indexOf('required') >= 0) {
           requiredIndicated = true;
         }
       }
@@ -198,6 +235,7 @@ export async function captureFormLabelsSnapshot(
         type: type,
         accessibleName: ns.name.slice(0, 120),
         nameSource: ns.source,
+        visibleLabelText: visLabel.slice(0, 120),
         placeholder: (el.getAttribute('placeholder') || '').slice(0, 80),
         required: required,
         requiredIndicated: requiredIndicated,

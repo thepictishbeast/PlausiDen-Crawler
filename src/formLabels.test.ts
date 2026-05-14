@@ -27,6 +27,7 @@ const ctrl = (
   type: 'text',
   accessibleName: 'Email',
   nameSource: 'label-for',
+  visibleLabelText: 'Email',
   placeholder: '',
   required: false,
   requiredIndicated: false,

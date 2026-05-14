@@ -100,14 +100,64 @@ gets a dedicated follow-up):
 
 ### Action items
 
-- [ ] Fix Loom form template to render required-field indicators
+- [x] Fix Loom form template to render required-field indicators
       (`*` after label OR explicit "required" badge) — closes the
-      `form.required-no-indicator` finding at the source.
+      `form.required-no-indicator` finding at the source. **DONE
+      2026-05-14**: PlausiDen-Loom commit added a
+      `render_required_marker()` helper, used by Text / Textarea /
+      Select arms; matching `.loom-form-field__required` CSS rule
+      added to skin.css (red asterisk, danger-color token).
 - [ ] Add `loginFlow` synthetic step to the journey or add a
       dedicated `login.html` fixture so credential-class
       detectors get exercised.
 - [ ] Build at least 3 more detectors from the roadmap before
       declaring T76 close to done.
+
+---
+
+## 2026-05-14 (second run) — SkillShots PoC, post-Loom-fix
+
+Same fixture, same journey, run AFTER:
+
+1. Loom form renderer adds a visible `*` to required-field labels
+   via `<span class="loom-form-field__required" aria-hidden="true">`.
+2. Crawler formLabels detector capture-side updated: it now reads
+   the VISIBLE label text (`<label for>` / wrapping label
+   textContent) separately from accessibleName. Required-indicator
+   check uses the visible text, since the project's doctrine puts
+   the bare field purpose in aria-label and the visible indicator
+   in the actual label element. Previous version was reading
+   aria-label and missing the `*` even when it was rendered.
+3. Crawler bug-fix: JSDoc inside the page.evaluate template literal
+   contained literal backticks, which broke template parsing and
+   silently made `evalFn` evaluate to `NaN` (typeof number). Caught
+   only because the detector started silently failing across every
+   page after the snapshot-shape change. Replaced JSDoc with `//`
+   line comments inside the eval string — fix locked.
+
+### Results
+
+**ALL 24 DETECTION AXES SILENT.** Zero findings, zero page errors,
+zero a11y violations, zero CSP violations, zero diffs vs prior run.
+The crawler exits with PASS.
+
+This is the cleanest dogfood run on record — the loop fully closed:
+detector found bug → fix at source → detector improved → audit
+re-runs clean. Future regressions on the same surface will be
+caught.
+
+### Remaining coverage gaps
+
+The site is genuinely well-built and stays clean against every
+detector we have today. To keep tightening the loop:
+
+1. Add a login-flow fixture (credential-class autocomplete checks
+   never fire on this site).
+2. Build remaining roadmap detectors — they may find issues this
+   one doesn't surface.
+3. Run the crawler against a deliberately broken fixture set to
+   guarantee each axis is firing correctly (don't trust silent
+   passes alone).
 
 ---
 

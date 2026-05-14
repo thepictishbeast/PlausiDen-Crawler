@@ -59,6 +59,21 @@ pub const FORM_LABELS_JS: &str = r##"(() => {
       return true;
     };
 
+    const visibleLabelText = function(el) {
+      if (el.id) {
+        const lab = document.querySelector('label[for="' + CSS.escape(el.id) + '"]');
+        if (lab) return (lab.textContent || '').trim();
+      }
+      let parent = el.parentElement;
+      let hops = 0;
+      while (parent && hops < 4) {
+        if (parent.tagName === 'LABEL') return (parent.textContent || '').trim();
+        parent = parent.parentElement;
+        hops += 1;
+      }
+      return '';
+    };
+
     const nameAndSource = function(el) {
       const labelledby = el.getAttribute('aria-labelledby');
       if (labelledby) {
@@ -112,12 +127,15 @@ pub const FORM_LABELS_JS: &str = r##"(() => {
         if (skip.indexOf(type) >= 0) continue;
       }
       const ns = nameAndSource(el);
+      const visLabel = visibleLabelText(el);
       const required = el.hasAttribute('required') ||
                        el.getAttribute('aria-required') === 'true';
+      // Check VISIBLE label, not accessibleName (which may be the
+      // bare aria-label, missing the `*`).
       let requiredIndicated = false;
-      if (required && ns.name) {
-        const lower = ns.name.toLowerCase();
-        if (ns.name.indexOf('*') >= 0 || lower.indexOf('required') >= 0) {
+      if (required && visLabel) {
+        const lower = visLabel.toLowerCase();
+        if (visLabel.indexOf('*') >= 0 || lower.indexOf('required') >= 0) {
           requiredIndicated = true;
         }
       }
@@ -127,6 +145,7 @@ pub const FORM_LABELS_JS: &str = r##"(() => {
         type: type,
         accessibleName: ns.name.slice(0, 120),
         nameSource: ns.source,
+        visibleLabelText: visLabel.slice(0, 120),
         placeholder: (el.getAttribute('placeholder') || '').slice(0, 80),
         required: required,
         requiredIndicated: requiredIndicated,
@@ -153,11 +172,20 @@ pub struct CapturedFormControl {
     /// `aria-labelledby` | `aria-label` | `label-for` |
     /// `label-wrap` | `title` | `placeholder` | `none`.
     pub name_source: String,
+    /// VISIBLE label text (label-for / wrapping label textContent),
+    /// captured independently of accessibleName so the required-
+    /// indicator check sees what sighted users see — not what
+    /// aria-label reports. Empty string when no visible label
+    /// exists (aria-label-only or placeholder-only fields).
+    /// Defaults to empty for back-compat with snapshots that
+    /// pre-date this field.
+    #[serde(default)]
+    pub visible_label_text: String,
     /// `placeholder` attribute value (first 80 chars).
     pub placeholder: String,
     /// `required` attribute or `aria-required="true"`.
     pub required: bool,
-    /// True iff the visible label text contains `*` or the
+    /// True iff the VISIBLE label text contains `*` or the
     /// word "required" (case-insensitive).
     pub required_indicated: bool,
 }
@@ -296,6 +324,7 @@ mod tests {
             r#type: ty.to_owned(),
             accessible_name: name.to_owned(),
             name_source: source.to_owned(),
+            visible_label_text: name.to_owned(),
             placeholder: String::new(),
             required,
             required_indicated,
