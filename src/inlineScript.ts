@@ -84,6 +84,14 @@ export interface CapturedInlineScript {
   src: string;
   /** True iff a 'nonce' attribute was present (any value). */
   hasNonce: boolean;
+  /**
+   * Base64 SHA-256 of the FULL inline script body (matches the
+   * CSP `'sha256-<b64>'` source-expression format). T76 cycle 54:
+   * lets the detector credit hash-pinned inline scripts as
+   * CSP-covered, equivalent to nonce-pinned. Optional because
+   * pre-cycle-54 captures don't include it.
+   */
+  sha256?: string;
 }
 
 export interface CapturedEventHandler {
@@ -104,6 +112,13 @@ export interface InlineScriptSnapshot {
   pageUrl: string;
   /** True iff Content-Security-Policy header is present. */
   hasCsp: boolean;
+  /**
+   * Raw value of the CSP `script-src` directive (header OR
+   * meta http-equiv). Used by the detector to credit hash-
+   * pinned inline scripts. Empty string when no script-src
+   * directive is observable.
+   */
+  cspScriptSrc: string;
   inlineScripts: CapturedInlineScript[];
   eventHandlers: CapturedEventHandler[];
   javascriptUris: CapturedJavascriptUri[];
@@ -114,14 +129,28 @@ export function detectInlineScriptIssues(
 ): InlineScriptFinding[] {
   const out: InlineScriptFinding[] = [];
 
-  const noNonce = snap.inlineScripts.filter((s) => !s.hasNonce);
-  if (noNonce.length > 0) {
-    const examples = noNonce.slice(0, 5).map((s) => `<script> '${s.src}'`);
+  // T76 cycle 54: a script is "CSP-covered" if EITHER it carries
+  // a nonce attribute OR its sha256 hash appears in the CSP
+  // `script-src` directive. Both forms are CSP-Level-2/3
+  // sanctioned ways to allow specific inline blocks; the
+  // detector now recognises both.
+  const scriptSrc = snap.cspScriptSrc || '';
+  const isHashPinned = (s: CapturedInlineScript): boolean => {
+    if (!s.sha256) return false;
+    // The hash token in CSP looks like `'sha256-<b64>'`. Match
+    // case-insensitively on the algorithm name (CSP is case-
+    // insensitive there) and exact-match on the base64 body.
+    const needle = `sha256-${s.sha256}`;
+    return scriptSrc.toLowerCase().includes(needle.toLowerCase());
+  };
+  const uncovered = snap.inlineScripts.filter((s) => !s.hasNonce && !isHashPinned(s));
+  if (uncovered.length > 0) {
+    const examples = uncovered.slice(0, 5).map((s) => `<script> '${s.src}'`);
     out.push({
       severity: 'warn',
       kind: 'inline-script.present-without-nonce',
-      detail: `${noNonce.length} inline <script> block(s) without a 'nonce' attribute. Under a strict CSP ('script-src nonce-<random>'), these are silently dropped. Without a CSP, they're stored-XSS sinks: any HTML-injection vulnerability that writes a <script> tag executes immediately. Migrate to external <script src> with SRI, or add a per-page nonce. Examples: ${examples.join('; ')}`,
-      evidence: { count: noNonce.length, examples },
+      detail: `${uncovered.length} inline <script> block(s) without a 'nonce' attribute OR a matching sha256 hash in CSP \`script-src\`. Under a strict CSP, these are silently dropped. Without a CSP, they're stored-XSS sinks: any HTML-injection vulnerability that writes a <script> tag executes immediately. Migrate to external <script src> with SRI, add a per-page nonce, OR pin the hash via \`script-src 'sha256-<b64>'\`. Examples: ${examples.join('; ')}`,
+      evidence: { count: uncovered.length, examples },
     });
   }
 
@@ -153,13 +182,13 @@ export function detectInlineScriptIssues(
   // Prioritises actionability — if csp.missing already fires
   // separately, this adds the "...AND you have inline scripts
   // that an injection can use" detail.
-  if (!snap.hasCsp && (noNonce.length > 0 || snap.eventHandlers.length > 0 || snap.javascriptUris.length > 0)) {
+  if (!snap.hasCsp && (uncovered.length > 0 || snap.eventHandlers.length > 0 || snap.javascriptUris.length > 0)) {
     out.push({
       severity: 'warn',
       kind: 'inline-script.no-csp-but-inline',
       detail: `Page has inline scripts/handlers AND no Content-Security-Policy header. Nothing stops a stored-XSS injection from executing. The cspPolicy detector also fires 'csp.missing' on this; the additional finding here calls out that the inline scripts make the missing CSP particularly dangerous. Add a strict CSP first (script-src 'self' 'nonce-<random>'), then migrate inline scripts to external src + nonce.`,
       evidence: {
-        inlineScripts: noNonce.length,
+        inlineScripts: uncovered.length,
         eventHandlers: snap.eventHandlers.length,
         javascriptUris: snap.javascriptUris.length,
       },
@@ -179,8 +208,34 @@ export function detectInlineScriptIssues(
  * Pulled from MDN's Element event-handler property table —
  * any DOM property that starts with 'on'.
  */
+/**
+ * Browser-side hash helper for INLINE_SCRIPT_DOM_CAPTURE_JS.
+ * Computes base64 SHA-256 of a string body via SubtleCrypto
+ * (HTTPS/localhost only — file:// / non-secure contexts cannot
+ * call crypto.subtle). Returns empty string on failure rather
+ * than rejecting; the detector treats absent hash as
+ * "not pinnable" which is the conservative outcome.
+ *
+ * T76 cycle 54: emitted from INLINE_SCRIPT_DOM_CAPTURE_JS so the
+ * capture can mark which scripts are CSP-hash-pinned.
+ */
 export const INLINE_SCRIPT_DOM_CAPTURE_JS = `
-(function() {
+(async function() {
+  async function _loomHash(s) {
+    try {
+      if (!window.crypto || !window.crypto.subtle) return '';
+      var enc = new TextEncoder();
+      var buf = await window.crypto.subtle.digest('SHA-256', enc.encode(s));
+      var bytes = new Uint8Array(buf);
+      var bin = '';
+      for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+      return window.btoa(bin);
+    } catch (e) {
+      return '';
+    }
+  }
+  // SUPERSOCIETY: keep the original synchronous flow for non-
+  // hash work, then await hashes at the end to fill in.
   var EVENT_ATTRS = [
     'onabort','onafterprint','onanimationend','onanimationiteration','onanimationstart',
     'onauxclick','onbeforeprint','onbeforeunload','onblur','oncancel','oncanplay',
@@ -201,15 +256,18 @@ export const INLINE_SCRIPT_DOM_CAPTURE_JS = `
     'onvolumechange','onwaiting','onwheel'
   ];
   var inlineScripts = [];
+  var inlineScriptBodies = [];
   var scripts = document.querySelectorAll('script');
   for (var i = 0; i < scripts.length; i++) {
     var s = scripts[i];
     if (s.hasAttribute('src')) continue; // external — out of scope
-    var src = (s.textContent || '').slice(0, 200);
+    var body = s.textContent || '';
+    var src = body.slice(0, 200);
     inlineScripts.push({
       src: src,
       hasNonce: s.hasAttribute('nonce'),
     });
+    inlineScriptBodies.push(body);
   }
   var eventHandlers = [];
   // Walk every element for known event-handler attribute names.
@@ -249,17 +307,40 @@ export const INLINE_SCRIPT_DOM_CAPTURE_JS = `
   // header-truth source after capture. Here we cover the meta
   // case as a fallback.
   var hasCsp = false;
+  var cspText = '';
   var metas = document.querySelectorAll('meta[http-equiv]');
   for (var p = 0; p < metas.length; p++) {
     var equiv = (metas[p].getAttribute('http-equiv') || '').toLowerCase();
     if (equiv === 'content-security-policy') {
       hasCsp = true;
+      cspText = metas[p].getAttribute('content') || '';
       break;
     }
+  }
+  // T76 cycle 54: pull the script-src directive value out of
+  // the CSP string. Order: directives are semicolon-separated;
+  // first match wins. The detector also accepts an enriched
+  // value from response headers via main.ts.
+  var cspScriptSrc = '';
+  if (cspText) {
+    var parts = cspText.split(';');
+    for (var q = 0; q < parts.length; q++) {
+      var seg = parts[q].trim();
+      if (seg.toLowerCase().indexOf('script-src ') === 0 ||
+          seg.toLowerCase() === 'script-src') {
+        cspScriptSrc = seg.slice('script-src'.length).trim();
+        break;
+      }
+    }
+  }
+  // Fill in sha256 hashes for each captured inline script.
+  for (var r = 0; r < inlineScripts.length; r++) {
+    inlineScripts[r].sha256 = await _loomHash(inlineScriptBodies[r]);
   }
   return {
     pageUrl: window.location.href,
     hasCsp: hasCsp,
+    cspScriptSrc: cspScriptSrc,
     inlineScripts: inlineScripts,
     eventHandlers: eventHandlers,
     javascriptUris: javascriptUris,

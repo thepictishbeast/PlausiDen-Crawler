@@ -1033,6 +1033,112 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (fifty-fourth entry) — A 97 with hash-pinned CSP: detector ALSO improved
+
+### What's new since last cycle (fifty-third entry)
+- **Cross-repo Loom fix** (commit 5f7c009): edit-form admin
+  page now ships a strict Content-Security-Policy meta with
+  sha256 hash pins for all three inline blocks (skip-link
+  CSS, page-layout CSS, click-bridge JS) + removed
+  `onclick="return confirm(...)"` in favour of a delegated
+  `data-loom-confirm` listener. Three inline-script warns
+  cleared.
+- **Detector improvement in PlausiDen-Crawler** (this commit):
+  `inline-script.present-without-nonce` now ALSO accepts
+  hash-pinned scripts as covered. CSP Level 2/3 sanctions
+  both nonce and sha256 source-expressions; the detector
+  previously credited only nonce.
+- **Score: A 95 → A 97** (+2). contentSecurity B=85 → A=100.
+- 17th cross-repo Loom commit + 2nd crawler detector fix
+  since cycle 38.
+- Active named-detector axis count UNCHANGED at 44.
+
+### The detector enhancement
+Captured `CapturedInlineScript` now also carries an optional
+base64 `sha256` field. The browser-side capture awaits a
+`crypto.subtle.digest('SHA-256', body)` per inline `<script>`
+and ships the hash back alongside the existing nonce-presence
+boolean.
+
+The browser also extracts the `script-src` directive from any
+`<meta http-equiv="Content-Security-Policy">` tag. main.ts then
+upgrades that field from the response-header CSP if available
+(more authoritative).
+
+```typescript
+const isHashPinned = (s: CapturedInlineScript): boolean => {
+  if (!s.sha256) return false;
+  const needle = `sha256-${s.sha256}`;
+  return scriptSrc.toLowerCase().includes(needle.toLowerCase());
+};
+const uncovered = snap.inlineScripts.filter(
+  (s) => !s.hasNonce && !isHashPinned(s));
+```
+
+A script is "covered" iff it carries a nonce OR its sha256
+matches a `'sha256-<b64>'` token in the CSP `script-src`
+directive. Both forms are CSP-Level-2-sanctioned; this brings
+the detector in line with browser-side enforcement.
+
+19 tests pass (16 existing + 3 cycle-54 additions):
+- hash-pinned script clean
+- hash mismatch still flagged
+- legacy capture without sha256 still flagged (back-compat)
+
+### The Loom CSP
+```
+default-src 'self';
+img-src 'self' data:;
+style-src 'self' 'sha256-<skip>' 'sha256-<page>';
+script-src 'self' 'sha256-<page-js>';
+frame-src 'self';
+connect-src 'self';
+frame-ancestors 'self';
+base-uri 'self';
+form-action 'self';
+```
+
+All three inline blocks live in named consts (SKIP_LINK_CSS,
+EDIT_PAGE_CSS, EDIT_PAGE_JS) whose hashes are computed at
+request time. Mutate the const → hash regenerates → policy
+matches. No drift.
+
+### Score arc (cycles 41-54)
+  C41 pre:  B 82, 19 strict, accessibility F=0.
+  C46:      B 85, 3 strict (F-clamp accessibility BREAKS).
+  C49:      B 87, 3 strict (skip-link works after detector fix).
+  C50:      B 89, 2 strict (accessibility F → C=70).
+  C51:      A 91, 1 strict (uxHygiene F=10 → F=35).
+  C52a:     A 90, 2 strict (uxHygiene → C=70, reliability bugs unmasked).
+  C52b:     A 93, 1 strict (reliability bugs fixed).
+  C53:      A 95, 0 strict (first clean run).
+  C54:      **A 97, 0 strict** (contentSecurity A=100).
+
+### What's left (0 strict + 7 warn)
+- 6× accessibility warns (form-labels + tap-targets) →
+  next cycle: bump button heights to ≥44 px.
+- 1× cross-page-meta-description warn (acknowledged — admin
+  pages share one description by design).
+
+### Cumulative cross-repo dogfood scoreboard (cycles 38-54)
+  Total: 17 cross-repo Loom commits + 1 Forge + 2 crawler
+  detector improvements. **Cycle 54 was the second time a
+  crawler-side detector enhancement landed in the same cycle
+  as the source-repo fix it credited (cycle 49 was the
+  first).** This is the dogfood loop's full closure: the
+  source repo got hardened AND the auditor got smarter.
+
+### Action items
+- [ ] Cycle 55: accessibility C=70 — bump admin button + nav
+      heights to ≥44 px for WCAG 2.1 AAA. Clears 6 warns.
+- [ ] Cycle 56: Trusted-Types runtime monitor detector
+      (Tier 3 security).
+- [ ] Cycle 57: `--no-baseline` deeper bug-finder mode.
+- [ ] Cycle 58+: bring the same CSP hash pattern to the
+      OTHER 3 admin pages (index, tutorial, uploads).
+
+---
+
 ## 2026-05-14 (fifty-third entry) — Loom edit-serve A 95: ZERO strict, first clean audit
 
 ### What's new since last cycle (fifty-second entry)

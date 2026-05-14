@@ -15,11 +15,53 @@ function snap(over: Partial<InlineScriptSnapshot>): InlineScriptSnapshot {
   return {
     pageUrl: PAGE,
     hasCsp: true,
+    cspScriptSrc: '',
     inlineScripts: [],
     eventHandlers: [],
     javascriptUris: [],
     ...over,
   };
+}
+
+// T76 cycle 54: hash-pinned inline scripts are clean.
+// A script with `sha256: 'X'` AND the CSP script-src directive
+// includes `'sha256-X'` should be treated as CSP-covered,
+// equivalent to nonce-pinned.
+{
+  const f = detectInlineScriptIssues(snap({
+    inlineScripts: [{ src: 'console.log(1)', hasNonce: false, sha256: 'aaa=' }],
+    cspScriptSrc: "'self' 'sha256-aaa='",
+  }));
+  assert(f.length === 0, 'hash-pinned script clean', JSON.stringify(f));
+}
+
+// T76 cycle 54: hash mismatch → still flagged.
+// Sha256 present on the script but the CSP directive doesn't
+// reference it → cannot credit; raise the warn.
+{
+  const f = detectInlineScriptIssues(snap({
+    inlineScripts: [{ src: 'console.log(1)', hasNonce: false, sha256: 'aaa=' }],
+    cspScriptSrc: "'self' 'sha256-different='",
+  }));
+  assert(
+    f.length === 1 && f[0].kind === 'inline-script.present-without-nonce',
+    'hash mismatch still flagged',
+    JSON.stringify(f),
+  );
+}
+
+// T76 cycle 54: missing sha256 field → treat as legacy capture.
+// Falls back to nonce-only check.
+{
+  const f = detectInlineScriptIssues(snap({
+    inlineScripts: [{ src: 'console.log(1)', hasNonce: false }],
+    cspScriptSrc: "'self' 'sha256-aaa='",
+  }));
+  assert(
+    f.length === 1 && f[0].kind === 'inline-script.present-without-nonce',
+    'legacy capture without sha256 still flagged',
+    JSON.stringify(f),
+  );
 }
 
 // 1. Empty page → no findings.

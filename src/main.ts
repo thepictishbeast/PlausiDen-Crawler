@@ -1078,14 +1078,26 @@ async function main(args: string[]): Promise<number> {
     try {
       const pageUrl = page.url();
       const snap = (await page.evaluate(INLINE_SCRIPT_DOM_CAPTURE_JS)) as InlineScriptSnapshot;
-      // Upgrade hasCsp from response-header truth (more
-      // authoritative than the meta http-equiv fallback the
-      // page-side capture uses).
+      // Upgrade hasCsp + cspScriptSrc from response-header truth
+      // (more authoritative than the meta http-equiv fallback the
+      // page-side capture uses). T76 cycle 54: the script-src
+      // directive is also extracted so the detector can credit
+      // hash-pinned inline scripts.
       const headers = topLevelResponseHeaders.get(pageUrl);
       if (headers) {
         for (const k of Object.keys(headers)) {
           if (k.toLowerCase() === 'content-security-policy') {
             snap.hasCsp = true;
+            const cspText = headers[k] || '';
+            const segs = cspText.split(';');
+            for (const seg of segs) {
+              const t = seg.trim();
+              if (t.toLowerCase().startsWith('script-src ') ||
+                  t.toLowerCase() === 'script-src') {
+                snap.cspScriptSrc = t.slice('script-src'.length).trim();
+                break;
+              }
+            }
             break;
           }
         }
