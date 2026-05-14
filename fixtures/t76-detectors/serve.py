@@ -72,30 +72,39 @@ CLEAN_HEAD = """<meta charset=utf-8>
 
 # Used in routes that test viewport/title/lang/etc. specifically:
 # omit the field-under-test, keep the rest healthy.
+_OMIT = object()  # sentinel: drop this element entirely.
+
 def head(*, viewport=None, title=None, meta_desc=None):
-    """Build a head block. Pass None for any field to drop it
-    entirely (= test "missing"). Pass a value to override the clean
-    baseline."""
+    """Build a head block.
+
+    For each kwarg:
+      - omitted (default None) → use the clean baseline value
+      - explicit string value → override with that value
+      - sentinel _OMIT → drop the element entirely (test "missing")
+
+    The sentinel pattern avoids the False/None ambiguity that bit
+    the first version: `False is not None` evaluates True, so a
+    `title=False` argument was silently producing `<title>False</title>`.
+    """
     parts = ['<meta charset=utf-8>']
-    if viewport is not None:
-        parts.append(f'<meta name=viewport content="{viewport}">')
-    elif viewport is False:  # explicit drop
+    if viewport is _OMIT:
         pass
-    else:
-        # default: include the clean viewport
+    elif viewport is None:
         parts.append('<meta name=viewport content="width=device-width, initial-scale=1">')
-    if meta_desc is not None:
-        parts.append(f'<meta name=description content="{meta_desc}">')
-    elif meta_desc is False:
-        pass
     else:
+        parts.append(f'<meta name=viewport content="{viewport}">')
+    if meta_desc is _OMIT:
+        pass
+    elif meta_desc is None:
         parts.append('<meta name=description content="A reasonable summary that fits the search-result preview window.">')
-    if title is not None:
-        parts.append(f'<title>{title}</title>')
-    elif title is False:
-        pass
     else:
+        parts.append(f'<meta name=description content="{meta_desc}">')
+    if title is _OMIT:
+        pass
+    elif title is None:
         parts.append('<title>T76 Fixture</title>')
+    else:
+        parts.append(f'<title>{title}</title>')
     return '\n'.join(parts)
 
 
@@ -107,7 +116,13 @@ def page(body, *, lang='en', head_override=None):
         html_open = '<html>'
     else:
         html_open = f'<html lang="{lang}">'
-    return f'<!doctype html>\n{html_open}<head>\n{h}\n</head>\n<body><a class="skip" href="#main">Skip to main content</a><main id="main">{body}</main></body></html>'
+    # Inline-style the skip link so its bounding box meets the
+    # 44×44 tap-target floor — without this the link renders as
+    # default-text size (~80×16) and trips tap.too-small on every
+    # page including the control. We don't use external CSS in
+    # the fixture by design (each route should isolate one signal).
+    skip_link = '<a class="skip" href="#main" style="display:inline-block;padding:12px 16px;min-width:44px;min-height:44px;box-sizing:border-box">Skip to main content</a>'
+    return f'<!doctype html>\n{html_open}<head>\n{h}\n</head>\n<body>{skip_link}<main id="main">{body}</main></body></html>'
 
 
 # ============================================================
@@ -150,7 +165,7 @@ def viewport_zoom_disabled():
 @route('/no-title/')
 def no_title():
     return page('<h1>No title</h1>',
-                head_override=head(title=False))
+                head_override=head(title=_OMIT))
 
 
 @route('/title-empty/')
@@ -204,7 +219,7 @@ def lang_unknown():
 @route('/no-meta-desc/')
 def no_meta_desc():
     return page('<h1>No meta description</h1>',
-                head_override=head(meta_desc=False))
+                head_override=head(meta_desc=_OMIT))
 
 
 @route('/meta-desc-empty/')
@@ -238,14 +253,14 @@ def no_skip_link():
 def skip_broken_target():
     # Skip link points at #content but the main has id=main
     body = '<h1>Skip link points at non-existent id</h1>'
-    return f'<!doctype html>\n<html lang="en"><head>\n{CLEAN_HEAD}\n</head>\n<body><a class="skip" href="#content">Skip to main content</a><main id="main">{body}</main></body></html>'
+    return f'<!doctype html>\n<html lang="en"><head>\n{CLEAN_HEAD}\n</head>\n<body><a class="skip" href="#content" style="display:inline-block;padding:12px 16px;min-width:44px;min-height:44px;box-sizing:border-box">Skip to main content</a><main id="main">{body}</main></body></html>'
 
 
 @route('/skip-not-first/')
 def skip_not_first():
     # Logo link comes BEFORE skip link in tab order
     body = '<h1>Skip link not first focusable</h1>'
-    return f'<!doctype html>\n<html lang="en"><head>\n{CLEAN_HEAD}\n</head>\n<body><a href="/">Logo</a> <a class="skip" href="#main">Skip to main content</a><main id="main">{body}</main></body></html>'
+    return f'<!doctype html>\n<html lang="en"><head>\n{CLEAN_HEAD}\n</head>\n<body><a href="/" style="display:inline-block;padding:12px 16px;min-width:44px;min-height:44px;box-sizing:border-box">Logo</a> <a class="skip" href="#main" style="display:inline-block;padding:12px 16px;min-width:44px;min-height:44px;box-sizing:border-box">Skip to main content</a><main id="main">{body}</main></body></html>'
 
 
 # ----- form-labels family -----
@@ -341,12 +356,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
         return
 
 
+class ReusableTCPServer(socketserver.TCPServer):
+    """SO_REUSEADDR so back-to-back fixture runs don't hit
+    `OSError: [Errno 98] Address already in use` while the previous
+    listener's socket is still in TIME_WAIT (60s on Linux). The CI
+    runner restarts this server many times per session."""
+    allow_reuse_address = True
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument('--port', type=int, default=8771)
     args = p.parse_args()
     print(f'[t76-fixtures] serving {len(ROUTES)} routes on http://127.0.0.1:{args.port}/', flush=True)
-    with socketserver.TCPServer(('127.0.0.1', args.port), Handler) as httpd:
+    with ReusableTCPServer(('127.0.0.1', args.port), Handler) as httpd:
         try:
             httpd.serve_forever()
         except KeyboardInterrupt:

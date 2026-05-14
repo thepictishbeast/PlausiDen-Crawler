@@ -210,13 +210,58 @@ on the next audit.
 
 ### Action items
 
-- [ ] Wire the fixture into CI: `bin/check-t76-detectors.sh` that
-      starts the server, runs the audit, asserts observed
-      findings match `expectedFindingsByLabel`.
-- [ ] Tweak fixture skip-link CSS so tapTargets only flares on
-      the engineered routes.
+- [x] Wire the fixture into CI: `scripts/check-t76-detectors.sh` —
+      starts the server (with SO_REUSEADDR so back-to-back runs
+      don't TIME_WAIT-deadlock the port), runs the audit, parses
+      report.json, asserts every expected finding observed per
+      route by URL match. **DONE 2026-05-14.** First run: 30/30
+      routes PASS.
+- [x] Tweak fixture skip-link CSS so tapTargets only flares on
+      the engineered routes. **DONE 2026-05-14**: skip link in
+      `page()` and the inline-built skip-link routes now carry
+      inline `padding:12px 16px;min-width:44px;min-height:44px`
+      so the bounding box meets the tap-target floor on every
+      page that isn't deliberately testing tap-too-small.
 - [ ] Add `mixedContent` + `linkUnderline` + `fontLoading` routes
       as those detectors land.
+
+### Bugs the script caught on its first runs
+
+The script-development loop itself surfaced four real bugs that
+no other test would have:
+
+1. **`title=False` silently rendered `<title>False</title>`.** The
+   Python fixture's `head()` helper used `if title is not None`
+   then a (dead) `elif title is False` branch — but `False is not
+   None` evaluates True, so the value-render branch fired. Replaced
+   with a sentinel `_OMIT` object; now `head(title=_OMIT)`
+   unambiguously drops the element.
+
+2. **Port 8771 in TIME_WAIT after kill blocks restart.** The fixture
+   server bound a fresh socket each run; Linux holds the previous
+   socket in TIME_WAIT for 60s, blocking a fresh bind. Added a
+   `ReusableTCPServer(socketserver.TCPServer)` subclass with
+   `allow_reuse_address = True`.
+
+3. **`report.eventsByStep` windows under-size goto duration**, so
+   detector findings for step N often land in step N+1 or N+2's
+   bucket. The script switched from stepLabel-based matching to
+   URL-based matching using each event's `.url` field, which is
+   set by the detector at capture time and is therefore precise.
+   (Note: this is a finding ABOUT the audit pipeline that should
+   eventually get fixed in main.ts so other consumers of
+   eventsByStep also get accurate per-step grouping.)
+
+4. **Default-text-sized skip link tripped tap.too-small everywhere.**
+   The fixture's `<a class="skip">Skip to main content</a>` rendered
+   at native text size (~80×16) — under the 24×24 strict floor on
+   every page. Inline-styled it to >= 44×44 so the noise is gone
+   from non-tap-test routes.
+
+The script PASSING means every T76 detector axis is alive AND
+no detector is blasting unexpected findings on the control route
+(beyond the predictable `css.no-stylesheets-declared`, since fixture
+serves CSS-less HTML by design — one signal per route).
 
 ---
 

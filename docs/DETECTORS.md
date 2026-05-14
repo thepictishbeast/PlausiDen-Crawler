@@ -340,7 +340,28 @@ isolation, not the *audit pipeline* through a real page.evaluate.
 The fixture closes this gap — a single audit run against the
 fixture server is a comprehensive liveness check.
 
-To run:
+### Automated check: `scripts/check-t76-detectors.sh`
+
+```sh
+scripts/check-t76-detectors.sh           # PASS or FAIL exit code
+scripts/check-t76-detectors.sh --keep    # keep run dir for inspection
+```
+
+The script:
+
+1. Starts the fixture server on port 8771 (kills stale instances first).
+2. Runs the audit against `journeys/t76-detector-fixtures.json`.
+3. Parses `runs/.../report.json` and matches each event to its
+   page by URL (NOT by stepLabel — `report.eventsByStep` time-window
+   slicing under-sizes goto+settle and findings spill into the wrong
+   step's bucket).
+4. For each label: asserts every expected finding kind in
+   `expectedFindingsByLabel` was observed for that step's URL.
+5. Cleans up the fixture server and run dir on exit (unless `--keep`).
+6. Exits 0 on PASS, 1 on missing expected findings, 2 on infra
+   failure (jq missing, server didn't start, etc.).
+
+Manual run (without the script wrapper):
 
 ```sh
 # Terminal 1: start the fixture server
@@ -350,9 +371,8 @@ python3 fixtures/t76-detectors/serve.py --port 8771
 npm run audit -- --journey journeys/t76-detector-fixtures.json
 ```
 
-The `expectedFindingsByLabel` map in the journey file documents
-which finding kinds each route should produce; a follow-up CI
-script can assert observed-vs-expected per label.
+Wire to CI: any pre-merge check or scheduled job can shell out to
+`scripts/check-t76-detectors.sh` and gate on its exit code.
 
 ---
 
