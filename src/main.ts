@@ -63,6 +63,7 @@ import { buildCacheControlSnapshot, detectCacheControlIssues, type CacheControlF
 import { buildVarySnapshot, detectVaryIssues, type VaryFinding } from './varyHeader.js';
 import { detectInlineScriptIssues, INLINE_SCRIPT_DOM_CAPTURE_JS, type InlineScriptFinding, type InlineScriptSnapshot } from './inlineScript.js';
 import { buildReportingEndpointsSnapshot, detectReportingEndpointsIssues, type ReportingEndpointsFinding } from './reportingEndpoints.js';
+import { calculateSupersocietyScore, renderSupersocietyScore } from './supersocietyScore.js';
 
 interface Budget {
   newConsoleErrors: number;
@@ -2467,6 +2468,16 @@ async function main(args: string[]): Promise<number> {
   // Write a terminal-friendly summary too so CI output is useful at a glance.
   writeFileSync(join(outDir, 'summary.txt'), renderSummary(agg));
 
+  // T76 cycle 32: Supersociety Score — composite 0-100 grade
+  // across 11 categories, dumped both as JSON for machine
+  // consumers and rendered into the console summary for the
+  // operator's quick scan.
+  const supersocietyScore = calculateSupersocietyScore(report.events);
+  writeFileSync(
+    join(outDir, 'supersociety-score.json'),
+    JSON.stringify(supersocietyScore, null, 2),
+  );
+
   // Per-screenshot WCAG findings (axe-core), separate from discover sweep
   // findings. Both files share the same `renderAxeFindings` shape so a
   // human can read either without learning a second format.
@@ -2574,6 +2585,7 @@ async function main(args: string[]): Promise<number> {
   console.log(`  web vitals:        ${report.counts.webVitalsFindings} (strict ${report.counts.webVitalsFindingsStrict})`);
   console.log(`  csp violations:    ${report.counts.cspViolations}`);
   console.log(`  steps ok/failed:   ${report.counts.stepsOk}/${report.counts.stepsFailed}`);
+  console.log(renderSupersocietyScore(supersocietyScore));
   if (prior) {
     console.log(`  diff vs prior run (${prior.journey}):`);
     console.log(`    NEW console errors:   ${diff.newConsoleErrors.length}`);

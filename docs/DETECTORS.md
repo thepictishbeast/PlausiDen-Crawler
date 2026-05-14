@@ -1,5 +1,15 @@
 # PlausiDen-Crawler — Detector Reference
 
+## Supersociety Score (cycle 32)
+
+Every audit emits a composite **Supersociety Score** (0-100 + letter grade A-F) at `runs/<journey>-<timestamp>/supersociety-score.json` plus a rendered table in the console summary. The score buckets every captured finding into one of 11 categories, deducts points (strict −25, warn −5, clamped at 0), and weights security categories 2× vs UX. See `src/supersocietyScore.ts` for the bucketing map and weights.
+
+Categories (with weight): `transportSecurity` (2.0) · `originIsolation` (2.0) · `contentSecurity` (2.0) · `cookieHygiene` (2.0) · `cacheCorrectness` (1.5) · `infoDisclosure` (1.0) · `observability` (1.0) · `reliability` (1.5) · `accessibility` (1.5) · `uxHygiene` (1.0).
+
+Letter grade thresholds: A ≥ 90, B ≥ 80, C ≥ 70, D ≥ 60, F < 60.
+
+
+
 Authoritative catalog of every detector axis the crawler emits, with
 the WCAG / standards reference each maps to and the canonical
 finding kinds + severities. Maintained alongside the code: a new

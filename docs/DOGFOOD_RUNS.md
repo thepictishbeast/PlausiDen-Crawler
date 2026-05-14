@@ -1033,6 +1033,107 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (thirty-second entry) — Supersociety Score meta-aggregator pivot
+
+### What's new since last cycle (thirty-first entry)
+- 1 new MODULE (not a detector axis): **`supersocietyScore`** —
+  meta-aggregator that turns the 43 existing detection axes
+  into a single composite 0-100 score with per-category
+  breakdown + letter grade A-F.
+- Active named-detector axis count UNCHANGED at 43 (46 with
+  legacy event kinds). This cycle is a UX pivot, not a new
+  detector.
+- `supersociety-score.json` written alongside `report.json` in
+  every audit run dir. Operators can `jq '.composite'` for a
+  single number to track over time.
+- Console summary now prints a Supersociety Score table at the
+  bottom of the per-axis breakdown.
+- 29 unit tests in `supersocietyScore.test.ts`, all passing.
+
+### Why the pivot
+Cycle-31 self-noted that marginal value per new response-
+header detector was decreasing. The crawler now has 43
+detection axes — a comprehensive surface, but operators have
+to mentally aggregate findings across 14 security categories,
+12 accessibility categories, etc. to know whether their site
+is "good enough". The crawler is too detailed to act on
+without pre-processing.
+
+The supersocietyScore aggregator solves this. One number with
+a per-category drill-down. Every existing detector
+automatically rolls into the appropriate category, so this
+work compounds — every NEW detector going forward
+automatically improves the score's diagnostic value.
+
+### Design choices
+
+**Deduction policy.** Strict findings cost 25 points each,
+warns cost 5. A single category with one strict + zero warns
+= score 75, grade C. Aggressive — supersociety means "no
+excuses". An operator complaining about a low score should
+be told: fix the findings.
+
+**Categorisation.** 11 categories, each finding kind mapped
+1:1. Some kinds touch multiple concerns (e.g. cache-control
++ cookies overlap with cookieHygiene); we attribute to the
+PRIMARY concern only — the secondary detector covers the
+overlap from a different angle.
+
+**Weighting.** Composite = weighted average. Security
+categories carry 2× weight vs UX. A site with great UX but
+no CSP shouldn't grade out the same as a site with stringent
+CSP and one missing alt text.
+
+**Unknown kinds.** Future detectors not yet bucketed fall
+into a logged-but-not-scored `unbucketed` array. Keeps the
+score stable when new axes ship before the categoriser is
+updated.
+
+### Sample output (SkillShots)
+```
+=== Supersociety Score ===
+  Grade A (97/100). 0 strict + 7 warn finding(s).
+                    Near-supersociety; close out the warns.
+
+  category              score  grade  strict  warn  weight
+  --------------------  -----  -----  ------  ----  ------
+  transportSecurity       100  A           0     0     2.0
+  originIsolation         100  A           0     0     2.0
+  contentSecurity         100  A           0     0     2.0
+  cookieHygiene           100  A           0     0     2.0
+  cacheCorrectness        100  A           0     0     1.5
+  infoDisclosure          100  A           0     0     1.0
+  observability           100  A           0     0     1.0
+  reliability             100  A           0     0     1.5
+  accessibility            65  D           0     7     1.5
+  uxHygiene               100  A           0     0     1.0
+```
+
+The accessibility category at D=65 is the 7 baseline-frozen
+tap-targets findings. Opportunity for the operator to either
+fix the targets (better) or whitelist them (acceptable).
+
+### Verified
+- HTTP gate: 47/47 routes pass.
+- HTTPS gate: 60/60 routes pass.
+- SkillShots audit: 46 axes silent, Grade A 97/100 score.
+- 29 supersocietyScore unit tests pass.
+
+### Action items
+- [ ] Add the score to summary.txt + a top-of-report
+      one-liner (currently only in console + JSON).
+- [ ] Whitelist mechanism for baseline-frozen findings
+      (e.g. SkillShots' tap-targets) so the score doesn't
+      get dragged down by intentional accept-the-risk
+      decisions. Probably a `whitelist.txt` per journey.
+- [ ] Score history / trend file — track composite + per-
+      category scores across runs to detect regressions.
+- [ ] Email / Slack notifier when grade drops by ≥1 letter.
+- [ ] HTML report renderer (the existing JSON dump is for
+      machines; humans want a charted view).
+
+---
+
 ## 2026-05-14 (thirty-first entry) — Reporting API endpoint configuration audit
 
 ### What's new since last cycle (thirtieth entry)
