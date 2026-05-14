@@ -1033,6 +1033,79 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (forty-fourth entry) — Loom edit-serve preview-toolbar buttons ≥24×24
+
+### What's new since last cycle (forty-third entry)
+- **Cross-repo fix in PlausiDen-Loom** (commit ef478e1):
+  preview-toolbar buttons + "open ↗" link now meet
+  WCAG 2.2 SC 2.5.8 AA (≥24×24).
+- Seventh consecutive cross-repo dogfood win.
+- Active named-detector axis count UNCHANGED at 43.
+
+### Score arc on Loom edit-serve
+  Cycle 41 pre:  B 82/100, 19 strict.
+  Cycle 41 post: B 83/100, 11 strict (viewport + lang).
+  Cycle 42 post: B 83/100, 7 strict (landmarks).
+  Cycle 43 post: B 83/100, 5 strict (contrast).
+  Cycle 44 post: B 83/100, **4 strict** (-1 tap-target cluster).
+
+### What was fixed
+The /about per-page edit form has a compact preview toolbar
+with 4 small interactive targets — 3 theme-toggle buttons
+(Light/Dark/Auto) + 1 "open ↗" link — at 22px tall.
+
+  - Theme buttons: padding `.15rem .4rem` →
+    `min-width:32px;min-height:24px;padding:.25rem .6rem`.
+  - "open ↗" link: no padding → `min-height:24px;
+    display:inline-flex;align-items:center;padding:.25rem .5rem`.
+
+For a compact toolbar, 44px AAA would break the visual
+design; 24×24 AA fits the layout gracefully. The cycle-39
+nav-link fix (which had room) used 44×44 AAA.
+
+### What's still strict (2 remaining)
+- 1× contrast.body-text-below-aa on /about (residual after
+  cycle 43; different colour pair than `#888` / `#a87000`).
+- 1× form.no-label on /about (14 inputs in fieldsets — the
+  fieldset legend exists but the detector requires per-input
+  labels).
+
+### Cumulative cross-repo dogfood scoreboard (cycles 38-44)
+  C38 Loom:  state-matrix missing CSS        C 75 → A 99.
+  C39 Loom:  nav-link 44px (AAA)             A 95 → A 100.
+  C40 Forge: CMS title disambiguation        A 100 → A 100 (0).
+  C41 Loom:  viewport + lang                 B 82 → B 83 (-8).
+  C42 Loom:  <main> landmark                 B 83 → B 83 (-4).
+  C43 Loom:  contrast colours                B 83 → B 83 (-2).
+  C44 Loom:  preview-toolbar 24×24           B 83 → B 83 (-1).
+
+Total: 7 cross-repo commits across PlausiDen-Loom (×6) +
+PlausiDen-Forge (×1). 15 strict findings cleared on the
+admin UI across cycles 41-44.
+
+### Verified
+- 297/297 loom unit tests pass.
+- HTTP gate: 47/47.
+- HTTPS gate: 60/60.
+
+### Action items
+- [ ] Cycle 45: form-label cluster on /about — 14 inputs need
+      per-input `<label>` or `aria-label`. Larger refactor.
+      But clearing this AND the residual contrast WILL break
+      the accessibility F-clamp (strict 0 + warns 11 still
+      F at 45, but THAT's the next problem to solve).
+- [ ] Cycle 46+: investigate the 11 accessibility warns to
+      reduce them below 8 (would put accessibility at D).
+- [ ] Consider scoring-policy revision: cap warn-deduction
+      per category at -40 so categories with 8+ warns don't
+      stay in F.
+- [ ] Pivot consideration: 7 cycles of dogfood is a lot. The
+      crawler has had ZERO new detector axes in 13 cycles.
+      Re-balance with at least 1 detector cycle soon
+      (CSP-report-only / Trusted-Types / Document-Policy).
+
+---
+
 ## 2026-05-14 (forty-third entry) — Loom edit-serve contrast colours WCAG AA
 
 ### What's new since last cycle (forty-second entry)
