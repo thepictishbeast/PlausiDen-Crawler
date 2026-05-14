@@ -1033,6 +1033,106 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (fifty-eighth entry) — --no-baseline uncovers SkillShots BEM-class bug
+
+### What's new since last cycle (fifty-seventh entry)
+- **First production use of `--no-baseline`** (cycle 57 flag):
+  ran against PlausiDen-Forge's SkillShots PoC output. Surfaced
+  **7 baseline-frozen tap-target warns** across the user-facing
+  header navigation. Normal audits had been masking these for
+  weeks because the baseline already included them.
+- **Cross-repo fix in PlausiDen-Loom** (commit 24c2dea):
+  BEM-class fix on `.loom-page-nav__link`. The skin's tap-
+  target floor rule selector was `.loom-page-nav-link`
+  (kebab-case), but the rendered HTML emits the BEM form with
+  `__`. The CSS rule silently never matched, so every
+  SkillShots nav link rendered at 24×24 px instead of 44×44.
+- **Companion sync in PlausiDen-Forge** (commit 615e0fd): the
+  bundled `static/loom-skin.css` synced from canonical Loom.
+- **Score: SkillShots PoC composite 100/100, zero findings**
+  across 30 audited pages × 48 detection axes, with AND
+  without baseline filtering.
+- 21st cross-repo Loom commit + 2nd Forge commit since cycle 38.
+
+### Why this cycle matters
+Three things landed in one cycle:
+
+1. **The dogfood loop's first cross-surface bug.** Until now,
+   the loop was Loom-only. Cycle 58 proved the same pattern
+   works on PlausiDen-Forge's user-facing surface.
+
+2. **`--no-baseline`'s first production win.** Cycle 57 added
+   the flag; cycle 58 used it and immediately surfaced a real
+   bug that had been invisible to baseline-filtered audits.
+   The flag pays for itself on first use.
+
+3. **A cross-repo CSS class-naming bug.** The bug only manifested
+   because the source CSS was in PlausiDen-Loom but the
+   rendered HTML emitter was ALSO in PlausiDen-Loom — across
+   two crates within the same repo. The two sides drifted apart
+   silently. The fix keeps both class forms as selectors so
+   future renames don't silently break tap-target compliance.
+
+### The bug in detail
+HTML (loom-cms-render/src/lib.rs:2671):
+```html
+<a class="loom-page-nav__link" href="..." data-backend="...">Battle Feed</a>
+```
+
+CSS (loom-tokens/src/skin.css:433, pre-fix):
+```css
+.loom-page-brand,
+.loom-page-nav-link {           /* ← kebab-case, never matched */
+  min-height: var(--loom-tap-min);  /* 44px */
+}
+```
+
+Rendered: 24×24 px nav links. AAA fail.
+
+The `--no-baseline` audit surfaced this:
+```
+tapTargets  30   7   7   warn (7 new — within budget)
+```
+
+Without `--no-baseline`, normal audits had been showing
+`tapTargets  30   7   0   pass (7 baseline frozen)` — invisible
+to the regression budget.
+
+### Fix
+```css
+.loom-page-brand,
+.loom-page-nav__link,    /* ← match rendered BEM class */
+.loom-page-nav-link {    /* ← legacy kebab kept for migration */
+  min-height: var(--loom-tap-min);
+}
+```
+
+### Score arc (cycles 41-58)
+  C56:  Loom A 100, 0 strict, 1 acknowledged warn.
+  C57:  Loom A 100, 0 strict, 1 acknowledged warn (TT axis).
+  C58:  Loom A 100 (unchanged); **SkillShots A 100, ZERO
+        findings under --no-baseline** (was 7 hidden warns).
+
+### What's left
+- 1× cross-page-meta-description warn on Loom (acknowledged
+  by design — admin pages share one description string).
+- Both surfaces otherwise clean against the full 48-axis sweep.
+
+### Cumulative cross-repo dogfood scoreboard (cycles 38-58)
+  21 Loom commits + 2 Forge + 4 crawler detectors/enhancements.
+
+### Action items
+- [ ] Cycle 59: Document-Policy detector (Tier 3 modern
+      security — 2024-shipped browser header).
+- [ ] Cycle 60: CSP `report-uri` collector endpoint in
+      loom-cli so violations are observable in production.
+- [ ] Cycle 61: supersociety badge SVG auto-published on every
+      push, embeddable in README/PRs.
+- [ ] Cycle 62: open dogfood loop on other PlausiDen surfaces
+      (Forge admin, Atrium, Sentinel-GUI) — same pattern.
+
+---
+
 ## 2026-05-14 (fifty-seventh entry) — Trusted Types runtime monitor detector
 
 ### What's new since last cycle (fifty-sixth entry)
