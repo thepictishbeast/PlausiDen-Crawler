@@ -149,6 +149,9 @@ DEFAULT_HEADERS = {
     # plausible-looking placeholder; the detector doesn't try
     # to validate the endpoint reachability.
     'Reporting-Endpoints': 'csp-default="https://reports.example.com/csp"',
+    # cycle 45: Origin-Agent-Cluster — process-level isolation
+    # primitive. '?1' is the supersociety baseline.
+    'Origin-Agent-Cluster': '?1',
     'Content-Type': 'text/html; charset=utf-8',
     # Cache-Control: 'no-store' alone (without 'no-cache' or
     # 'max-age=0') is the canonical "do not cache" directive
@@ -307,6 +310,36 @@ def csp_clean():
         page('<h1>CSP hardened — clean baseline.</h1>'),
         {'Content-Security-Policy': _CSP_HARDENED},
     )
+
+
+# ----- Origin-Agent-Cluster -----
+@route('/no-origin-agent-cluster/')
+def no_origin_agent_cluster():
+    return (
+        page('<h1>No Origin-Agent-Cluster header.</h1>'),
+        {'Origin-Agent-Cluster': None},
+    )
+
+
+@route('/origin-agent-cluster-disabled/')
+def origin_agent_cluster_disabled():
+    return (
+        page('<h1>Origin-Agent-Cluster explicitly disabled.</h1>'),
+        {'Origin-Agent-Cluster': '?0'},
+    )
+
+
+@route('/origin-agent-cluster-invalid/')
+def origin_agent_cluster_invalid():
+    return (
+        page('<h1>Origin-Agent-Cluster invalid value.</h1>'),
+        {'Origin-Agent-Cluster': 'yes'},
+    )
+
+
+@route('/origin-agent-cluster-clean/')
+def origin_agent_cluster_clean():
+    return page('<h1>Origin-Agent-Cluster ?1 — clean.</h1>'), {}
 
 
 # ----- Reporting API endpoints -----

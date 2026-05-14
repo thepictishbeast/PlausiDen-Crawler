@@ -310,6 +310,27 @@ Multi-token policies are honored per the W3C spec — the LAST recognised token 
 
 **Third response-header detector.** Reads from the same `topLevelResponseHeaders` Map as hsts + xFrameOptions. With three concrete examples now in hand, the ~70% structural overlap is a candidate for a generic `headerDetector(headerName, parser, classifier)` helper — extract on the next addition.
 
+### `originAgentCluster` — Origin-Agent-Cluster header *(T76 cycle 45 — added 2026-05-14)*
+Source: `src/originAgentCluster.ts`
+
+| Finding | Sev | Catches |
+|---|---|---|
+| `origin-agent-cluster.missing` | warn | No `Origin-Agent-Cluster` header. Browser default: shared agent cluster with same-site origins (e.g. `accounts.x.com` + `files.x.com` in the same process). |
+| `origin-agent-cluster.disabled` | warn | Header set to `?0` — explicit opt-out of process-level isolation. Likely a legacy `document.domain` compatibility need; surfaced for review. |
+| `origin-agent-cluster.invalid` | warn | Value not the RFC 8941 structured-fields boolean form (`?1` or `?0`). Browsers silently reject. |
+
+Out of scope: localhost (consistent with response-header detector family).
+
+Origin-Agent-Cluster (HTML Living Standard, W3C 2021) is the SAME-SITE counterpart to COOP+COEP cross-origin isolation. Together they cover the full process-isolation surface:
+- **COOP** — `window.opener` relationship across origins.
+- **COEP** — cross-origin sub-resource fetches.
+- **CORP** — per-resource cross-origin embed control.
+- **OAC** — this origin gets its OWN process even from other same-site origins.
+
+Side effect: disables `document.domain` mutation (legacy same-origin-policy bypass).
+
+**Thirteenth response-header detector.** Uses the cycle-24 `responseHeaderDetector` helper. Single-value, three findings.
+
 ### `reportingEndpoints` — Reporting API endpoint configuration *(T76 cycle 31 — added 2026-05-14)*
 Source: `src/reportingEndpoints.ts`
 

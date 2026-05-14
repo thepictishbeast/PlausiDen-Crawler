@@ -54,6 +54,7 @@ export interface CapturedEvent {
     | 'vary'
     | 'inline-script'
     | 'reporting-endpoints'
+    | 'origin-agent-cluster'
     | 'link-underline'
     | 'cross-page-title'
     | 'cross-page-meta-description';
@@ -145,6 +146,8 @@ export interface Report {
     inlineScriptFindingsStrict: number;
     reportingEndpointsFindings: number;
     reportingEndpointsFindingsStrict: number;
+    originAgentClusterFindings: number;
+    originAgentClusterFindingsStrict: number;
     linkUnderlineFindings: number;
     linkUnderlineFindingsStrict: number;
     crossPageTitleFindings: number;
@@ -427,6 +430,12 @@ export interface Diff {
    */
   newReportingEndpointsFindings: CapturedEvent[];
   /**
+   * origin-agent-cluster findings new in this run vs prior.
+   * All warn — Origin-Agent-Cluster process-isolation
+   * primitive. Missing / disabled / invalid. T76 cycle 45.
+   */
+  newOriginAgentClusterFindings: CapturedEvent[];
+  /**
    * link-underline findings new in this run vs prior. Warn-only:
    * inline link inside running text distinguished only by colour.
    * WCAG 1.4.1 Level A. T76.
@@ -498,6 +507,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     newVaryFindings: [],
     newInlineScriptFindings: [],
     newReportingEndpointsFindings: [],
+    newOriginAgentClusterFindings: [],
     newLinkUnderlineFindings: [],
     newCrossPageTitleFindings: [],
     newCrossPageMetaDescriptionFindings: [],
@@ -547,6 +557,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     out.newVaryFindings = current.events.filter(e => e.kind === 'vary');
     out.newInlineScriptFindings = current.events.filter(e => e.kind === 'inline-script');
     out.newReportingEndpointsFindings = current.events.filter(e => e.kind === 'reporting-endpoints');
+    out.newOriginAgentClusterFindings = current.events.filter(e => e.kind === 'origin-agent-cluster');
     out.newLinkUnderlineFindings = current.events.filter(e => e.kind === 'link-underline');
     out.newCrossPageTitleFindings = current.events.filter(e => e.kind === 'cross-page-title');
     out.newCrossPageMetaDescriptionFindings = current.events.filter(e => e.kind === 'cross-page-meta-description');
@@ -597,6 +608,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     else if (e.kind === 'vary') out.newVaryFindings.push(e);
     else if (e.kind === 'inline-script') out.newInlineScriptFindings.push(e);
     else if (e.kind === 'reporting-endpoints') out.newReportingEndpointsFindings.push(e);
+    else if (e.kind === 'origin-agent-cluster') out.newOriginAgentClusterFindings.push(e);
     else if (e.kind === 'link-underline') out.newLinkUnderlineFindings.push(e);
     else if (e.kind === 'cross-page-title') out.newCrossPageTitleFindings.push(e);
     else if (e.kind === 'cross-page-meta-description') out.newCrossPageMetaDescriptionFindings.push(e);
@@ -962,6 +974,17 @@ export function renderPositiveSignal(report: Report, diff: Diff): string {
       total: report.events.filter((e) => e.kind === 'reporting-endpoints').length,
       news: diff.newReportingEndpointsFindings.length,
       strictNews: strict(diff.newReportingEndpointsFindings),
+    },
+    {
+      // T76 cycle 45 (Crawler): origin-agent-cluster —
+      // Origin-Agent-Cluster header. Process-level isolation
+      // primitive (HTML Living Standard). Warn on missing /
+      // disabled / invalid. Same-site Spectre mitigation
+      // distinct from COOP/COEP.
+      name: 'originAgentCluster',
+      total: report.events.filter((e) => e.kind === 'origin-agent-cluster').length,
+      news: diff.newOriginAgentClusterFindings.length,
+      strictNews: strict(diff.newOriginAgentClusterFindings),
     },
     {
       // T76 (Crawler): link-underline — WCAG 1.4.1 (Use of Color, A).

@@ -1033,6 +1033,93 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (forty-fifth entry) — originAgentCluster detector, axis 44
+
+### What's new since last cycle (forty-fourth entry)
+- 1 new detector axis: **`originAgentCluster`** — modern
+  HTML-Living-Standard process-isolation primitive.
+  Active named-detector axis count: 43 → **44**.
+- 4 new HTTPS fixture routes (3 finding-specific + 1 clean
+  control). HTTPS gate now validates **64/64** routes (was 60/60).
+- HTTPS fixture `DEFAULT_HEADERS` now sets
+  `Origin-Agent-Cluster: ?1` so unrelated routes don't leak
+  `origin-agent-cluster.missing`.
+- 10 unit tests in `originAgentCluster.test.ts`, all passing.
+- Thirteenth response-header detector wired through the
+  cycle-24 helper.
+
+### Why originAgentCluster now
+Cycle 44's closing note flagged 13 cycles without a new
+detector axis. Pivoted back to detector work. Origin-Agent-
+Cluster picked for:
+
+  1. Genuinely tomorrow-tech (HTML Living Standard 2021,
+     Chrome 88+, Firefox shipping). Almost no sites set it.
+  2. Single-value header → slots into the helper cleanly.
+  3. Complements COOP/COEP/CORP cross-origin isolation
+     with SAME-SITE process isolation:
+       - COOP: window.opener relationship across origins.
+       - COEP: cross-origin sub-resource fetches.
+       - CORP: per-resource cross-origin embed control.
+       - OAC:  this origin gets its OWN process even from
+               other same-site origins (e.g. accounts.x.com
+               + files.x.com no longer share a process).
+  4. Side effect: disables document.domain mutation (legacy
+     same-origin-policy bypass).
+
+### Detector design
+Three findings, all warn:
+
+  - origin-agent-cluster.missing      Browser default = shared
+    agent cluster with same-site origins.
+  - origin-agent-cluster.disabled     Explicit `?0`. Operator
+    chose; surface for review.
+  - origin-agent-cluster.invalid      Value not `?1` or `?0`.
+    Browsers silently reject (header has no effect).
+
+The structured-fields-boolean form (`?1` / `?0`, per RFC 8941)
+is the only valid syntax. Test 10 documents that trailing
+semicolons (some servers add them) currently classify as
+invalid — could revisit if real-world traffic shows the need.
+
+### DEFAULT_HEADERS expansion
+With Origin-Agent-Cluster added, the HTTPS fixture's
+DEFAULT_HEADERS now demonstrates **all 13 recommended modern
+security headers** as a reference baseline:
+
+  HSTS · X-Frame-Options · Referrer-Policy ·
+  Permissions-Policy · Content-Security-Policy ·
+  Cross-Origin-Opener-Policy · Cross-Origin-Embedder-Policy ·
+  Reporting-Endpoints · Origin-Agent-Cluster ·
+  Cache-Control · (+ Content-Type)
+
+Useful as an operator reference for what a fully-hardened
+response looks like.
+
+### Verified
+- HTTP gate: 47/47 routes pass.
+- HTTPS gate: 64/64 routes pass (4 new origin-agent-cluster routes).
+- SkillShots audit: all 47 axes silent (was 46; the new
+  origin-agent-cluster axis is silent because SkillShots is
+  on localhost so the exemption short-circuits — Python
+  SimpleHTTPServer doesn't set the header so would fire on a
+  non-localhost site).
+
+### Action items
+- [ ] CSP-Report-Only header parser (still queued cycles 26+).
+- [ ] Trusted Types runtime monitoring detector (more complex
+      — needs page.addInitScript + window.* buffer).
+- [ ] Document-Policy header detector (newer than Permissions-
+      Policy, stricter scope).
+- [ ] Cycle 46: resume Loom edit-serve dogfood (form-label
+      cluster + residual contrast remain).
+- [ ] Pivot consideration for cycle 46+: alternate dogfood
+      cycles with detector cycles. 7 dogfood / 0 detector
+      in cycles 38-44 was too unbalanced; this cycle reset
+      that. Target maybe 3 dogfood : 1 detector cadence.
+
+---
+
 ## 2026-05-14 (forty-fourth entry) — Loom edit-serve preview-toolbar buttons ≥24×24
 
 ### What's new since last cycle (forty-third entry)

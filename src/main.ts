@@ -63,6 +63,7 @@ import { buildCacheControlSnapshot, detectCacheControlIssues, type CacheControlF
 import { buildVarySnapshot, detectVaryIssues, type VaryFinding } from './varyHeader.js';
 import { detectInlineScriptIssues, INLINE_SCRIPT_DOM_CAPTURE_JS, type InlineScriptFinding, type InlineScriptSnapshot } from './inlineScript.js';
 import { buildReportingEndpointsSnapshot, detectReportingEndpointsIssues, type ReportingEndpointsFinding } from './reportingEndpoints.js';
+import { buildOriginAgentClusterSnapshot, detectOriginAgentClusterIssues, type OriginAgentClusterFinding } from './originAgentCluster.js';
 import { calculateSupersocietyScore, renderSupersocietyScore } from './supersocietyScore.js';
 import {
   buildScoreHistoryEntry,
@@ -1233,6 +1234,23 @@ async function main(args: string[]): Promise<number> {
   };
 
   /**
+   * T76 cycle 45: Origin-Agent-Cluster header audit. Modern
+   * HTML-Living-Standard primitive that opts the origin into
+   * its own browser process — Spectre / same-site-attack
+   * mitigation distinct from COOP/COEP cross-origin isolation.
+   */
+  const originAgentClusterFindingsByStep: Array<PerStepRecord<OriginAgentClusterFinding>> = [];
+  const checkOriginAgentCluster = makeResponseHeaderCheck({
+    detectorName: 'originAgentCluster',
+    eventKind: 'origin-agent-cluster',
+    page, topLevelResponseHeaders, disableLocalhostExemption,
+    findingsByStep: originAgentClusterFindingsByStep,
+    log,
+    buildSnapshot: buildOriginAgentClusterSnapshot,
+    detectIssues: detectOriginAgentClusterIssues,
+  });
+
+  /**
    * T76 cycle 31: Reporting API endpoint configuration audit.
    * Without endpoints configured, ALL browser-emitted security
    * reports (CSP violations, COEP violations, crash reports,
@@ -2091,6 +2109,7 @@ async function main(args: string[]): Promise<number> {
       await checkCacheControl(step.label || `goto-${i}`);
       await checkVary(step.label || `goto-${i}`);
       await checkReportingEndpoints(step.label || `goto-${i}`);
+      await checkOriginAgentCluster(step.label || `goto-${i}`);
       await checkWebVitals(step.label || `goto-${i}`);
     }
     // Memory snapshot at end of each step so the report shows heap growth
@@ -2251,6 +2270,8 @@ async function main(args: string[]): Promise<number> {
       inlineScriptFindingsStrict: events.filter(e => e.kind === 'inline-script' && e.severity === 'strict').length,
       reportingEndpointsFindings: events.filter(e => e.kind === 'reporting-endpoints').length,
       reportingEndpointsFindingsStrict: events.filter(e => e.kind === 'reporting-endpoints' && e.severity === 'strict').length,
+      originAgentClusterFindings: events.filter(e => e.kind === 'origin-agent-cluster').length,
+      originAgentClusterFindingsStrict: events.filter(e => e.kind === 'origin-agent-cluster' && e.severity === 'strict').length,
       linkUnderlineFindings: events.filter(e => e.kind === 'link-underline').length,
       linkUnderlineFindingsStrict: events.filter(e => e.kind === 'link-underline' && e.severity === 'strict').length,
       crossPageTitleFindings: events.filter(e => e.kind === 'cross-page-title').length,
@@ -2460,6 +2481,12 @@ async function main(args: string[]): Promise<number> {
     writeFileSync(
       join(outDir, 'reporting-endpoints.json'),
       JSON.stringify(reportingEndpointsFindingsByStep, null, 2),
+    );
+  }
+  if (originAgentClusterFindingsByStep.length > 0) {
+    writeFileSync(
+      join(outDir, 'origin-agent-cluster.json'),
+      JSON.stringify(originAgentClusterFindingsByStep, null, 2),
     );
   }
   if (inlineScriptFindingsByStep.length > 0) {
@@ -2672,6 +2699,7 @@ async function main(args: string[]): Promise<number> {
   console.log(`  vary:              ${report.counts.varyFindings} (strict ${report.counts.varyFindingsStrict})`);
   console.log(`  inline-script:     ${report.counts.inlineScriptFindings} (strict ${report.counts.inlineScriptFindingsStrict})`);
   console.log(`  reporting:         ${report.counts.reportingEndpointsFindings} (strict ${report.counts.reportingEndpointsFindingsStrict})`);
+  console.log(`  origin-agent-cluster:${report.counts.originAgentClusterFindings} (strict ${report.counts.originAgentClusterFindingsStrict})`);
   console.log(`  link underline:    ${report.counts.linkUnderlineFindings} (strict ${report.counts.linkUnderlineFindingsStrict})`);
   console.log(`  cross-page title:  ${report.counts.crossPageTitleFindings} (strict ${report.counts.crossPageTitleFindingsStrict})`);
   console.log(`  cross-page meta:   ${report.counts.crossPageMetaDescriptionFindings} (strict ${report.counts.crossPageMetaDescriptionFindingsStrict})`);
@@ -2786,6 +2814,9 @@ async function main(args: string[]): Promise<number> {
     const newReStrict = diff.newReportingEndpointsFindings.filter(e => e.severity === 'strict').length;
     const newReWarn = diff.newReportingEndpointsFindings.length - newReStrict;
     console.log(`    NEW reporting:        ${diff.newReportingEndpointsFindings.length} (strict ${newReStrict}, warn ${newReWarn})`);
+    const newOacStrict = diff.newOriginAgentClusterFindings.filter(e => e.severity === 'strict').length;
+    const newOacWarn = diff.newOriginAgentClusterFindings.length - newOacStrict;
+    console.log(`    NEW origin-agent:     ${diff.newOriginAgentClusterFindings.length} (strict ${newOacStrict}, warn ${newOacWarn})`);
     const newLinkUnderlineStrict = diff.newLinkUnderlineFindings.filter(e => e.severity === 'strict').length;
     const newLinkUnderlineWarn = diff.newLinkUnderlineFindings.length - newLinkUnderlineStrict;
     console.log(`    NEW link underline:   ${diff.newLinkUnderlineFindings.length} (strict ${newLinkUnderlineStrict}, warn ${newLinkUnderlineWarn})`);

@@ -63,7 +63,11 @@
     { "kind": "goto", "url": "https://127.0.0.1:8773/reporting-report-to-only/", "label": "reporting-report-to-only" },
     { "kind": "goto", "url": "https://127.0.0.1:8773/reporting-invalid/", "label": "reporting-invalid" },
     { "kind": "goto", "url": "https://127.0.0.1:8773/reporting-csp-orphan/", "label": "reporting-csp-orphan" },
-    { "kind": "goto", "url": "https://127.0.0.1:8773/reporting-clean/", "label": "reporting-clean" }
+    { "kind": "goto", "url": "https://127.0.0.1:8773/reporting-clean/", "label": "reporting-clean" },
+    { "kind": "goto", "url": "https://127.0.0.1:8773/no-origin-agent-cluster/", "label": "no-origin-agent-cluster" },
+    { "kind": "goto", "url": "https://127.0.0.1:8773/origin-agent-cluster-disabled/", "label": "origin-agent-cluster-disabled" },
+    { "kind": "goto", "url": "https://127.0.0.1:8773/origin-agent-cluster-invalid/", "label": "origin-agent-cluster-invalid" },
+    { "kind": "goto", "url": "https://127.0.0.1:8773/origin-agent-cluster-clean/", "label": "origin-agent-cluster-clean" }
   ],
   "expectedFindingsByLabel": {
     "control": [],
@@ -125,6 +129,10 @@
     "reporting-report-to-only": ["reporting.report-to-only"],
     "reporting-invalid": ["reporting.invalid"],
     "reporting-csp-orphan": ["reporting.csp-report-uri-no-endpoints"],
-    "reporting-clean": []
+    "reporting-clean": [],
+    "no-origin-agent-cluster": ["origin-agent-cluster.missing"],
+    "origin-agent-cluster-disabled": ["origin-agent-cluster.disabled"],
+    "origin-agent-cluster-invalid": ["origin-agent-cluster.invalid"],
+    "origin-agent-cluster-clean": []
   }
 }
