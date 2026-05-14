@@ -39,7 +39,14 @@
     { "kind": "goto", "url": "http://127.0.0.1:8771/link-in-chrome/", "label": "link-in-chrome" },
     { "kind": "goto", "url": "http://127.0.0.1:8771/font-no-display/", "label": "font-no-display" },
     { "kind": "goto", "url": "http://127.0.0.1:8771/login-no-autocomplete/", "label": "login-no-autocomplete" },
-    { "kind": "goto", "url": "http://127.0.0.1:8771/login-with-autocomplete/", "label": "login-with-autocomplete" }
+    { "kind": "goto", "url": "http://127.0.0.1:8771/login-with-autocomplete/", "label": "login-with-autocomplete" },
+    { "kind": "goto", "url": "http://127.0.0.1:8771/sri-cross-origin-script-no-integrity/", "label": "sri-cross-origin-script-no-integrity" },
+    { "kind": "goto", "url": "http://127.0.0.1:8771/sri-cross-origin-style-no-integrity/", "label": "sri-cross-origin-style-no-integrity" },
+    { "kind": "goto", "url": "http://127.0.0.1:8771/sri-cross-origin-script-no-crossorigin/", "label": "sri-cross-origin-script-no-crossorigin" },
+    { "kind": "goto", "url": "http://127.0.0.1:8771/sri-cross-origin-script-weak-algo/", "label": "sri-cross-origin-script-weak-algo" },
+    { "kind": "goto", "url": "http://127.0.0.1:8771/sri-cross-origin-script-malformed/", "label": "sri-cross-origin-script-malformed" },
+    { "kind": "goto", "url": "http://127.0.0.1:8771/sri-clean/", "label": "sri-clean" },
+    { "kind": "goto", "url": "http://127.0.0.1:8771/sri-same-origin-no-integrity/", "label": "sri-same-origin-no-integrity" }
   ],
   "expectedFindingsByLabel": {
     "control": [],
@@ -77,6 +84,13 @@
     "link-in-chrome": [],
     "font-no-display": ["font-loading.no-display"],
     "login-no-autocomplete": ["autocomplete.missing-credentials"],
-    "login-with-autocomplete": []
+    "login-with-autocomplete": [],
+    "sri-cross-origin-script-no-integrity": ["sri.script-cross-origin-no-integrity"],
+    "sri-cross-origin-style-no-integrity": ["sri.style-cross-origin-no-integrity"],
+    "sri-cross-origin-script-no-crossorigin": ["sri.script-cross-origin-no-crossorigin"],
+    "sri-cross-origin-script-weak-algo": ["sri.script-weak-algorithm"],
+    "sri-cross-origin-script-malformed": ["sri.script-invalid-integrity-format"],
+    "sri-clean": [],
+    "sri-same-origin-no-integrity": []
   }
 }

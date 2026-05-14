@@ -1033,6 +1033,140 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (twenty-fifth entry) — Subresource Integrity supply-chain detector
+
+### What's new since last cycle (twenty-fourth entry)
+- 1 new detector axis: **`sri`** — Subresource Integrity per-
+  element DOM audit. Brings the active-axis count to **37**
+  (40 with the three legacy event kinds counted separately).
+  FIRST per-element security audit (existing per-element
+  detectors are accessibility / UX).
+- 7 new HTTP fixture routes for the five finding kinds plus
+  two control routes (clean SRI + same-origin no-SRI):
+  `/sri-cross-origin-script-no-integrity/`,
+  `/sri-cross-origin-style-no-integrity/`,
+  `/sri-cross-origin-script-no-crossorigin/`,
+  `/sri-cross-origin-script-weak-algo/`,
+  `/sri-cross-origin-script-malformed/`,
+  `/sri-clean/` (control), `/sri-same-origin-no-integrity/`
+  (control). HTTP gate now validates **43/43** routes (was
+  36/36).
+
+### Why SRI now
+The user's CLAUDE.md threat model lists "supply-chain
+compromise" as a state-actor adversarial primitive. SRI is
+the single highest-leverage front-end defence against
+supply-chain attacks AND one of the few security controls
+that doesn't require server cooperation — the page author can
+unilaterally pin the cross-origin asset's hash even when the
+CDN itself is uncooperative.
+
+Real-world incidents this detector would have caught:
+
+  - Microsoft Tay (2016) — bot account compromise via
+    cross-origin embed.
+  - MyEtherWallet (2018) — DNS hijack + injected wallet-
+    stealer JavaScript via Cloudflare CDN.
+  - British Airways (2018) — Magecart payment-skimmer via
+    compromised Modernizr CDN.
+  - event-stream NPM (2018) — supply-chain RCE in a
+    transitive dependency.
+  - SolarWinds (2020) — different layer (build pipeline) but
+    same threat model.
+
+### Detector design
+Five finding kinds, two severities:
+
+  - `sri.script-cross-origin-no-integrity` (strict) — script
+    loaded from a different origin without integrity. RCE
+    waiting to happen.
+  - `sri.style-cross-origin-no-integrity` (warn) — stylesheet
+    same. Lower severity (narrower attack surface) but still
+    a defence-in-depth gap.
+  - `sri.script-cross-origin-no-crossorigin` (warn) — has
+    integrity but no `crossorigin` attribute. Browsers
+    SILENTLY IGNORE the integrity check without the CORS
+    opt-in. Critical UX trap — looks safe in source review,
+    isn't.
+  - `sri.script-invalid-integrity-format` (warn) — typo
+    silently disables SRI.
+  - `sri.script-weak-algorithm` (warn) — sha1/md5; W3C spec
+    only recognises sha256/sha384/sha512.
+
+The "no-crossorigin" finding is the one most likely to surface
+on real-world sites — every CSP-aware developer remembers to
+add integrity but many forget the second attribute. The
+silent-ignore behaviour is exactly the kind of trap the
+crawler should catch.
+
+### Architectural shape (different from response-header family)
+SRI is the FIRST per-element security detector. The existing
+8 response-header detectors all share the same shape (read
+top-level navigation response headers, classify) and migrated
+to the `responseHeaderDetector` helper in cycle 24. SRI
+doesn't fit:
+
+  - Capture is via `page.evaluate(SRI_DOM_CAPTURE_JS)` — a
+    DOM walk for `<script src>` and `<link href>` elements.
+  - Classification operates over an array of per-element
+    snapshots, not a single header value.
+  - Findings aggregate across multiple elements (4 cross-
+    origin scripts → 1 finding with count=4).
+
+This shape matches the existing per-element accessibility /
+UX detectors (linkUnderline, runtimeFocus, runtimeContrast,
+runtimeImages, etc.). NO new helper extracted yet — the
+shapes there are also heterogeneous (each detector's per-
+element classifier is different). If a SECOND per-element
+security detector lands (e.g. inline-script analysis without
+nonces), the helper question re-opens.
+
+### Tests
+- 18 unit scenarios in `sri.test.ts`, all passing — empty,
+  same-origin-ignored, cross-origin-no-integrity (strict),
+  cross-origin-stylesheet-no-integrity (warn), non-stylesheet
+  link-rel ignored, fully-correct SRI clean, integrity-without-
+  crossorigin warn, weak algorithm sha1, malformed integrity,
+  multi-algo OK, aggregation count=4, examples-capped-at-5,
+  count-still-reflects-all, mixed-script-and-style, use-
+  credentials counts as crossorigin, empty-crossorigin-
+  attribute counts as anonymous.
+- Browser-side capture function exposed as `SRI_DOM_CAPTURE_JS`
+  string template so the unit tests can compile-check the
+  classifier independently and a future Rust mirror (T75)
+  can reuse the source via `js_brackets_balanced` parity.
+
+### Verified
+- HTTP gate: **43/43** routes pass (was 36/36; 7 new SRI routes).
+- HTTPS gate: 34/34 routes pass (no change; SRI is HTTP-fine).
+- SkillShots audit: 40 axes total, all silent vs prior. SRI
+  fires nothing because SkillShots uses no cross-origin
+  scripts or stylesheets — correct quiet-baseline confirmation
+  that the detector is wired and active without firing on a
+  clean site.
+
+### Action items
+- [ ] CORP detector — capture-layer expansion still needed.
+      Per-RESOURCE header (not per-page) so `topLevelResponse-
+      Headers` Map needs a sibling for sub-resource headers.
+      Bigger architecture lift than the eight existing
+      response-header detectors. Queued.
+- [ ] Server header leak detector — fits the existing
+      `responseHeaderDetector` helper cleanly. Quick win
+      cycle-26 candidate.
+- [ ] X-Powered-By leak detector — sister to Server header,
+      same pattern.
+- [ ] Cache-Control hygiene detector — single-value but the
+      classifier depends on response status + content-type.
+      Still single-value; helper applies.
+- [ ] Inline-script-without-nonce detector — would be the
+      SECOND per-element security audit, re-opening the
+      "extract a perElementDetector helper" question.
+- [ ] CSP `report-only` header parser — pairs naturally with
+      the existing CSP detector.
+
+---
+
 ## 2026-05-14 (twenty-fourth entry) — responseHeaderDetector helper extraction
 
 ### What's new since last cycle (twenty-third entry)

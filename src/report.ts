@@ -47,6 +47,7 @@ export interface CapturedEvent {
     | 'csp-policy'
     | 'coop'
     | 'coep'
+    | 'sri'
     | 'link-underline'
     | 'cross-page-title'
     | 'cross-page-meta-description';
@@ -124,6 +125,8 @@ export interface Report {
     coopFindingsStrict: number;
     coepFindings: number;
     coepFindingsStrict: number;
+    sriFindings: number;
+    sriFindingsStrict: number;
     linkUnderlineFindings: number;
     linkUnderlineFindingsStrict: number;
     crossPageTitleFindings: number;
@@ -354,6 +357,14 @@ export interface Diff {
    */
   newCoepFindings: CapturedEvent[];
   /**
+   * sri findings new in this run vs prior. Strict =
+   * cross-origin <script> without integrity (CDN compromise =
+   * RCE). Warn = cross-origin stylesheet without integrity /
+   * integrity without crossorigin (silently ignored) /
+   * malformed integrity / weak algorithm. T76.
+   */
+  newSriFindings: CapturedEvent[];
+  /**
    * link-underline findings new in this run vs prior. Warn-only:
    * inline link inside running text distinguished only by colour.
    * WCAG 1.4.1 Level A. T76.
@@ -418,6 +429,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     newCspFindings: [],
     newCoopFindings: [],
     newCoepFindings: [],
+    newSriFindings: [],
     newLinkUnderlineFindings: [],
     newCrossPageTitleFindings: [],
     newCrossPageMetaDescriptionFindings: [],
@@ -460,6 +472,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     out.newCspFindings = current.events.filter(e => e.kind === 'csp-policy');
     out.newCoopFindings = current.events.filter(e => e.kind === 'coop');
     out.newCoepFindings = current.events.filter(e => e.kind === 'coep');
+    out.newSriFindings = current.events.filter(e => e.kind === 'sri');
     out.newLinkUnderlineFindings = current.events.filter(e => e.kind === 'link-underline');
     out.newCrossPageTitleFindings = current.events.filter(e => e.kind === 'cross-page-title');
     out.newCrossPageMetaDescriptionFindings = current.events.filter(e => e.kind === 'cross-page-meta-description');
@@ -503,6 +516,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     else if (e.kind === 'csp-policy') out.newCspFindings.push(e);
     else if (e.kind === 'coop') out.newCoopFindings.push(e);
     else if (e.kind === 'coep') out.newCoepFindings.push(e);
+    else if (e.kind === 'sri') out.newSriFindings.push(e);
     else if (e.kind === 'link-underline') out.newLinkUnderlineFindings.push(e);
     else if (e.kind === 'cross-page-title') out.newCrossPageTitleFindings.push(e);
     else if (e.kind === 'cross-page-meta-description') out.newCrossPageMetaDescriptionFindings.push(e);
@@ -788,6 +802,18 @@ export function renderPositiveSignal(report: Report, diff: Diff): string {
       total: report.events.filter((e) => e.kind === 'coep').length,
       news: diff.newCoepFindings.length,
       strictNews: strict(diff.newCoepFindings),
+    },
+    {
+      // T76 (Crawler): sri — Subresource Integrity per-element
+      // DOM audit. Strict on cross-origin <script> without
+      // integrity (CDN compromise = RCE). Warn on cross-origin
+      // stylesheet without integrity / integrity without
+      // crossorigin (silently ignored) / malformed integrity /
+      // weak algorithm. Supply-chain attack mitigation.
+      name: 'sri',
+      total: report.events.filter((e) => e.kind === 'sri').length,
+      news: diff.newSriFindings.length,
+      strictNews: strict(diff.newSriFindings),
     },
     {
       // T76 (Crawler): link-underline — WCAG 1.4.1 (Use of Color, A).

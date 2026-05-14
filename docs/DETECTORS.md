@@ -225,6 +225,23 @@ Multi-token policies are honored per the W3C spec — the LAST recognised token 
 
 **Third response-header detector.** Reads from the same `topLevelResponseHeaders` Map as hsts + xFrameOptions. With three concrete examples now in hand, the ~70% structural overlap is a candidate for a generic `headerDetector(headerName, parser, classifier)` helper — extract on the next addition.
 
+### `sri` — Subresource Integrity per-element DOM audit *(T76 — added 2026-05-14)*
+Source: `src/sri.ts`
+
+| Finding | Sev | Catches |
+|---|---|---|
+| `sri.script-cross-origin-no-integrity` | strict | `<script src="https://other-origin/...">` without an `integrity` attribute. CDN compromise (DNS hijack, BGP rerouting, vendor breach, malicious insider) → arbitrary script execution with the page's origin authority — equivalent to RCE in the user's session. |
+| `sri.style-cross-origin-no-integrity` | warn | `<link rel="stylesheet" href="//other-origin/...">` without integrity. Stylesheet compromise enables visual injection (phishing overlays) and theoretical CSS-keylogger attacks via attribute selectors. |
+| `sri.script-cross-origin-no-crossorigin` | warn | Element has integrity but no `crossorigin` attribute. Browsers REFUSE to verify SRI on cross-origin resources without the CORS opt-in via `crossorigin="anonymous"` (or `"use-credentials"`). The integrity attribute is silently IGNORED — the page is no safer than if SRI was never set. |
+| `sri.script-invalid-integrity-format` | warn | The integrity attribute is set but doesn't parse as one or more `<algorithm>-<base64>` tokens. Browsers fall back to no-integrity-check semantics — a typo silently disables SRI. |
+| `sri.script-weak-algorithm` | warn | Integrity uses SHA-1 / MD5 (legacy, broken hash functions). The W3C spec only recognises sha256, sha384, sha512 — anything else is silently dropped. |
+
+**Real-world incidents this detector would have caught:** Microsoft Tay (2016), MyEtherWallet (2018) DNS hijack via Cloudflare, British Airways (2018) Magecart payment-skimmer via compromised Modernizr CDN, event-stream NPM (2018) supply-chain RCE.
+
+Out of scope (browser-platform-limited): `<img>`, `<audio>`, `<video>`, `<source>`, `<picture>`, `<iframe>` — browsers don't yet support SRI on these element types. Same-origin resources — threat model assumes the page-author controls their own origin's asset pipeline. Verifying the hash actually MATCHES the resource bytes — would double the audit's network footprint; the browser enforces verification at load time. `data:` and `blob:` URLs.
+
+**FIRST per-element security audit.** The existing per-element detectors (linkUnderline, runtimeFocus, runtimeContrast, etc.) are accessibility / UX. SRI's DOM walker pattern mirrors them but the threat model is supply-chain, not visual. The walker code is exposed as `SRI_DOM_CAPTURE_JS` for future Rust mirror parity (T75).
+
 ### `coop` — Cross-Origin-Opener-Policy response header *(T76 — added 2026-05-14)*
 Source: `src/coop.ts`
 

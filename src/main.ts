@@ -56,6 +56,7 @@ import { buildCspSnapshot, detectCspIssues, type CspFinding } from './contentSec
 import { buildCoopSnapshot, detectCoopIssues, type CoopFinding } from './coop.js';
 import { buildCoepSnapshot, detectCoepIssues, type CoepFinding } from './coep.js';
 import { makeResponseHeaderCheck, type PerStepRecord } from './responseHeaderDetector.js';
+import { detectSriIssues, SRI_DOM_CAPTURE_JS, type SriFinding, type SriSnapshot } from './sri.js';
 
 interface Budget {
   newConsoleErrors: number;
@@ -1017,6 +1018,36 @@ async function main(args: string[]): Promise<number> {
   };
 
   /**
+   * T76: Subresource Integrity (SRI) detector. SECURITY-flavoured;
+   * supply-chain attack mitigation. Per-element DOM walk via
+   * `page.evaluate` (different shape from response-header
+   * detectors — doesn't fit the response-header helper).
+   */
+  const sriFindingsByStep: Array<{ stepLabel: string; pageUrl: string; findings: SriFinding[] }> = [];
+  const checkSri = async (afterLabel: string) => {
+    try {
+      const snap = (await page.evaluate(SRI_DOM_CAPTURE_JS)) as SriSnapshot;
+      const findings = detectSriIssues(snap);
+      sriFindingsByStep.push({ stepLabel: afterLabel, pageUrl: snap.pageUrl, findings });
+      for (const f of findings) {
+        log({
+          kind: 'sri',
+          text: `[${f.kind}] ${f.detail}`,
+          url: snap.pageUrl,
+          severity: f.severity,
+          ruleId: f.kind,
+          impact: f.severity === 'strict' ? 'serious' : 'minor',
+        });
+      }
+    } catch (e) {
+      log({
+        kind: 'pageerror',
+        text: `[sri] detector threw on step ${afterLabel}: ${(e as Error).message}`,
+      });
+    }
+  };
+
+  /**
    * T76: link-underline detector. WCAG 1.4.1 (Use of Color, A).
    * Flags inline links inside running text that distinguish
    * themselves from surrounding text ONLY by colour — fails
@@ -1843,6 +1874,7 @@ async function main(args: string[]): Promise<number> {
       await checkCsp(step.label || `goto-${i}`);
       await checkCoop(step.label || `goto-${i}`);
       await checkCoep(step.label || `goto-${i}`);
+      await checkSri(step.label || `goto-${i}`);
       await checkWebVitals(step.label || `goto-${i}`);
     }
     // Memory snapshot at end of each step so the report shows heap growth
@@ -1989,6 +2021,8 @@ async function main(args: string[]): Promise<number> {
       coopFindingsStrict: events.filter(e => e.kind === 'coop' && e.severity === 'strict').length,
       coepFindings: events.filter(e => e.kind === 'coep').length,
       coepFindingsStrict: events.filter(e => e.kind === 'coep' && e.severity === 'strict').length,
+      sriFindings: events.filter(e => e.kind === 'sri').length,
+      sriFindingsStrict: events.filter(e => e.kind === 'sri' && e.severity === 'strict').length,
       linkUnderlineFindings: events.filter(e => e.kind === 'link-underline').length,
       linkUnderlineFindingsStrict: events.filter(e => e.kind === 'link-underline' && e.severity === 'strict').length,
       crossPageTitleFindings: events.filter(e => e.kind === 'cross-page-title').length,
@@ -2164,6 +2198,12 @@ async function main(args: string[]): Promise<number> {
       JSON.stringify(coepFindingsByStep, null, 2),
     );
   }
+  if (sriFindingsByStep.length > 0) {
+    writeFileSync(
+      join(outDir, 'sri.json'),
+      JSON.stringify(sriFindingsByStep, null, 2),
+    );
+  }
   if (linkUnderlineFindingsByStep.length > 0) {
     writeFileSync(
       join(outDir, 'link-underline.json'),
@@ -2268,6 +2308,7 @@ async function main(args: string[]): Promise<number> {
   console.log(`  csp policy:        ${report.counts.cspFindings} (strict ${report.counts.cspFindingsStrict})`);
   console.log(`  coop:              ${report.counts.coopFindings} (strict ${report.counts.coopFindingsStrict})`);
   console.log(`  coep:              ${report.counts.coepFindings} (strict ${report.counts.coepFindingsStrict})`);
+  console.log(`  sri:               ${report.counts.sriFindings} (strict ${report.counts.sriFindingsStrict})`);
   console.log(`  link underline:    ${report.counts.linkUnderlineFindings} (strict ${report.counts.linkUnderlineFindingsStrict})`);
   console.log(`  cross-page title:  ${report.counts.crossPageTitleFindings} (strict ${report.counts.crossPageTitleFindingsStrict})`);
   console.log(`  cross-page meta:   ${report.counts.crossPageMetaDescriptionFindings} (strict ${report.counts.crossPageMetaDescriptionFindingsStrict})`);
@@ -2358,6 +2399,9 @@ async function main(args: string[]): Promise<number> {
     const newCoepStrict = diff.newCoepFindings.filter(e => e.severity === 'strict').length;
     const newCoepWarn = diff.newCoepFindings.length - newCoepStrict;
     console.log(`    NEW coep:             ${diff.newCoepFindings.length} (strict ${newCoepStrict}, warn ${newCoepWarn})`);
+    const newSriStrict = diff.newSriFindings.filter(e => e.severity === 'strict').length;
+    const newSriWarn = diff.newSriFindings.length - newSriStrict;
+    console.log(`    NEW sri:              ${diff.newSriFindings.length} (strict ${newSriStrict}, warn ${newSriWarn})`);
     const newLinkUnderlineStrict = diff.newLinkUnderlineFindings.filter(e => e.severity === 'strict').length;
     const newLinkUnderlineWarn = diff.newLinkUnderlineFindings.length - newLinkUnderlineStrict;
     console.log(`    NEW link underline:   ${diff.newLinkUnderlineFindings.length} (strict ${newLinkUnderlineStrict}, warn ${newLinkUnderlineWarn})`);

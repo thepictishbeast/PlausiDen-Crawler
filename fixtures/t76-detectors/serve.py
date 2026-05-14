@@ -431,6 +431,80 @@ def opener_explicit():
     return page('<h1>Explicit rel=opener</h1><p><a href="https://other.example/" target="_blank" rel="opener">External</a></p>')
 
 
+# ----- Subresource Integrity (SRI) -----
+# A 384-bit base64 placeholder hash; the detector only validates
+# format, not actual byte-match (browser does that at load time).
+_SRI_VALID = 'sha384-deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef'
+
+
+@route('/sri-cross-origin-script-no-integrity/')
+def sri_cross_origin_script_no_integrity():
+    body = (
+        '<h1>Cross-origin script without integrity</h1>'
+        '<script src="https://other.example/lib.js"></script>'
+    )
+    return page(body)
+
+
+@route('/sri-cross-origin-style-no-integrity/')
+def sri_cross_origin_style_no_integrity():
+    body = (
+        '<h1>Cross-origin stylesheet without integrity</h1>'
+        '<link rel="stylesheet" href="https://other.example/lib.css">'
+    )
+    return page(body)
+
+
+@route('/sri-cross-origin-script-no-crossorigin/')
+def sri_cross_origin_script_no_crossorigin():
+    body = (
+        '<h1>Cross-origin script with integrity but no crossorigin</h1>'
+        f'<script src="https://other.example/lib.js" integrity="{_SRI_VALID}"></script>'
+    )
+    return page(body)
+
+
+@route('/sri-cross-origin-script-weak-algo/')
+def sri_cross_origin_script_weak_algo():
+    body = (
+        '<h1>Cross-origin script with weak hash algorithm</h1>'
+        '<script src="https://other.example/lib.js" '
+        'integrity="sha1-deadbeefdeadbeefdeadbeefdeadbeefdeadbeef" '
+        'crossorigin="anonymous"></script>'
+    )
+    return page(body)
+
+
+@route('/sri-cross-origin-script-malformed/')
+def sri_cross_origin_script_malformed():
+    body = (
+        '<h1>Cross-origin script with malformed integrity</h1>'
+        '<script src="https://other.example/lib.js" '
+        'integrity="just-some-garbage" '
+        'crossorigin="anonymous"></script>'
+    )
+    return page(body)
+
+
+@route('/sri-clean/')
+def sri_clean():
+    body = (
+        '<h1>SRI clean — cross-origin script with integrity + crossorigin</h1>'
+        f'<script src="https://other.example/lib.js" integrity="{_SRI_VALID}" crossorigin="anonymous"></script>'
+    )
+    return page(body)
+
+
+@route('/sri-same-origin-no-integrity/')
+def sri_same_origin_no_integrity():
+    # Same-origin script; SRI doesn't apply. Should fire NO findings.
+    body = (
+        '<h1>Same-origin script — no SRI required</h1>'
+        '<script src="/local.js"></script>'
+    )
+    return page(body)
+
+
 # ============================================================
 # Server
 # ============================================================
