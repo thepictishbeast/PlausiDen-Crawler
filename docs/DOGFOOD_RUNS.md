@@ -1033,6 +1033,92 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (fortieth entry) — Forge SkillShots → A=100/100, zero findings, supersociety baseline met
+
+### What's new since last cycle (thirty-ninth entry)
+- **Cross-repo fix in PlausiDen-Forge** (commit fa9e4e9):
+  rename `cms/compose.json` title from "Post a skill —
+  SkillShots" → "Compose — SkillShots". The post-skill page
+  keeps its title; the two pages now have distinct titles
+  reflecting their distinct content (compose = multi-mode
+  hub, post-skill = specific battle form).
+- Forge static/ rebuilt with cycle-39's Loom nav-link CSS
+  fix baked in.
+- Third consecutive ecosystem-wide dogfood win.
+- Forge-built SkillShots now at **Grade A (100/100)**, ZERO
+  findings across all 11 categories. Supersociety baseline
+  met.
+
+### Score arc on Forge-built SkillShots
+  Cycle 39 pre-fix:  A (95/100). 9 warns + 1 title dup.
+  Cycle 39 post-fix: A (100/100). nav-link warns fixed.
+  Cycle 40 post-fix: **A (100/100). ZERO findings.**
+
+### The defect
+Two CMS pages shared the exact same `<title>`:
+  - `cms/compose.json`: "Post a skill — SkillShots"
+  - `cms/post-skill.json`: "Post a skill — SkillShots"
+
+Their descriptions already differed — compose is the
+multi-mode entry hub ("post a skill clip, challenge a
+player, or go live"), post-skill is the specific battle-
+creation form ("set up a new battle: rules, video upload,
+pot + entry fee"). They were always distinct pages with
+distinct intent; the title just hadn't caught up.
+
+### Real-world impact
+1. SEO: Google filters duplicate-titled results, so the two
+   pages were effectively cannibalising each other in
+   search-result pages.
+2. UX: users with multiple tabs / bookmarks / history
+   entries couldn't tell the two pages apart in their
+   browser chrome.
+
+### The fix
+Rename `cms/compose.json` title to "Compose — SkillShots".
+Description stays — the page IS a compose-mode entry hub.
+One-character word change. SEO + UX win across the
+SkillShots site.
+
+### Three consecutive dogfood cycles, three cross-repo wins
+- Cycle 38: Loom state-matrix missing CSS → emit it.
+- Cycle 39: Loom nav-link tap targets → 44px min-height.
+- Cycle 40: Forge SkillShots title dup → distinct titles.
+
+Total: 3 cross-repo commits in PlausiDen-Loom + PlausiDen-
+Forge. Cumulative impact: the SkillShots site went from
+Grade C (75/100) at cycle 38's pre-fix audit to Grade A
+(100/100) with zero findings at cycle 40's post-fix audit.
+Every defect was REAL — not a fixture-induced false
+positive. The dashboard layer (cycles 32-37) earned its
+build cost.
+
+### Verified
+- HTTP gate: 47/47 routes pass.
+- HTTPS gate: 60/60 routes pass.
+- Forge-built SkillShots: A (100/100), zero findings.
+- Loom state-matrix: A (99/100) — unchanged.
+- SkillShots dev server: A (100/100) — unchanged.
+
+### Action items
+- [ ] Audit `forge.toml` mode=production output (different
+      from mode=poc).
+- [ ] Audit Atrium / Tidy / Purge once they have buildable
+      surfaces.
+- [ ] Multi-journey aggregate dashboard would show all 3
+      SkillShots variants (dev-server, Forge-built, state-
+      matrix) side by side at a glance — useful for project
+      reviews.
+- [ ] Wire `forge-skillshots-build.json` into PlausiDen-Forge's
+      CI gate so any regression on the Forge build re-fails the
+      build the moment it happens.
+- [ ] Email/Slack grade-drop notifier (8 cycles in arrears,
+      queued since cycle 32). Worth landing soon — would
+      have immediate value with the three dogfood journeys
+      now live.
+
+---
+
 ## 2026-05-14 (thirty-ninth entry) — dogfood Forge-built SkillShots → A=100 via Loom nav-link fix
 
 ### What's new since last cycle (thirty-eighth entry)
