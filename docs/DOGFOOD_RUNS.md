@@ -1033,6 +1033,87 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (forty-third entry) — Loom edit-serve contrast colours WCAG AA
+
+### What's new since last cycle (forty-second entry)
+- **Cross-repo fix in PlausiDen-Loom** (commit fb1327e):
+  muted-text + warn-class colours updated to WCAG AA-passing.
+- Sixth consecutive cross-repo dogfood win.
+- Active named-detector axis count UNCHANGED at 43.
+
+### Score arc on Loom edit-serve
+  Cycle 41 pre:  B 82/100, 19 strict.
+  Cycle 41 post: B 83/100, 11 strict (-8: viewport + lang).
+  Cycle 42 post: B 83/100, 7 strict (-4: landmarks).
+  Cycle 43 post: B 83/100, **5 strict** (-2: contrast).
+
+### What was fixed
+- `#888` muted-text colour replaced with `#595959`
+  - Original: 3.54:1 on white — fails WCAG AA 4.5:1.
+  - New: 7.0:1 — AA-passing, still visually muted.
+  - 9 usage sites across `loom-cli/src/main.rs`.
+- `.warn{color:#a87000}` replaced with `.warn{color:#8a5a00}`
+  - Original: 4.03:1 — fails WCAG AA 4.5:1.
+  - New: 5.0:1 — AA-passing, similar amber tone.
+
+### What's still strict (5 remaining)
+- 1× contrast.body-text-below-aa on /about edit form (1
+  element — different colour pair, residual).
+- 1× form.no-label on /about edit form (14 inputs without
+  individual `<label>` — they have a fieldset legend but
+  the detector requires per-input labels).
+- 1× tap.too-small on /about (4 theme-toggle buttons at
+  22px height — similar to cycle 39's nav-link fix; needs
+  min-height:44px).
+- 2× overflow.text-clipped on / and /uploads — needs CSS
+  investigation.
+
+### Composite still B 83 — F-clamp continues
+Accessibility category score = max(0, 100 - 5×25 - 11×5) =
+max(0, -80) = 0. To break the clamp accessibility needs to
+reach ≥60, which requires either:
+
+  - 0 strict + ≤7 warns (currently 11), OR
+  - 1 strict + ≤3 warns
+
+Neither is realistic this cycle. Most of the remaining
+strict findings are clusters (14 inputs, 4 buttons, etc.)
+that each need targeted refactoring beyond a single CSS
+swap.
+
+### Cumulative cross-repo dogfood scoreboard (cycles 38-43)
+  C38 Loom:  state-matrix missing CSS                  C 75 → A 99.
+  C39 Loom:  nav-link 44px min-height                  A 95 → A 100.
+  C40 Forge: CMS title disambiguation                  A 100 → A 100 (0).
+  C41 Loom:  edit-serve viewport + lang                B 82 → B 83 (-8 strict).
+  C42 Loom:  edit-serve <main> landmark               B 83 → B 83 (-4 strict).
+  C43 Loom:  edit-serve contrast colours               B 83 → B 83 (-2 strict).
+
+Total: 6 cross-repo commits across PlausiDen-Loom (×5) +
+PlausiDen-Forge (×1). 14 strict findings cleared on the
+admin UI across cycles 41-43.
+
+### Verified
+- 297/297 loom unit tests pass.
+- HTTP gate: 47/47.
+- HTTPS gate: 60/60.
+- Loom edit-serve: B (83/100), 5 strict.
+
+### Action items
+- [ ] Cycle-44: theme-toggle button min-height:44px (likely
+      a 1-line fix similar to cycle 39's nav-link change).
+- [ ] Cycle-45: form-label cluster on /about edit form (14
+      inputs need explicit labels or aria-label).
+- [ ] Cycle-46: overflow.text-clipped + residual contrast.
+- [ ] Once strict reaches 0 on accessibility, the F-clamp
+      breaks and composite jumps past 83.
+- [ ] Consider scoring-policy revision: per-category
+      caps-on-deduction so progress within F shows up as
+      composite movement. Trade-off: less aggressive
+      messaging on broken categories.
+
+---
+
 ## 2026-05-14 (forty-second entry) — Loom edit-serve <main> landmark, 4 more strict cleared
 
 ### What's new since last cycle (forty-first entry)
