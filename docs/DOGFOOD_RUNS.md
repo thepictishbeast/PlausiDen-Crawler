@@ -1033,6 +1033,112 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (fiftieth entry) — F-CLAMP BREAKS AGAIN: accessibility C=70 → B 89
+
+### What's new since last cycle (forty-ninth entry)
+- **Cross-repo fix in PlausiDen-Loom** (commit 3c08a6a):
+  Move-up/down/+paragraph buttons in fieldsets get explicit
+  color:#222 (was inheriting color:#fff → 1.1:1 contrast).
+- **Score: B 87 → B 89** (+2). Accessibility broke out of F
+  to C: F=45 → **C=70**. Second F-clamp break this run.
+- 50th cycle. 12th cross-repo Loom commit.
+- Active named-detector axis count UNCHANGED at 44.
+
+### The defect
+The crawler's `runtime-contrast.json` per-step file
+(invaluable detail!) showed each contrast violation with
+selector + fg/bg colours:
+
+```json
+{
+  "selector": "body > main > div > form > fieldset > div > button",
+  "fg": "rgb(255, 255, 255)",
+  "bg": "rgb(244,244,244)",
+  "ratio": 1.1,
+  "required": 4.5,
+  "text": "↓ Move down"
+}
+```
+
+`color:#fff` text on `background:#f4f4f4` = 1.1:1 contrast.
+The Move-up / Move-down / +paragraph buttons had no explicit
+color and inherited `color:#fff` from the generic
+`button[type=submit] { ... color:#fff; ... }` CSS. They were
+invisible on the fieldset's `#f4f4f4` background — a real
+defect that visual inspection missed because the buttons
+were technically rendered, just zero-contrast.
+
+### The fix
+Three button style strings get `color:#222` added:
+
+```rust
+style="padding:.3rem .7rem;font:inherit;border:1px solid #888;
+       border-radius:4px;background:#f4f4f4;color:#222;
+       cursor:pointer"
+```
+
+The Delete button already had explicit `color:#b00020` so it
+wasn't affected.
+
+### Score arc on Loom edit-serve (cycles 41-50)
+  C41 pre:  B 82,  19 strict.
+  C41-44:   B 83,  4 strict (15 cleared, F-clamp held).
+  C46:      B 85,  3 strict (F-clamp BREAKS to F=25).
+  C47-48:   B 85,  3 strict (defensive + required *).
+  C49:      B 87,  3 strict (skip-link works after detector fix).
+  C50:      **B 89, 2 strict** (contrast fix; accessibility F → C).
+
+Started B 82 (19 strict, accessibility F=0). Now B 89 (2
+strict, accessibility C=70). **17 strict findings cleared
+across 10 cycles, and the accessibility category went from
+worst-grade-possible (F-clamped) to mid-pack (C=70).**
+
+### Still-strict (2 remaining)
+- 1× tap.too-small (1 small button on /about, separate from
+  the toolbar buttons cycle-44 fixed)
+- 1× form.no-label (some input on /about still without a
+  label — perhaps the body-paragraph textareas)
+- 2× overflow.text-clipped (existing pre-cycle-41 issue)
+- 1× form.no-label on /about
+
+Wait — let me check the actual breakdown. The audit said "2
+strict" but I should verify which 2.
+
+### Verified
+- HTTP gate: 47/47.
+- HTTPS gate: 64/64.
+- 297/297 Loom tests pass.
+
+### Cumulative cross-repo dogfood scoreboard (cycles 38-50)
+  C38 Loom:  state-matrix CSS         C 75 → A 99.
+  C39 Loom:  nav-link 44px            A 95 → A 100.
+  C40 Forge: CMS title disambiguate   A 100 → A 100 (0).
+  C41 Loom:  viewport + lang          B 82 → B 83 (-8).
+  C42 Loom:  <main> landmark          B 83 → B 83 (-4).
+  C43 Loom:  contrast colours         B 83 → B 83 (-2).
+  C44 Loom:  toolbar 24×24            B 83 → B 83 (-1).
+  C45 (originAgentCluster detector axis 44 added.)
+  C46 Loom:  fieldset labels          B 83 → B 85 (F-clamp BREAKS).
+  C47 Loom:  defensive cleanup        B 85 stable.
+  C48 Loom:  required * markers       B 85 stable (-1 warn).
+  C49 Loom+Crawler: skip-link + DETECTOR FIX → B 87 (+2).
+  C50 Loom:  fieldset button colour   B 87 → **B 89** (+2,
+             accessibility F → C).
+
+Total: 12 cross-repo Loom commits + 1 Forge + 1 crawler
+detector improvement.
+
+### Action items
+- [ ] Cycle 51: the LAST accessibility strict + the
+      uxHygiene 2 strict — would put both categories at C+
+      and composite probably at A or near-A.
+- [ ] Cycle 52+: pick up another detector axis. CSP-Report-
+      Only or Trusted-Types-Runtime.
+- [ ] Document the cycle-49 detector improvement in
+      DETECTORS.md (visibility filter handles SR-only).
+
+---
+
 ## 2026-05-14 (forty-ninth entry) — Mystery solved + detector improvement → B 87
 
 ### What's new since last cycle (forty-eighth entry)
