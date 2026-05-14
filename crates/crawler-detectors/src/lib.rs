@@ -46,6 +46,7 @@ pub mod runtime_contrast;
 pub mod runtime_focus;
 pub mod runtime_images;
 pub mod runtime_landmarks;
+pub mod tap_targets;
 pub mod ui_overflow;
 pub mod web_vitals;
 
