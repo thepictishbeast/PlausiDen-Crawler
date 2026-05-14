@@ -1033,6 +1033,82 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (seventy-first entry) — Size-based log rotation closes the long-run growth gap
+
+### What's new since last cycle (seventieth entry)
+- **Cross-repo Loom fix** (commit 6559a9b): size-based
+  rotation on the cycle 63 collector. Default 50 MiB ceiling,
+  10-file retention. Env overrides for tests.
+- **6th E2E test** in the collector suite: drives rotation
+  with a 1 KiB ceiling + 2-file retention, asserts rotation
+  files appear and the keep-count is honoured.
+- 6/6 collector E2E tests pass in 0.25s.
+- Score: aggregate **A 100/100 (16)** holds.
+
+### Why this matters
+Cycle 69 capped the INSTANTANEOUS write rate (100/min/IP).
+Cycle 71 caps the LONG-RUN GROWTH. Even at the rate-limit
+ceiling:
+  100 reports/min × 60 min × 24 hr × 30 days = 4.3M reports/month.
+  At ~120 bytes average JSONL = 500 MiB/month uncapped.
+
+The 50 MiB ceiling rotates roughly every 3 days at full load
+(realistic load is ≪ that). 10-file retention keeps ~1 month
+of forensic data on disk.
+
+### Implementation discipline (continued from cycle 70)
+- Inline in the collector's write path. One `fs::metadata`
+  call per POST in the common case (file under threshold).
+- Heavy path (rename + glob + prune) runs only when rotation
+  actually triggers.
+- Env-tunable thresholds for tests: zero performance cost in
+  production (env lookup is one `std::env::var` per write).
+- Fresh-monotonic suffix: `<unix_secs>.<nanos>` defends
+  against burst-rotation collisions in the same second.
+- Lexical sort of `violations-*.jsonl` is chronological
+  because the suffix is fixed-width. No timestamp parsing
+  needed for pruning.
+- Failure degrades silently to stderr. Browser sees 204
+  regardless; the loop keeps moving.
+
+### The supersociety observability stack is resilience-complete
+```
+detect → enforce → report → COLLECT → audit → REVIEW
+                            ^^^^^^^^
+                            rate-limited (cycle 69)
+                            rotated + retained (cycle 71)
+                            E2E pinned (cycles 68, 70, 71)
+```
+
+Six layers, four hardening cycles on the COLLECT stage alone.
+The collector survives:
+- Flash-burst attacks (rate limiter caps inserts).
+- Patient long-run attacks (rotation prevents disk-full).
+- Wire-format regressions (E2E test pins the JSONL shape).
+- Misconfigurations (cycle 64 detector audits the headers).
+
+### Score arc (cycles 41-71)
+  C70: aggregate A 100/100 (16) — review loop end-to-end usable.
+  C71: aggregate A 100/100 (16) — collector storage hardened.
+
+### Cumulative cross-repo dogfood scoreboard (cycles 38-71)
+  30 Loom commits + 3 Forge + 1 Sentinel-GUI + 8 crawler
+  enhancements + 2 test suites.
+
+### Action items
+- [ ] Cycle 72: `loom report-stats` — aggregate the JSONL
+      into per-kind counts + first/last seen + top offender
+      URLs. Operator dashboard summary.
+- [ ] Cycle 73: extend dogfood to PlausiDen-Atrium.
+- [ ] Cycle 74: mutation test on supersocietyScore — flip
+      STRICT_PENALTY to 5; verify property 5 catches it.
+- [ ] Cycle 75: Reporting-Endpoints across rotation: ensure
+      the report-tail viewer can show entries that span
+      rotation boundaries (currently reads only the active
+      log; could optionally read N most-recent rotations).
+
+---
+
 ## 2026-05-14 (seventieth entry) — `loom report-tail` closes the operator review loop
 
 ### What's new since last cycle (sixty-ninth entry)
