@@ -1033,6 +1033,80 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (sixty-eighth entry) — E2E integration test contractually pins the collector
+
+### What's new since last cycle (sixty-seventh entry)
+- **Cross-repo fix in PlausiDen-Loom** (commit 5baab04):
+  E2E integration test for the cycle 63 security-report
+  collector. AVP-2 Tier 5 (cross-repo integration). Spawns
+  `loom edit-serve` against a temp CMS fixture, POSTs
+  synthetic CSP-violation + Reporting-API bodies, asserts
+  on the on-disk JSONL format.
+- 4 new tests in `loom-cli/tests/report_collector_e2e.rs`:
+  - legacy `/csp-report` returns 204 + correct JSONL line.
+  - modern `/reports` returns 204 + correct JSONL line.
+  - oversized 100 KiB payload returns 204 (no retry-storm) +
+    on-disk line is capped at 64 KiB.
+  - both endpoints unauthenticated (per W3C spec — browsers
+    cannot send session cookies on report POSTs).
+- Stdlib-only HTTP client (TcpStream + manual HTTP request
+  string construction). No reqwest / ureq dep added — the
+  supersociety stack stays lean and the test is byte-
+  verifiable.
+- 4/4 tests pass in 0.05s.
+
+### Why this matters
+Cycle 63 built the collector. Cycle 64 audited its config.
+Cycle 65 added NEL routing. Cycle 67 hardened a new surface
+that USES the collector pipeline. Cycle 68 now contractually
+PINS the collector's wire format: any future commit that
+changes the JSONL shape will fail this test.
+
+Before today, the collector was "works in cycle 63's
+smoke-test". After today, it has a regression suite. The
+shape is a load-bearing API contract — future tooling
+(TUI viewer, log analysis scripts, SIEM ingestion) depends
+on the field names being stable.
+
+### Two real bugs caught while writing this test
+1. **Parallel-test port collision**: first version used
+   `pick_port()` = `49152 + (pid % chunk)`. Same PID → same
+   port → two tests fought for the same TCP bind. Fix: an
+   atomic counter for unique-per-test ports within a process.
+
+2. **Fixture-directory collision**: `Instant::now().elapsed()
+   .as_nanos()` is ALWAYS zero (Instant just created!). Two
+   concurrent tests at the same PID created the same fixture
+   path → cross-contamination of violations.jsonl. Fix: use
+   `SystemTime::now()` wall-clock nanos + the unique port
+   for the suffix.
+
+Both bugs are textbook "the test is broken, not the system"
+bugs that often slip through review. Writing the assertion
+"the JSONL line should contain my exact body" surfaced both
+in the first run.
+
+### Score arc (cycles 41-68)
+  C67: aggregate A 100/100 (16) — Sentinel-GUI hardened.
+  C68: aggregate A 100/100 (16) — collector now Tier-5 pinned.
+
+### Cumulative cross-repo dogfood scoreboard (cycles 38-68)
+  27 Loom commits + 3 Forge + 1 Sentinel-GUI + 8 crawler
+  enhancements + property test suite + E2E test suite.
+
+### Action items
+- [ ] Cycle 69: extend dogfood to PlausiDen-Atrium (Tauri
+      web view; new audit surface).
+- [ ] Cycle 70: TUI viewer for violations.jsonl
+      (operator UX on the cycle 63 collector).
+- [ ] Cycle 71: mutation testing — flip STRICT_PENALTY in
+      supersocietyScore and verify property 5 catches it.
+- [ ] Cycle 72: rate-limit on the report collector so an
+      attacker can't DoS the JSONL log file (currently
+      append-only, no caps; cycle 73 adds rotation).
+
+---
+
 ## 2026-05-14 (sixty-seventh entry) — Sentinel-GUI hardened to A 100/100 in one cycle
 
 ### What's new since last cycle (sixty-sixth entry)
