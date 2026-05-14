@@ -199,6 +199,16 @@ async function main(args: string[]): Promise<number> {
     viewport: { width: viewport.w, height: viewport.h },
     bypassCSP: true,
   };
+  // T76 (2026-05-14): opt-in for HTTPS fixture testing. Real
+  // audits should NEVER set this — silently ignoring cert errors
+  // would mask production misconfiguration that the
+  // failed-fetches axis is supposed to catch. Off by default;
+  // the t76-detector-fixtures-https/serve.py wrapper sets the
+  // env var so its self-signed cert doesn't tank the audit.
+  if (process.env.CRAWLER_IGNORE_HTTPS_ERRORS === '1') {
+    contextOpts.ignoreHTTPSErrors = true;
+    console.log('[crawler] CRAWLER_IGNORE_HTTPS_ERRORS=1 — TLS errors will be silently accepted');
+  }
 
   // Two state-file formats are supported:
   //   1. Playwright storageState — { cookies: [...], origins: [{...localStorage}] }.
@@ -992,6 +1002,7 @@ async function main(args: string[]): Promise<number> {
       const pageUrl = page.url();
       const headers = topLevelResponseHeaders.get(pageUrl);
       const snap = buildXFrameOptionsSnapshot(pageUrl, headers);
+      if (disableLocalhostExemption) snap.pageIsLocalhost = false;
       const findings = detectXFrameOptionsIssues(snap);
       xFrameOptionsFindingsByStep.push({ stepLabel: afterLabel, pageUrl, findings });
       for (const f of findings) {
@@ -1020,11 +1031,17 @@ async function main(args: string[]): Promise<number> {
    * and localhost.
    */
   const hstsFindingsByStep: Array<{ stepLabel: string; pageUrl: string; findings: HstsFinding[] }> = [];
+  // T76: env-var bypass for the localhost exemption — only set
+  // by the t76-detector-fixtures-https/serve.py wrapper so the
+  // detector can fire end-to-end on a 127.0.0.1-bound test
+  // server. Production audits NEVER set this.
+  const disableLocalhostExemption = process.env.CRAWLER_DISABLE_LOCALHOST_EXEMPTION === '1';
   const checkHsts = async (afterLabel: string) => {
     try {
       const pageUrl = page.url();
       const headers = topLevelResponseHeaders.get(pageUrl);
       const snap = buildHstsSnapshot(pageUrl, headers);
+      if (disableLocalhostExemption) snap.pageIsLocalhost = false;
       const findings = detectHstsIssues(snap);
       hstsFindingsByStep.push({ stepLabel: afterLabel, pageUrl, findings });
       for (const f of findings) {

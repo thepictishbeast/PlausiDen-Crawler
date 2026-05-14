@@ -872,12 +872,80 @@ Liveness gate (33/33) still PASS.
 
 ### Action items
 
-- [ ] HTTPS fixture variant for full mixedContent + hsts +
-      xFrameOptions live integration.
+- [x] **DONE 2026-05-14 (sixteenth cycle)**: HTTPS fixture
+      variant for full mixedContent + hsts + xFrameOptions
+      live integration. See sixteenth entry below.
 - [x] **DONE 2026-05-14 (fifteenth cycle)**: `xFrameOptions`
       landed. Pattern validated.
 - [ ] Add `referrerPolicy` detector — same response-header
-      capture path, third consumer.
+      capture path, third consumer (now exercisable end-to-end
+      via the new HTTPS fixture).
+- [ ] login-flow fixture (still queued).
+- [ ] Remaining roadmap: `fontLoading`.
+
+---
+
+## 2026-05-14 (sixteenth entry) — HTTPS fixture variant
+
+### What's new since last cycle (fifteenth entry)
+- New `fixtures/t76-detectors-https/` dir with self-signed
+  cert + key (100-year validity, `CN=localhost`).
+- New `fixtures/t76-detectors-https/serve.py` — HTTPS server
+  on port 8773 with per-route response-header overrides.
+- New `journeys/t76-detector-fixtures-https.json` — 9 routes
+  exercising hsts (4) + xFrameOptions (3) + mixedContent (2).
+- New `scripts/check-t76-https-detectors.sh` — gate that
+  spins the HTTPS fixture, sets `CRAWLER_IGNORE_HTTPS_ERRORS=1`
+  + `CRAWLER_DISABLE_LOCALHOST_EXEMPTION=1`, runs the audit,
+  asserts each route's expected findings.
+
+### Why a separate fixture
+
+Three detectors (mixedContent, hsts, xFrameOptions) short-
+circuit on http or localhost. The existing http fixture can't
+exercise them. Unit-tested but never live-validated. This
+fixture closes that gap.
+
+### Two opt-in env vars
+
+Both default to OFF; production audits must NEVER set either:
+
+  - `CRAWLER_IGNORE_HTTPS_ERRORS=1` — Playwright trusts the
+    fixture's self-signed cert. Without this, the navigation
+    fails at the cert check.
+  - `CRAWLER_DISABLE_LOCALHOST_EXEMPTION=1` — flips the
+    snapshot's `pageIsLocalhost` to false in main.ts, so the
+    detectors actually fire on 127.0.0.1. Without this, the
+    detectors' built-in localhost exemption masks every
+    finding.
+
+The HTTPS check-script wrapper sets both before invoking the
+audit. Production never goes through this code path.
+
+### What the script-development loop caught
+
+A subtle bash bug — `set -e` + `curl ... 2>/dev/null | grep -q`
+caused the wait loop's first iteration to silently kill the
+script. Refactored to var-capture: `code=$(curl -ks ... || true)`
++ `[ "$code" = "200" ]`. Then a SECOND issue: curl was exiting
+non-zero AFTER printing %{http_code}=200 (TLS body-read flake
+on the self-signed cert). Wrapped with `|| true` to swallow
+the exit code; the printed status code is what we trust.
+
+### Result
+
+**9/9 routes PASS.** Every HTTPS-detector finding kind fires:
+hsts.missing / max-age-too-short / no-subdomains,
+frame-options.missing / allowall / invalid, mixed-content.active
+/ passive. All three detectors now have unit + live coverage.
+
+The existing HTTP gate (33/33) still PASSes. SkillShots audit
+still ALL 32 AXES SILENT.
+
+### Action items
+
+- [ ] Add referrerPolicy detector (third response-header
+      consumer) and exercise it via the new HTTPS fixture.
 - [ ] login-flow fixture (still queued).
 - [ ] Remaining roadmap: `fontLoading`.
 

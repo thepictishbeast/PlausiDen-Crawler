@@ -1,0 +1,28 @@
+{
+  "name": "t76-detector-fixtures-https",
+  "description": "HTTPS fixture journey for the response-header detectors (hsts, xFrameOptions) + mixedContent. Pairs with fixtures/t76-detectors-https/serve.py. Requires CRAWLER_IGNORE_HTTPS_ERRORS=1 + CRAWLER_DISABLE_LOCALHOST_EXEMPTION=1 — the detectors short-circuit on localhost in production audits, so the env vars opt the audit into fixture-mode behaviour.",
+  "baseUrl": "https://127.0.0.1:8773",
+  "viewport": { "width": 1280, "height": 800 },
+  "steps": [
+    { "kind": "goto", "url": "https://127.0.0.1:8773/control/", "label": "control" },
+    { "kind": "goto", "url": "https://127.0.0.1:8773/no-hsts/", "label": "no-hsts" },
+    { "kind": "goto", "url": "https://127.0.0.1:8773/short-hsts/", "label": "short-hsts" },
+    { "kind": "goto", "url": "https://127.0.0.1:8773/no-subdomains/", "label": "no-subdomains" },
+    { "kind": "goto", "url": "https://127.0.0.1:8773/no-xfo/", "label": "no-xfo" },
+    { "kind": "goto", "url": "https://127.0.0.1:8773/allowall-frame/", "label": "allowall-frame" },
+    { "kind": "goto", "url": "https://127.0.0.1:8773/invalid-xfo/", "label": "invalid-xfo" },
+    { "kind": "goto", "url": "https://127.0.0.1:8773/mixed-active/", "label": "mixed-active" },
+    { "kind": "goto", "url": "https://127.0.0.1:8773/mixed-passive/", "label": "mixed-passive" }
+  ],
+  "expectedFindingsByLabel": {
+    "control": [],
+    "no-hsts": ["hsts.missing"],
+    "short-hsts": ["hsts.max-age-too-short"],
+    "no-subdomains": ["hsts.no-subdomains"],
+    "no-xfo": ["frame-options.missing"],
+    "allowall-frame": ["frame-options.allowall"],
+    "invalid-xfo": ["frame-options.invalid"],
+    "mixed-active": ["mixed-content.active"],
+    "mixed-passive": ["mixed-content.passive"]
+  }
+}
