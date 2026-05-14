@@ -1,0 +1,20 @@
+[
+  {
+    "kind": "placeholder-text",
+    "ruleId": "placeholder.lorem-ipsum",
+    "reason": "The state-matrix is a deliberate SHOWCASE of every CmsSection variant + theme combination — Lorem Ipsum is the correct content for demonstrating typography + spacing without distracting reviewers with real copy.",
+    "until": "2026-12-31"
+  },
+  {
+    "kind": "tap-targets",
+    "ruleId": "tap.too-small",
+    "reason": "The state-matrix renders components at their canonical size for designer review; the small interactive targets (1x1 skip-link, 24x21px dismiss button, etc.) are DEMONSTRATIONS not real interactive UI. End-user-facing Loom-built pages would either size up via the CmsSection.cta variant or not include these primitives at all.",
+    "until": "2026-12-31"
+  },
+  {
+    "kind": "tap-targets",
+    "ruleId": "tap.below-recommended",
+    "reason": "Same accepted-risk as tap.too-small — state-matrix component demonstrations, not interactive end-user UI.",
+    "until": "2026-12-31"
+  }
+]

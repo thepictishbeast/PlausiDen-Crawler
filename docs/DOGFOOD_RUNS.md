@@ -1033,6 +1033,107 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (thirty-eighth entry) — dogfood Loom state-matrix, real bug found + fixed cross-repo
+
+### What's new since last cycle (thirty-seventh entry)
+- New crawler journey: `journeys/loom-state-matrix.json` —
+  audits Loom's `state-matrix-{auto,light,dark}.html` output
+  served locally on port 8124.
+- New whitelist: `journeys/loom-state-matrix.whitelist.json`
+  — accepts the intentional Lorem-Ipsum + small-tap-target
+  findings (the state-matrix is a SHOWCASE, not real UI).
+- **Cross-repo fix in PlausiDen-Loom** (commit e8af560):
+  `loom state-matrix` now emits the sibling `loom-skin.css`
+  AND uses a relative href so the matrix works both from
+  `file://` and `python3 -m http.server`.
+- Active named-detector axis count UNCHANGED at 43. First
+  PIVOT cycle after 6 consecutive UX-meta cycles. Closes the
+  supersociety loop: crawler audits PlausiDen-Loom, finds a
+  real defect, fixes it in Loom, score goes up.
+
+### The dogfood loop in action
+Initial audit of `state-matrix-light.html`, `-dark.html`,
+`-auto.html`:
+
+  **Grade C (75/100)** — 15 strict + 15 warn findings
+  reliability=F (16 findings), accessibility=F (9), uxHygiene=F (5)
+
+Drilling into the reliability findings: 6 console-errors +
+10 failed-requests, all the same root cause —
+`http://127.0.0.1:8124/loom-skin.css` returns 404. The
+state-matrix HTML referenced `<link rel="stylesheet"
+href="/loom-skin.css">` but the subcommand never emitted the
+CSS file. Worse, the href was absolute, so even a real http
+server would 404 unless the CSS was at the document root.
+
+**Single-commit fix in Loom** (e8af560):
+- `cmd_state_matrix` calls `loom_tokens::tokens_css()` and
+  writes to `<out>/loom-skin.css` alongside the HTML.
+- Href switched from `/loom-skin.css` (absolute) to
+  `loom-skin.css` (relative) so the matrix works from both
+  `file://` and HTTP-served paths.
+
+Post-fix re-audit: **Grade A (90/100)**. Reliability F → A,
+accessibility F → F (still 6 strict + 3 warn), uxHygiene F
+→ A.
+
+The remaining accessibility findings:
+  - `placeholder-text.lorem-ipsum` — 1 hit (the matrix IS
+    Lorem Ipsum by design).
+  - `tap-targets.tap.too-small` — 3 small targets (1×1px
+    skip-link, 24×21px dismiss button, etc.).
+  - `tap-targets.tap.below-recommended` — sibling findings.
+
+These are INTENTIONAL — the matrix is a showcase of every
+CmsSection variant, not a real interactive UI. Whitelisted
+with reasons + `until: 2026-12-31`. Final score: **A (99/100)**.
+
+### Score arc
+  - Pre-fix:      C (75/100). 30 findings.
+  - Post-fix:     A (90/100). 11 findings.
+  - Post-whitelist: A (99/100). 2 findings.
+
+The one remaining warn is `outbound-links` flagging a small
+nav link — minor, can be a follow-up cycle.
+
+### Why this cycle matters
+After 6 consecutive cycles of building the supersociety
+dashboard layer (cycles 32-37), this cycle ACTUALLY USED IT
+on a real PlausiDen project and found a real bug. The
+dashboard's value compounded:
+
+  - Composite score directly identified "reliability=0/F".
+  - Per-category breakdown isolated the failing category.
+  - Drilling JSON identified the exact resource that 404'd.
+  - One-commit fix in Loom raised the grade from C → A.
+  - Whitelist (cycle 35) lets us accept the remaining
+    intentional findings without dragging the score.
+
+This is the SHIP CRITERION for the dashboard layer: it found
+a real bug in real PlausiDen code and helped fix it. The
+loop closed.
+
+### Verified
+- HTTP gate: 47/47 routes pass (existing detector fixtures).
+- HTTPS gate: 60/60 routes pass.
+- SkillShots audit: Grade A 100/100 (unchanged).
+- Loom state-matrix audit: Grade A 99/100 (was C 75/100).
+- Cross-repo commit in PlausiDen-Loom: e8af560.
+
+### Action items
+- [ ] Fix the remaining `outbound-links` finding in Loom's
+      state-matrix (minor, follow-up).
+- [ ] Audit `loom site init` template output similarly.
+- [ ] Audit a Forge-generated site once Forge is buildable.
+- [ ] Commit `journeys/loom-state-matrix.json` to CI so
+      Loom's state-matrix can never regress on the
+      supersociety dashboard signal again.
+- [ ] Repeat-dogfood other PlausiDen apps (Atrium, Tidy,
+      Purge) — find real bugs, fix them, score goes up.
+- [ ] Email/Slack grade-drop notifier (7 cycles in arrears).
+
+---
+
 ## 2026-05-14 (thirty-seventh entry) — stable latest-* paths + CI workflow sample
 
 ### What's new since last cycle (thirty-sixth entry)

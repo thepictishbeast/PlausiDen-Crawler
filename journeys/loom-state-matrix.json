@@ -1,0 +1,11 @@
+{
+  "name": "loom-state-matrix",
+  "description": "Audit Loom's state-matrix HTML output (T34): every CmsSection variant + named state across the auto/light/dark themes. Dogfoods the cycle 32-37 supersociety dashboard against actual PlausiDen-generated content. Grade is the answer to 'how do Loom's design-system primitives score against the crawler's 43 axes?'",
+  "baseUrl": "http://127.0.0.1:8124",
+  "viewport": { "width": 1280, "height": 900 },
+  "steps": [
+    { "kind": "goto", "url": "http://127.0.0.1:8124/state-matrix-light.html", "label": "state-matrix-light" },
+    { "kind": "goto", "url": "http://127.0.0.1:8124/state-matrix-dark.html",  "label": "state-matrix-dark" },
+    { "kind": "goto", "url": "http://127.0.0.1:8124/state-matrix-auto.html",  "label": "state-matrix-auto" }
+  ]
+}
