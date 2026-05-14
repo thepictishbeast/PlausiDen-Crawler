@@ -1,5 +1,5 @@
 {
-  "composite": 93,
+  "composite": 100,
   "grade": "A",
   "journeyCount": 16,
   "perJourney": [
@@ -20,7 +20,7 @@
     },
     {
       "name": "sentinel-gui",
-      "composite": 93,
+      "composite": 100,
       "grade": "A"
     },
     {

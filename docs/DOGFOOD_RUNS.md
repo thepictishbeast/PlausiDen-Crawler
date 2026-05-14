@@ -1033,6 +1033,101 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (sixty-seventh entry) — Sentinel-GUI hardened to A 100/100 in one cycle
+
+### What's new since last cycle (sixty-sixth entry)
+- **Cross-repo fix in Sentinel-GUI** (commit 284ff44):
+  applied the cumulative lessons from PlausiDen-Loom cycles
+  38-65 in ONE rewrite. Sentinel-GUI went from cycle 66's
+  baseline A 93/100 → **A 100/100, zero findings, 50 axes
+  silent**.
+- **Aggregate badge: A 93/100 (16) → A 100/100 (16)** —
+  every PlausiDen surface back at supersociety baseline.
+
+### What landed in one commit
+The cycle 38-65 Loom journey took 28 cross-repo commits to
+discover + close every finding class. Sentinel-GUI applied
+the SAME pattern in one rewrite:
+
+1. **Semantic HTML**: `<header>`, `<main id="main">`,
+   `<section aria-label="...">` instead of div-soup.
+2. **Accessibility**: skip-link with focus-only reveal +
+   ≥44px tap targets; visible :focus-visible ring on the
+   scan button.
+3. **UX hygiene**: inline SVG favicon, meta-description.
+4. **Hash-pinned CSP**: DASHBOARD_CSS + DASHBOARD_JS
+   extracted to named consts, sha256-hashed at request time,
+   pinned in `style-src` + `script-src`. No 'unsafe-inline'.
+5. **Trusted Types**: `require-trusted-types-for 'script';
+   trusted-types sentinel-gui`. Inline JS registers a
+   policy and routes innerHTML through it.
+6. **No event-handler attrs**: scan button uses
+   addEventListener instead of `onclick=` so the CSP can be
+   strict.
+7. **Defense-in-depth headers**: COOP, COEP-friendly CORP,
+   X-Content-Type-Options, X-Frame-Options DENY (CSP-L2
+   fallback), Referrer-Policy, Origin-Agent-Cluster,
+   Document-Policy (force-load-at-top), Reporting-Endpoints,
+   Report-To, NEL.
+
+### The dogfood loop's compression value
+PlausiDen-Loom + PlausiDen-Forge took ~28 cross-repo cycles
+to converge from B 82 → A 100. PlausiDen-Sentinel-GUI took
+ONE cycle (well, two iterations — cycle 67a left one strict
+contrast bug because the skip-link inherited browser-default
+blue, fixed in 67b). The compression came from:
+
+- Pre-existing fix-pattern library (visually-hidden skip-link
+  CSS, BEM-class naming, ≥44px tap targets, hash-pinned CSP).
+- Pre-existing defense-in-depth header list (8 modern headers).
+- Pre-existing Trusted Types pattern.
+- Pre-existing detector audit-side that fires immediately on
+  the new surface.
+
+This is what the dogfood loop is FOR. The first run-through
+is expensive; subsequent surfaces inherit the hardening
+patterns and converge fast.
+
+### Cycle 67a discovery: skip-link contrast bug
+Cycle 67a's first audit caught a real bug: the skip-link had
+explicit color only on `:focus`, not on the resting state.
+The resting state is offscreen via `left:-9999px;width:1px;
+height:1px;overflow:hidden` — invisible to users — but
+axe-core's contrast scanner still rendered the computed style
+and saw `rgb(0,0,238)` (browser default link blue) on
+`rgb(10,10,26)` (page bg). Ratio: 2.09 — strict fail.
+
+Fix in cycle 67b: set `color: var(--accent)` on the resting
+state too. The change is invisible to humans (the element is
+clipped) but satisfies axe-core's contrast check.
+
+This is the kind of bug a manual review NEVER catches and
+the dogfood loop ALWAYS does.
+
+### Score arc (cycles 41-67)
+  C66:  aggregate A 93/100 (16) — sentinel-gui joined unhardened.
+  C67a: aggregate A 93/100 (16) — sentinel-gui at A 97
+        (rewrite mostly clean; 1 strict contrast leftover).
+  C67b: **aggregate A 100/100 (16)** — every surface at perfect
+        composite; first full-matrix supersociety state across
+        the expanded matrix.
+
+### Cumulative cross-repo dogfood scoreboard (cycles 38-67)
+  26 Loom commits + 3 Forge commits + 1 Sentinel-GUI commit +
+  8 crawler enhancements + property test suite.
+
+### Action items
+- [ ] Cycle 68: extend dogfood to PlausiDen-Atrium.
+- [ ] Cycle 69: TUI viewer for violations.jsonl
+      (operator UX for the cycle 63 collector log).
+- [ ] Cycle 70: mutation testing on score module — flip
+      STRICT_PENALTY to 5 and verify property 5 catches it.
+- [ ] Cycle 71: integration test that drives the loom edit-
+      serve report collector with synthetic CSP violations
+      and asserts they land in violations.jsonl.
+
+---
+
 ## 2026-05-14 (sixty-sixth entry) — Property tests + dogfood loop extends to Sentinel-GUI
 
 ### What's new since last cycle (sixty-fifth entry)
