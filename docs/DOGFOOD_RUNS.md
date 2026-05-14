@@ -1033,6 +1033,88 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (seventy-ninth entry) — Editor UX: Cmd-S + unsaved-changes warning
+
+### What's new since last cycle (seventy-eighth entry)
+- **Cross-repo Loom fix** (commit be906c6): two content-
+  editor UX wins on top of the cycle 54+62 click-bridge:
+  - **Cmd-S / Ctrl-S keyboard shortcut** triggers
+    form.requestSubmit().
+  - **Unsaved-changes warning + dirty indicator**:
+    `beforeunload` prompt on dirty; `document.title` gets
+    a leading "●" when dirty.
+- Both extensions live within the existing EDIT_PAGE_JS
+  const. The CSP sha256 hash regenerated automatically per
+  cycle 54's hash-pinning machinery — no manual update.
+- Aggregate badge holds at **A 100/100 (16)**.
+
+### Why this cycle pivoted to UX
+Cycles 22-78 hardened the security + observability + Tier-6
+validation stack to provable A 100/100. The user's standing
+prompt has had "improve UX" + "improve the content cms loom
+in forge generate" + "think of what the client would want"
+since cycle 1. The supersociety doctrine has been pure
+defense-in-depth for ~50 cycles; cycle 79 returns to the
+user-facing surface.
+
+### From-the-content-editor lens
+Inspection of `/about` (the page-edit form) surfaced 10 UX
+gaps a real content editor would notice:
+- No Cmd-S to save.
+- No unsaved-changes warning on navigation.
+- No dirty indicator anywhere on screen.
+- Save button only at the bottom (long scroll for big forms).
+- Delete-section has confirm but no undo.
+- No section-level live preview (only whole-page iframe).
+- No revision history.
+- No autosave / draft / localStorage staging.
+- No drag-drop reorder (Move-up/down buttons only).
+- "Append" form re-loads the page on every section add.
+
+Cycle 79 ships the top 2 (keyboard save + navigation guard)
+because they prevent OPERATOR DATA LOSS — the supersociety
+doctrine treats lost typing the same as a security
+regression. The other 8 go in the backlog.
+
+### The CSP hash regenerated itself
+A real test of cycle 54's machinery: the EDIT_PAGE_JS const
+changed, the sha256 hash recomputed at request time, and
+the strict CSP still matches the rendered script. Production
+audit confirms 50/50 axes silent. No detector fired on the
+script-content change — the hash pin is honest and live.
+
+If we'd hand-coded the hash anywhere, the cycle 79 change
+would have silently broken the CSP. The cycle 54 doctrine
+(extract inline content into a const, compute hash from
+the const) made the UX edit safe.
+
+### Score arc (cycles 41-79)
+  C78: aggregate A 100/100 (16) — drift v2 catches more bugs.
+  C79: aggregate A 100/100 (16) — editor UX gains; CSP self-
+       regenerated.
+
+### Cumulative cross-repo dogfood scoreboard (cycles 38-79)
+  33 Loom commits + 3 Forge + 1 Sentinel-GUI + 13 crawler
+  enhancements + 3 E2E suites + property + mutation + drift
+  test suites + meta-runner + design+ops manual.
+
+### Action items
+- [ ] Cycle 80: section-level "open in new tab" preview
+      that opens just THIS section in a single-section
+      preview URL (`/preview-edit/<slug>.html#sec-<i>`).
+- [ ] Cycle 81: revision history — autosave the prior
+      `cms/<slug>.json` to `cms/<slug>.<unix>.bak` on
+      every successful save, keep last N versions.
+- [ ] Cycle 82: localStorage draft persistence — save
+      form state every 5s to localStorage; restore on
+      page load if a draft exists for this slug.
+- [ ] Cycle 83: drag-drop section reorder (data-attribute
+      + native HTML5 drag events; no library).
+- [ ] Cycle 84: pre-push git hook for `npm run test:meta`
+      (still pending from cycle 78).
+
+---
+
 ## 2026-05-14 (seventy-eighth entry) — Drift detector v2 finds 4 more silent bugs
 
 ### What's new since last cycle (seventy-seventh entry)
