@@ -6612,6 +6612,89 @@ already.
 
 ---
 
+## 2026-05-14 (twenty-sixth entry) — Speculation Rules privacy detector
+
+### What's new since the twenty-fifth entry
+- 1 new detection axis: **`speculation-rules`** — audits
+  `<script type="speculationrules">` blocks (the W3C 2024 draft,
+  Chromium 119+). Brings the active-axis count to **51**.
+- 12 unit-test scenarios; all green.
+- Tier-6 meta-validation (property × 200, mutation, drift) all
+  pass — drift detector automatically picked up the new kind in
+  KIND_TO_CATEGORY + the CapturedEvent type union without manual
+  surgery, confirming the cycle-78 contract still holds for axis
+  additions a year later.
+
+### Why Speculation Rules now
+The dogfood log entry 25 listed `hstsHeader`, `fontLoading`, and
+`xFrameOptions` as "remaining roadmap" detectors. Audit shows all
+three are already shipped — the roadmap entry was stale. The next
+genuine coverage gap is the Speculation Rules API, brand new and
+unaudited by any of the existing axes.
+
+Speculation Rules let a page tell the browser to *prerender* (= fetch
++ parse + execute JavaScript inside a hidden tab) or *prefetch* (=
+download + cache) URLs BEFORE the user opts in to navigation. The
+spec is supersociety-aligned in intent (faster nav, fewer mobile
+data round-trips) but introduces a sharp privacy edge: a page that
+prerenders cross-origin URLs without the `requires:
+["anonymous-client-ip-when-cross-origin"]` clause leaks the user's
+IP + browser fingerprint + Accept-Language to a third-party server
+with NO user interaction. State-actor adversaries with control over
+a third-party origin currently benefit from any page that does this
+unprotected.
+
+### Detector design
+Five finding kinds:
+
+  - `speculation-rules.cross-origin-prerender-no-anonymous-ip`
+    (**strict**) — see above. Privacy regression by default.
+  - `speculation-rules.legacy-cross-origin-urls-form` (warn) — the
+    2023 draft's `{urls: [...]}` list form is being phased out for
+    cross-origin targets; switch to `{where: {...}}`.
+  - `speculation-rules.invalid-json` (warn) — typo silently drops
+    the ENTIRE block; no console error.
+  - `speculation-rules.empty-rule-set` (warn) — copy-paste error.
+  - `speculation-rules.eager-eagerness` (warn) — `eagerness:"eager"`
+    starts the prefetch/prerender immediately, burning mobile data
+    without the user's consent.
+
+Same shape as cycle 25 SRI: pure-function classifier +
+page.evaluate snapshot capture; unit-testable without a browser;
+runs as a per-step audit hook in main.ts.
+
+### Wired in
+- `src/speculationRules.ts`: detector + DOM walker.
+- `src/speculationRules.test.ts`: 12 scenarios.
+- `src/report.ts`: `'speculation-rules'` in the CapturedEvent kind
+  union (cycle 78 type-safety contract; the type union is the
+  enforcement point that prevents `as` casts).
+- `src/supersocietyScore.ts`: `'speculation-rules'` → infoDisclosure
+  bucket (same threat-model neighborhood as referrer-policy + info-
+  leak headers — privacy regression by leaky API).
+- `src/main.ts`: `checkSpeculationRules` per-step hook between
+  cycle 25's `checkSri` and the inline-script audit.
+
+### Aggregate badge
+Unchanged at **A 100/100 (16)** since the detector currently fires
+zero findings against every audited surface — PlausiDen-built sites
+don't use Speculation Rules yet, so there's nothing to flag. When
+the first Speculation-Rules-using surface lands (Forge `prerender`
+support is on the roadmap), this detector will be the gate.
+
+### Action items
+- [ ] HTTP fixture routes for each finding kind (mirror cycle 25
+      SRI: 5 problem cases + 2 controls = 7 routes).
+- [ ] Document-rules `where` predicate cross-origin detection
+      currently uses a regex heuristic on `href_matches`. A
+      future cycle could parse the URL-pattern spec properly
+      and catch more shapes.
+- [ ] When Forge ships speculationrules emission (likely in T12
+      dynamic frontend), add a dogfood entry verifying the
+      detector fires on a deliberate misuse fixture.
+
+---
+
 ## 2026-05-14 (twenty-fifth entry) — Subresource Integrity supply-chain detector
 
 ### What's new since last cycle (twenty-fourth entry)
