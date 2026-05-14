@@ -2617,7 +2617,23 @@ async function main(args: string[]): Promise<number> {
     writeFileSync(join(outDir, 'findings.txt'), renderAxeFindings(screenshotAxe));
   }
 
-  const prior = findPriorRun(runsDir, outDir, journey.name);
+  // T76 cycle 57: --no-baseline mode. Bypasses the prior-run
+  // comparison so EVERY current finding shows up in the diff as
+  // "new". Use case: deeper bug-finder mode where the operator
+  // wants the full extant bug list, not just deltas — useful
+  // when a baseline has frozen long-standing defects and a
+  // fresh audit is wanted.
+  const noBaseline = process.argv.includes('--no-baseline');
+  const prior = noBaseline
+    ? null
+    : findPriorRun(runsDir, outDir, journey.name);
+  if (noBaseline) {
+    log({
+      kind: 'console',
+      text: '[crawler] --no-baseline: ignoring prior-run baseline; reporting ALL extant findings as new',
+      level: 'info',
+    });
+  }
   const diff = diffReports(report, prior);
   writeFileSync(join(outDir, 'diff.json'), JSON.stringify(diff, null, 2));
 

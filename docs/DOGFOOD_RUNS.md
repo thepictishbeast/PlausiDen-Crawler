@@ -1033,6 +1033,100 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (fifty-sixth entry) — CSP defence-in-depth + --no-baseline mode
+
+### What's new since last cycle (fifty-fifth entry)
+- **Cross-repo fix in PlausiDen-Loom** (commit 9a8841e):
+  Hash-pinned CSP rolled out to the OTHER three admin pages
+  (index, tutorial, uploads). Cycle 54 covered /about (the
+  page with inline JS); cycle 56 brings parity to every page.
+- **New crawler flag — `--no-baseline`** (this commit): bypasses
+  the prior-run comparison and reports every current finding
+  as new. Use case: deeper bug-finder mode that surfaces
+  long-frozen defects the baseline has buried.
+- **Refactor: ADMIN_SKIP_LINK_CSS** lifted to a module-level
+  `pub(crate) const` in loom-cli so every admin page emits
+  identical skip-link CSS and the sha256 hash is stable.
+- **Score holds at A 100/100** (already perfect). Cycle 56 is
+  defence-in-depth — no visible score change, but future
+  accidental inline scripts are blocked by the strict CSP.
+- 19th cross-repo Loom commit + 3rd crawler enhancement since
+  cycle 38.
+
+### The CSP rollout
+Every admin page now ships:
+
+```html
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'self';
+  img-src 'self' data:;
+  style-src 'self' 'sha256-<skip>' 'sha256-<page>';
+  script-src 'self' [optional 'sha256-<js>'];
+  connect-src 'self';
+  frame-ancestors 'self';
+  base-uri 'self';
+  form-action 'self';
+">
+<meta http-equiv="X-Content-Type-Options" content="nosniff">
+<meta http-equiv="Referrer-Policy" content="no-referrer">
+```
+
+The skip-link CSS is now sourced from a SHARED module-level
+const, so the hash is the same across pages. Page-specific
+CSS lives in handler-local consts. Future inline content
+needs to be added as a new const + new hash in the policy —
+the type system catches drift at compile time.
+
+### The --no-baseline mode
+Running `npm run audit -- --journey X.json --no-baseline`:
+1. Skips `findPriorRun()` (forces `prior = null`)
+2. `diffReports(report, null)` populates every `new*` array
+   with ALL current findings, not just deltas
+3. The PASS/FAIL budget still applies but operates on the
+   full extant set
+4. Logs a clear info-level notice that no-baseline mode is active
+
+Tested on the Loom edit-serve audit: under --no-baseline the
+total extant finding count is **1** (the acknowledged cross-
+page-meta-description). Without the flag, that 1 finding is
+baseline-frozen and invisible. The flag confirms cycle 55+56
+work has genuinely cleared everything else.
+
+### Score arc (cycles 41-56)
+  C41 pre:  B 82, 19 strict, accessibility F=0.
+  C46:      B 85, 3 strict (F-clamp accessibility BREAKS).
+  C49:      B 87, 3 strict (skip-link works after detector fix).
+  C50:      B 89, 2 strict (accessibility F → C=70).
+  C51:      A 91, 1 strict (uxHygiene F=10 → F=35).
+  C52a:     A 90, 2 strict (uxHygiene → C=70, reliability bugs unmasked).
+  C52b:     A 93, 1 strict (reliability bugs fixed).
+  C53:      A 95, 0 strict (first clean run).
+  C54:      A 97, 0 strict (contentSecurity A=100).
+  C55:      A 100, 0 strict, 1 warn (perfect-score audit!).
+  C56:      A 100, 0 strict, 1 warn (CSP uniform across pages,
+                                     score unchanged but
+                                     attack surface tightened).
+
+### What's left (0 strict + 1 acknowledged warn)
+- 1× cross-page-meta-description warn (intentional shared
+  meta-description across admin pages, by design).
+
+### Cumulative cross-repo dogfood scoreboard (cycles 38-56)
+  19 cross-repo Loom commits + 1 Forge + 3 crawler enhancements.
+
+### Action items
+- [ ] Cycle 57: Trusted-Types runtime monitor detector
+      (Tier 3 advanced security — blocks DOM-XSS sinks).
+- [ ] Cycle 58: open same dogfood loop on PlausiDen-Forge's
+      static generated output (the skillshots-poc fixture).
+- [ ] Cycle 59: build a "supersociety badge" SVG export that
+      auto-publishes on every push, embeddable in README.
+- [ ] Cycle 60: add CSP `report-uri` + a tiny collector
+      endpoint in loom-cli so CSP violations get logged to
+      the operator (real attack telemetry).
+
+---
+
 ## 2026-05-14 (fifty-fifth entry) — Loom edit-serve hits PERFECT SCORE 100/100
 
 ### What's new since last cycle (fifty-fourth entry)
