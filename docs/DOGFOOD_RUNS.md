@@ -426,14 +426,82 @@ favicon axis).
 
 ### Action items
 
-- [ ] Wire a render phase into the Rust forge `build` command.
-      Currently you have to invoke `loom cms-render` per file
-      manually after a Loom or CMS edit. The Rust forge runs
-      every LINT phase but the bash forge.sh's per-page render
-      step wasn't ported. forge-phases/src/render.rs has the
-      logic via `loom_cms_render::page_shell_themed`; just needs
-      to be registered in forge-cli/src/main.rs's phase list.
+- [x] Wire a render phase into the Rust forge `build` command.
+      **DONE 2026-05-14** — see eighth entry below. The phase
+      already existed in forge-phases (T70b 2026-05-13); this
+      cycle registered it in forge-cli's pipeline AND added a
+      forge.toml `[render] write_canonical = true` opt-in so it
+      writes directly to `static/<slug>.html` (T70c). Backwards
+      compatible: default stays `_render/` per the original
+      doctrine.
 - [ ] Same as before: mixedContent detector + login-flow fixture.
+
+---
+
+## 2026-05-14 (eighth entry) — Forge render phase wired into build
+
+### What's new since last cycle (seventh entry)
+- `RenderPhase` now registered in forge-cli's phase list. Build
+  output now shows `== phase: render ==`.
+- New forge.toml `[render] write_canonical = true` opt-in flag
+  (closes T70c). When set, Forge writes rendered HTML directly
+  to `static/<slug>.html` instead of the sibling `static/_render/`.
+- `skillshots-poc/forge.toml` flipped to `write_canonical = true`.
+
+### What this fixes
+
+Every cycle that touched Loom (page_shell, render_form_field,
+DEFAULT_FAVICON_LINK, etc.) had to do this dance:
+
+1. cargo build --release -p loom-cli
+2. for f in cms/*.json: loom cms-render --input "$f" --out static/...
+3. forge build  (just to lint, since render didn't run)
+4. npm run audit
+
+Now it's just:
+
+1. cargo build --release -p loom-cli
+2. forge build  (renders + lints in one command)
+3. npm run audit
+
+The friction was real: it cost ~5 min per cycle of cargo
+rebuild + manual render loop, AND introduced silent staleness
+when the operator forgot a step.
+
+### How it stays safe
+
+`write_canonical = true` is OPT-IN per site. Default is `false`,
+preserving the original T70b behaviour of writing only to
+`_render/`. Sites with hand-edited `static/<slug>.html` content
+that isn't reflected in cms/*.json keep their existing flow.
+
+Forge.toml parsing is defence-in-depth: a typo'd or malformed
+forge.toml falls back to the safe default. 4 new tests pin
+the contract:
+- `render_writes_to_underscore_render_by_default`
+- `render_writes_to_static_when_write_canonical_true`
+- `render_falls_back_safely_on_malformed_forge_toml`
+- `render_write_canonical_false_or_missing_uses_underscore_render`
+
+### Verified end-to-end
+
+1. Edited `cms/leaderboard.json` description to a temp marker.
+2. Ran `forge build` — output included `phase_render generated 9 HTML page(s)`.
+3. `static/leaderboard.html` carried the marker. Confirmed.
+4. Restored real description, re-ran forge build.
+5. Re-audit: ALL 26 DETECTION AXES SILENT. Liveness gate
+   (31/31 routes) still PASS.
+
+### Action items
+
+- [ ] Re-run the audit on EVERY commit cycle to confirm the
+      render phase output stays in sync — the old manual
+      `loom cms-render` step is gone, but if the phase silently
+      fails (e.g. a broken cms/*.json after future schema
+      change), `static/` could go stale. Mitigation: render phase
+      already emits a STRICT finding on schema drift.
+- [ ] mixedContent detector still queued.
+- [ ] login-flow fixture still queued.
 
 ---
 
