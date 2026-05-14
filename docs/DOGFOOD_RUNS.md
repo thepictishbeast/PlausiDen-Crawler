@@ -1033,6 +1033,103 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (thirty-third entry) — score history + regression detection
+
+### What's new since last cycle (thirty-second entry)
+- 1 new MODULE: **`scoreHistory`** — persistent journey-scoped
+  trend tracking + regression detection for the cycle-32
+  Supersociety Score.
+- New file per audit: `runs/<journey>-score-history.jsonl`.
+  One JSON object per line; appendable + tail-friendly.
+- Console summary now prints a "Supersociety Score — vs prior
+  run" block with the headline (`improved` / `stable` /
+  `REGRESSION:`) plus a worst-first list of category-level
+  regressions.
+- 31 unit tests in `scoreHistory.test.ts`, all passing.
+- Active named-detector axis count UNCHANGED at 43 (46 with
+  legacy event kinds). This cycle compounds cycle 32, not a
+  new detector.
+
+### Why score history now
+Cycle 32 introduced the Supersociety Score. A single number
+is useful in isolation, but the operator's REAL question is:
+"Did this commit make it better or worse?". Without history,
+the operator has to manually compare two run dirs and squint
+at the JSON. With history, the regression report shows up
+right in the console summary every audit.
+
+### Storage shape
+- File: `runs/<journey-slug>-score-history.jsonl` (per-journey
+  isolation; different journeys have different baselines).
+- Format: JSONL — one JSON entry per line.
+- Each entry: timestamp + journey + composite + grade +
+  total strict/warn + per-category {score, grade, strict,
+  warn} + optional commit SHA.
+- Reader is tolerant: missing file → empty list; malformed
+  lines skipped silently.
+- No pruning yet — file is small (one entry ≈ 800 bytes).
+  Future maintenance pass could prune entries older than N
+  days; queued.
+
+### Regression policy
+Four triggers:
+  1. Composite drop ≥ 5 points
+  2. Category score drop ≥ 10 points
+  3. Category letter grade dropped (B → C, etc.)
+  4. New strict finding in any category
+
+Any one trigger flags `hasRegression = true`. The renderer
+sorts category regressions worst-first so the operator sees
+the biggest pain point first.
+
+### Optional commit SHA stamping
+The history entry can carry a `commit` field, populated from
+the `CRAWLER_COMMIT_SHA` env var. CI can set this from
+`$GIT_COMMIT` so regressions trace back to specific releases:
+
+```bash
+CRAWLER_COMMIT_SHA=$(git rev-parse HEAD) npm run audit
+```
+
+### Sample output (second SkillShots run, no changes)
+```
+=== Supersociety Score — vs prior run ===
+  Score stable at 97 (Δ0). No regressions.
+```
+
+### Sample output (hypothetical regression)
+```
+=== Supersociety Score — vs prior run ===
+  REGRESSION: composite 95→75 (-20, grade A→C),
+              2 category regression(s).
+
+  category regressions (worst first):
+    · transportSecurity: score 100→50 (-50), grade A→F, +2 strict
+    · contentSecurity:   score 95→80 (-15), grade A→B
+```
+
+### Verified
+- HTTP gate: 47/47 routes pass.
+- HTTPS gate: 60/60 routes pass.
+- SkillShots audit: ran twice; first run created history,
+  second showed `Score stable at 97 (Δ0). No regressions.`
+- 31 scoreHistory unit tests pass.
+
+### Action items
+- [ ] HTML report renderer that charts the
+      `score-history.jsonl` (composite over time +
+      per-category stacked bars).
+- [ ] Whitelist mechanism for baseline-frozen findings
+      (still queued from cycle 32).
+- [ ] CI integration sample — a `.github/workflows/audit.yml`
+      that runs the crawler on every PR + posts the
+      regression report as a PR comment.
+- [ ] Email/Slack notifier when grade drops by ≥1 letter
+      (still queued from cycle 32).
+- [ ] Trim policy (delete entries older than 90 days).
+
+---
+
 ## 2026-05-14 (thirty-second entry) — Supersociety Score meta-aggregator pivot
 
 ### What's new since last cycle (thirty-first entry)

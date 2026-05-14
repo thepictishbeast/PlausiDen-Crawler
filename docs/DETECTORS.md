@@ -8,6 +8,16 @@ Categories (with weight): `transportSecurity` (2.0) · `originIsolation` (2.0) �
 
 Letter grade thresholds: A ≥ 90, B ≥ 80, C ≥ 70, D ≥ 60, F < 60.
 
+### Score history (cycle 33)
+
+Every audit also appends to a journey-scoped trend file at `runs/<journey>-score-history.jsonl` (one JSON object per line). The crawler then diffs the new entry against the most-recent prior entry and renders a regression block in the console summary.
+
+Regression policy: composite drop ≥ 5 points OR category drop ≥ 10 points OR category-grade drop OR new strict findings in a category. Output is a multi-line block headed with either `Score improved` / `Score stable` / `REGRESSION:` and a worst-first list of category regressions. The history is per-journey so different journeys (e.g. `plausiden-smoke` vs `skillshots-poc`) have independent baselines.
+
+Optional `CRAWLER_COMMIT_SHA` env var stamps each entry with the commit, letting operators trace regressions back to a release.
+
+
+
 
 
 Authoritative catalog of every detector axis the crawler emits, with

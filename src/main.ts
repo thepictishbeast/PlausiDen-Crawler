@@ -64,6 +64,13 @@ import { buildVarySnapshot, detectVaryIssues, type VaryFinding } from './varyHea
 import { detectInlineScriptIssues, INLINE_SCRIPT_DOM_CAPTURE_JS, type InlineScriptFinding, type InlineScriptSnapshot } from './inlineScript.js';
 import { buildReportingEndpointsSnapshot, detectReportingEndpointsIssues, type ReportingEndpointsFinding } from './reportingEndpoints.js';
 import { calculateSupersocietyScore, renderSupersocietyScore } from './supersocietyScore.js';
+import {
+  buildScoreHistoryEntry,
+  readScoreHistory,
+  appendScoreHistoryEntry,
+  detectScoreRegression,
+  renderScoreRegression,
+} from './scoreHistory.js';
 
 interface Budget {
   newConsoleErrors: number;
@@ -2478,6 +2485,19 @@ async function main(args: string[]): Promise<number> {
     JSON.stringify(supersocietyScore, null, 2),
   );
 
+  // T76 cycle 33: persist the score into the journey-scoped
+  // history file (runs/<journey>-score-history.jsonl), then
+  // diff against the most-recent prior entry to detect
+  // regressions. The regression report ships in the console
+  // summary so operators see drops vs prior runs at a glance.
+  const scoreHistoryEntry = buildScoreHistoryEntry(supersocietyScore, {
+    journey: journey.name,
+    commit: process.env.CRAWLER_COMMIT_SHA,
+  });
+  const priorScoreHistory = readScoreHistory(runsDir, journey.name);
+  appendScoreHistoryEntry(runsDir, scoreHistoryEntry);
+  const scoreRegression = detectScoreRegression(scoreHistoryEntry, priorScoreHistory);
+
   // Per-screenshot WCAG findings (axe-core), separate from discover sweep
   // findings. Both files share the same `renderAxeFindings` shape so a
   // human can read either without learning a second format.
@@ -2586,6 +2606,7 @@ async function main(args: string[]): Promise<number> {
   console.log(`  csp violations:    ${report.counts.cspViolations}`);
   console.log(`  steps ok/failed:   ${report.counts.stepsOk}/${report.counts.stepsFailed}`);
   console.log(renderSupersocietyScore(supersocietyScore));
+  console.log(renderScoreRegression(scoreRegression));
   if (prior) {
     console.log(`  diff vs prior run (${prior.journey}):`);
     console.log(`    NEW console errors:   ${diff.newConsoleErrors.length}`);
