@@ -59,6 +59,7 @@ import { makeResponseHeaderCheck, type PerStepRecord } from './responseHeaderDet
 import { detectSriIssues, SRI_DOM_CAPTURE_JS, type SriFinding, type SriSnapshot } from './sri.js';
 import { buildInfoLeakSnapshot, detectInfoLeakIssues, type InfoLeakFinding } from './infoLeakHeaders.js';
 import { buildCorpSnapshot, detectCorpIssues, type CorpFinding } from './corp.js';
+import { buildCacheControlSnapshot, detectCacheControlIssues, type CacheControlFinding } from './cacheControl.js';
 
 interface Budget {
   newConsoleErrors: number;
@@ -1167,6 +1168,25 @@ async function main(args: string[]): Promise<number> {
   };
 
   /**
+   * T76 cycle 28: Cache-Control hygiene detector. Catches Web
+   * Cache Deception (Omer Gil 2017): a response that issues
+   * Set-Cookie + allows public caching can leak the session to
+   * the next visitor of the cached URL. Also flags missing
+   * header, invalid syntax, contradictory directives, and
+   * unrealistic max-age. Localhost exempt.
+   */
+  const cacheControlFindingsByStep: Array<PerStepRecord<CacheControlFinding>> = [];
+  const checkCacheControl = makeResponseHeaderCheck({
+    detectorName: 'cacheControl',
+    eventKind: 'cache-control',
+    page, topLevelResponseHeaders, disableLocalhostExemption,
+    findingsByStep: cacheControlFindingsByStep,
+    log,
+    buildSnapshot: buildCacheControlSnapshot,
+    detectIssues: detectCacheControlIssues,
+  });
+
+  /**
    * T76: info-leak headers detector. Opsec hygiene — flags
    * version-disclosure headers (Server, X-Powered-By,
    * X-AspNet-Version, X-AspNetMvc-Version, X-Runtime,
@@ -1964,6 +1984,7 @@ async function main(args: string[]): Promise<number> {
       await checkSri(step.label || `goto-${i}`);
       await checkInfoLeak(step.label || `goto-${i}`);
       await checkCorp(step.label || `goto-${i}`);
+      await checkCacheControl(step.label || `goto-${i}`);
       await checkWebVitals(step.label || `goto-${i}`);
     }
     // Memory snapshot at end of each step so the report shows heap growth
@@ -2116,6 +2137,8 @@ async function main(args: string[]): Promise<number> {
       infoLeakFindingsStrict: events.filter(e => e.kind === 'info-leak' && e.severity === 'strict').length,
       corpFindings: events.filter(e => e.kind === 'corp').length,
       corpFindingsStrict: events.filter(e => e.kind === 'corp' && e.severity === 'strict').length,
+      cacheControlFindings: events.filter(e => e.kind === 'cache-control').length,
+      cacheControlFindingsStrict: events.filter(e => e.kind === 'cache-control' && e.severity === 'strict').length,
       linkUnderlineFindings: events.filter(e => e.kind === 'link-underline').length,
       linkUnderlineFindingsStrict: events.filter(e => e.kind === 'link-underline' && e.severity === 'strict').length,
       crossPageTitleFindings: events.filter(e => e.kind === 'cross-page-title').length,
@@ -2309,6 +2332,12 @@ async function main(args: string[]): Promise<number> {
       JSON.stringify(corpFindingsByStep, null, 2),
     );
   }
+  if (cacheControlFindingsByStep.length > 0) {
+    writeFileSync(
+      join(outDir, 'cache-control.json'),
+      JSON.stringify(cacheControlFindingsByStep, null, 2),
+    );
+  }
   if (linkUnderlineFindingsByStep.length > 0) {
     writeFileSync(
       join(outDir, 'link-underline.json'),
@@ -2416,6 +2445,7 @@ async function main(args: string[]): Promise<number> {
   console.log(`  sri:               ${report.counts.sriFindings} (strict ${report.counts.sriFindingsStrict})`);
   console.log(`  info-leak headers: ${report.counts.infoLeakFindings} (strict ${report.counts.infoLeakFindingsStrict})`);
   console.log(`  corp:              ${report.counts.corpFindings} (strict ${report.counts.corpFindingsStrict})`);
+  console.log(`  cache-control:     ${report.counts.cacheControlFindings} (strict ${report.counts.cacheControlFindingsStrict})`);
   console.log(`  link underline:    ${report.counts.linkUnderlineFindings} (strict ${report.counts.linkUnderlineFindingsStrict})`);
   console.log(`  cross-page title:  ${report.counts.crossPageTitleFindings} (strict ${report.counts.crossPageTitleFindingsStrict})`);
   console.log(`  cross-page meta:   ${report.counts.crossPageMetaDescriptionFindings} (strict ${report.counts.crossPageMetaDescriptionFindingsStrict})`);
@@ -2515,6 +2545,9 @@ async function main(args: string[]): Promise<number> {
     const newCorpStrict = diff.newCorpFindings.filter(e => e.severity === 'strict').length;
     const newCorpWarn = diff.newCorpFindings.length - newCorpStrict;
     console.log(`    NEW corp:             ${diff.newCorpFindings.length} (strict ${newCorpStrict}, warn ${newCorpWarn})`);
+    const newCcStrict = diff.newCacheControlFindings.filter(e => e.severity === 'strict').length;
+    const newCcWarn = diff.newCacheControlFindings.length - newCcStrict;
+    console.log(`    NEW cache-control:    ${diff.newCacheControlFindings.length} (strict ${newCcStrict}, warn ${newCcWarn})`);
     const newLinkUnderlineStrict = diff.newLinkUnderlineFindings.filter(e => e.severity === 'strict').length;
     const newLinkUnderlineWarn = diff.newLinkUnderlineFindings.length - newLinkUnderlineStrict;
     console.log(`    NEW link underline:   ${diff.newLinkUnderlineFindings.length} (strict ${newLinkUnderlineStrict}, warn ${newLinkUnderlineWarn})`);

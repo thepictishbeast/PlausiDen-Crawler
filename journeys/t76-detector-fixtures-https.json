@@ -46,7 +46,14 @@
     { "kind": "goto", "url": "https://127.0.0.1:8773/info-leak-x-debug-token/", "label": "info-leak-x-debug-token" },
     { "kind": "goto", "url": "https://127.0.0.1:8773/info-leak-via/", "label": "info-leak-via" },
     { "kind": "goto", "url": "https://127.0.0.1:8773/info-leak-x-generator/", "label": "info-leak-x-generator" },
-    { "kind": "goto", "url": "https://127.0.0.1:8773/info-leak-clean/", "label": "info-leak-clean" }
+    { "kind": "goto", "url": "https://127.0.0.1:8773/info-leak-clean/", "label": "info-leak-clean" },
+    { "kind": "goto", "url": "https://127.0.0.1:8773/cache-control-missing/", "label": "cache-control-missing" },
+    { "kind": "goto", "url": "https://127.0.0.1:8773/cache-control-public-with-cookie/", "label": "cache-control-public-with-cookie" },
+    { "kind": "goto", "url": "https://127.0.0.1:8773/cache-control-no-private-with-cookie/", "label": "cache-control-no-private-with-cookie" },
+    { "kind": "goto", "url": "https://127.0.0.1:8773/cache-control-invalid/", "label": "cache-control-invalid" },
+    { "kind": "goto", "url": "https://127.0.0.1:8773/cache-control-unrealistic-maxage/", "label": "cache-control-unrealistic-maxage" },
+    { "kind": "goto", "url": "https://127.0.0.1:8773/cache-control-contradictory/", "label": "cache-control-contradictory" },
+    { "kind": "goto", "url": "https://127.0.0.1:8773/cache-control-clean/", "label": "cache-control-clean" }
   ],
   "expectedFindingsByLabel": {
     "control": [],
@@ -91,6 +98,13 @@
     "info-leak-x-debug-token": ["info-leak.x-debug-token"],
     "info-leak-via": ["info-leak.via"],
     "info-leak-x-generator": ["info-leak.x-generator"],
-    "info-leak-clean": []
+    "info-leak-clean": [],
+    "cache-control-missing": ["cache-control.missing"],
+    "cache-control-public-with-cookie": ["cache-control.public-with-cookie"],
+    "cache-control-no-private-with-cookie": ["cache-control.no-private-with-cookie"],
+    "cache-control-invalid": ["cache-control.invalid"],
+    "cache-control-unrealistic-maxage": ["cache-control.unrealistic-maxage"],
+    "cache-control-contradictory": ["cache-control.contradictory"],
+    "cache-control-clean": []
   }
 }

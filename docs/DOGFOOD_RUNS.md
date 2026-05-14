@@ -1033,6 +1033,115 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (twenty-eighth entry) — Cache-Control hygiene + Web Cache Deception catch
+
+### What's new since last cycle (twenty-seventh entry)
+- 1 new detector axis: **`cacheControl`** — Cache-Control
+  directive hygiene. Brings the active-axis count to **40**
+  (43 with the three legacy event kinds counted separately).
+  Six finding kinds, one strict + five warns.
+- 7 new HTTPS fixture routes (6 finding-specific + 1 clean
+  control). HTTPS gate now validates **50/50** routes (was
+  43/43).
+- DEFAULT_HEADERS Cache-Control simplified from
+  `'no-store, no-cache, must-revalidate, max-age=0'` (IE6-era
+  belt-and-braces, also a `cache-control.contradictory`
+  trigger under the new detector — no-store + max-age cancel)
+  to just `'no-store'`. Per RFC 9111 (which superseded
+  RFC 7234), `no-store` alone is the canonical "do not cache"
+  directive.
+- 18 unit tests in `cacheControl.test.ts`, all passing.
+- Tenth response-header detector wired through the cycle-24
+  helper. The detector reads both Cache-Control and Set-Cookie
+  from the same headers Map — set-cookie's VALUE isn't used
+  (just presence), so the helper's snapshot+classifier shape
+  applies cleanly.
+
+### Why cacheControl now
+The user's CLAUDE.md doctrine emphasises adversarial security
+and the "supersociety" stack. Web Cache Deception (Omer Gil,
+2017) is the canonical attack class this detector catches:
+
+  An attacker tricks an intermediate cache (CDN, reverse
+  proxy, kiosk browser) into storing a per-user personalised
+  response by appending a fake static-asset extension to the
+  URL: `/account/foo.css`. The origin server returns the
+  account page (path-routing typically ignores extensions).
+  If the response carries Set-Cookie but Cache-Control
+  allows shared caching, the next visitor to the cached URL
+  receives the previous user's session + personal data.
+
+The defence is a single Cache-Control directive — `no-store`
+forbids any cache from storing the response. The detector
+flags the EXACT symptom: response has Set-Cookie AND
+Cache-Control includes `public`, OR omits both `no-store` and
+`private`.
+
+This is the highest-leverage cache-related security control —
+real apps fail this all the time because the framework
+defaults haven't caught up to the attack.
+
+### Detector design
+Six findings, one strict, five warns:
+
+  - cache-control.missing                    warn
+  - cache-control.public-with-cookie         strict (cache deception!)
+  - cache-control.no-private-with-cookie     warn
+  - cache-control.invalid                    warn
+  - cache-control.unrealistic-maxage         warn
+  - cache-control.contradictory              warn
+
+The contradictory check catches four directive combinations
+that cancel each other:
+
+  - no-store + max-age (no-store wins, max-age is dead code)
+  - public + private (spec ambiguous; most honour 'private')
+  - no-cache + immutable (revalidate-always vs skip-revalidate)
+  - no-store + immutable (no-store forbids cache, immutable
+    assumes one)
+
+These are silent intent-leaks where the operator clearly
+wanted ONE behaviour but expressed BOTH.
+
+### DEFAULT_HEADERS Cache-Control modernisation
+The fixture had the old IE6-era belt-and-braces value
+(`no-store, no-cache, must-revalidate, max-age=0`). Under the
+new detector this is `cache-control.contradictory` because
+no-store and max-age cancel. Simplified to just `no-store`,
+which RFC 9111 says is sufficient. Saves bytes too.
+
+### Verified
+- HTTP gate: 43/43 routes pass (cache-control fires only on
+  the HTTPS fixture which has Set-Cookie semantics).
+- HTTPS gate: **50/50** routes pass (was 43/43; 7 new
+  cache-control routes).
+- SkillShots audit: 43 axes total, all silent vs prior. Site
+  on localhost so the exemption short-circuits — even though
+  Python's SimpleHTTPServer doesn't set Cache-Control at all
+  (which would normally fire `cache-control.missing`).
+
+### Action items
+- [ ] **End-to-end CORP fixture verification**: spin up a
+      second TLS listener on port 8774 (cross-origin by port-
+      difference rule) serving sub-resource bytes with various
+      CORP header values. Add gate routes that load those.
+      Validates the cross-origin detection path end-to-end.
+- [ ] CSP `report-only` header parser — pairs with existing
+      CSP detector. Single-value, helper applies.
+- [ ] Vary header completeness — single-value, helper applies.
+- [ ] Inline-script-without-nonce detector — second per-element
+      security audit, would re-open the perElementDetector
+      helper question.
+- [ ] Sub-resource Cache-Control audit — same shape as CORP
+      sub-resource walk. Could share a perSubResourceDetector
+      helper that emerges if a SECOND per-sub-resource detector
+      lands.
+- [ ] Server-Timing header — not info-leak per se but a
+      timing side-channel surface. Could fold into infoLeak as
+      a 9th finding kind.
+
+---
+
 ## 2026-05-14 (twenty-seventh entry) — CORP detector + sub-resource capture-layer expansion
 
 ### What's new since last cycle (twenty-sixth entry)

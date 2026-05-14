@@ -50,6 +50,7 @@ export interface CapturedEvent {
     | 'sri'
     | 'info-leak'
     | 'corp'
+    | 'cache-control'
     | 'link-underline'
     | 'cross-page-title'
     | 'cross-page-meta-description';
@@ -133,6 +134,8 @@ export interface Report {
     infoLeakFindingsStrict: number;
     corpFindings: number;
     corpFindingsStrict: number;
+    cacheControlFindings: number;
+    cacheControlFindingsStrict: number;
     linkUnderlineFindings: number;
     linkUnderlineFindingsStrict: number;
     crossPageTitleFindings: number;
@@ -386,6 +389,14 @@ export interface Diff {
    */
   newCorpFindings: CapturedEvent[];
   /**
+   * cache-control findings new in this run vs prior. Strict
+   * = Cache-Control 'public' on a Set-Cookie response (Web
+   * Cache Deception). Warn = missing / invalid /
+   * unrealistic-maxage / contradictory directives /
+   * Set-Cookie without no-store-or-private. T76 cycle 28.
+   */
+  newCacheControlFindings: CapturedEvent[];
+  /**
    * link-underline findings new in this run vs prior. Warn-only:
    * inline link inside running text distinguished only by colour.
    * WCAG 1.4.1 Level A. T76.
@@ -453,6 +464,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     newSriFindings: [],
     newInfoLeakFindings: [],
     newCorpFindings: [],
+    newCacheControlFindings: [],
     newLinkUnderlineFindings: [],
     newCrossPageTitleFindings: [],
     newCrossPageMetaDescriptionFindings: [],
@@ -498,6 +510,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     out.newSriFindings = current.events.filter(e => e.kind === 'sri');
     out.newInfoLeakFindings = current.events.filter(e => e.kind === 'info-leak');
     out.newCorpFindings = current.events.filter(e => e.kind === 'corp');
+    out.newCacheControlFindings = current.events.filter(e => e.kind === 'cache-control');
     out.newLinkUnderlineFindings = current.events.filter(e => e.kind === 'link-underline');
     out.newCrossPageTitleFindings = current.events.filter(e => e.kind === 'cross-page-title');
     out.newCrossPageMetaDescriptionFindings = current.events.filter(e => e.kind === 'cross-page-meta-description');
@@ -544,6 +557,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     else if (e.kind === 'sri') out.newSriFindings.push(e);
     else if (e.kind === 'info-leak') out.newInfoLeakFindings.push(e);
     else if (e.kind === 'corp') out.newCorpFindings.push(e);
+    else if (e.kind === 'cache-control') out.newCacheControlFindings.push(e);
     else if (e.kind === 'link-underline') out.newLinkUnderlineFindings.push(e);
     else if (e.kind === 'cross-page-title') out.newCrossPageTitleFindings.push(e);
     else if (e.kind === 'cross-page-meta-description') out.newCrossPageMetaDescriptionFindings.push(e);
@@ -863,6 +877,18 @@ export function renderPositiveSignal(report: Report, diff: Diff): string {
       total: report.events.filter((e) => e.kind === 'corp').length,
       news: diff.newCorpFindings.length,
       strictNews: strict(diff.newCorpFindings),
+    },
+    {
+      // T76 cycle 28 (Crawler): cache-control — directive
+      // hygiene audit. Strict on Web Cache Deception risk
+      // (public + Set-Cookie). Warn on missing / invalid /
+      // unrealistic max-age / contradictory directives /
+      // Set-Cookie without no-store-or-private. Localhost
+      // exempt.
+      name: 'cacheControl',
+      total: report.events.filter((e) => e.kind === 'cache-control').length,
+      news: diff.newCacheControlFindings.length,
+      strictNews: strict(diff.newCacheControlFindings),
     },
     {
       // T76 (Crawler): link-underline — WCAG 1.4.1 (Use of Color, A).

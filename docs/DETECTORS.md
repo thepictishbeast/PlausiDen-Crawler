@@ -225,6 +225,22 @@ Multi-token policies are honored per the W3C spec — the LAST recognised token 
 
 **Third response-header detector.** Reads from the same `topLevelResponseHeaders` Map as hsts + xFrameOptions. With three concrete examples now in hand, the ~70% structural overlap is a candidate for a generic `headerDetector(headerName, parser, classifier)` helper — extract on the next addition.
 
+### `cacheControl` — Cache-Control directive hygiene audit *(T76 cycle 28 — added 2026-05-14)*
+Source: `src/cacheControl.ts`
+
+| Finding | Sev | Catches |
+|---|---|---|
+| `cache-control.missing` | warn | No `Cache-Control` header at all. Browsers / proxies fall back to RFC 7234 heuristic freshness — unpredictable across implementations. |
+| `cache-control.public-with-cookie` | strict | Response carries Set-Cookie AND `Cache-Control: public`. **Web Cache Deception** (Omer Gil 2017) — an intermediate cache (CDN, reverse proxy, kiosk browser) can store the response keyed by URL and serve it WITH THE ORIGINAL Set-Cookie to the next visitor. |
+| `cache-control.no-private-with-cookie` | warn | Response carries Set-Cookie AND Cache-Control omits both `no-store` and `private`. Sufficiently permissive proxies may store and serve the response cross-user. |
+| `cache-control.invalid` | warn | Header value couldn't be parsed into any directive (or `max-age` is non-numeric). Browsers fall back to no-Cache-Control semantics. |
+| `cache-control.unrealistic-maxage` | warn | `max-age` greater than 31536000 (1 year). RFC 7234 §5.2.1.1: caches SHOULD treat values greater than 1 year as 1 year. |
+| `cache-control.contradictory` | warn | Directive set contains contradictions: `no-store` + `max-age` (no-store wins, max-age dead); `public` + `private` (spec ambiguous); `no-cache` + `immutable` (cancel each other); `no-store` + `immutable`. |
+
+Out of scope: `Pragma: no-cache` (legacy HTTP/1.0 fallback); `Expires` header (superseded by max-age); per-resource Cache-Control on sub-resources (future detector); localhost.
+
+**Tenth response-header detector.** Uses the cycle-24 `responseHeaderDetector` helper for wiring. The detector reads BOTH `Cache-Control` and `Set-Cookie` from the same headers Map — set-cookie's value isn't used (just presence), so the helper's snapshot+classifier shape applies cleanly.
+
 ### `corp` — Cross-Origin-Resource-Policy per-sub-resource audit *(T76 cycle 27 — added 2026-05-14)*
 Source: `src/corp.ts`
 

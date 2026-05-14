@@ -145,7 +145,14 @@ DEFAULT_HEADERS = {
     'Cross-Origin-Opener-Policy': 'same-origin',
     'Cross-Origin-Embedder-Policy': 'require-corp',
     'Content-Type': 'text/html; charset=utf-8',
-    'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+    # Cache-Control: 'no-store' alone (without 'no-cache' or
+    # 'max-age=0') is the canonical "do not cache" directive
+    # since RFC 9111 superseded RFC 7234. The previous combo
+    # value (no-store, no-cache, must-revalidate, max-age=0)
+    # was historical IE6-era boilerplate; it's also a
+    # cache-control.contradictory finding under the cycle-28
+    # detector (no-store + max-age cancel).
+    'Cache-Control': 'no-store',
 }
 
 
@@ -295,6 +302,69 @@ def csp_clean():
         page('<h1>CSP hardened — clean baseline.</h1>'),
         {'Content-Security-Policy': _CSP_HARDENED},
     )
+
+
+# ----- Cache-Control hygiene -----
+@route('/cache-control-missing/')
+def cache_control_missing():
+    return (
+        page('<h1>No Cache-Control header.</h1>'),
+        {'Cache-Control': None},
+    )
+
+
+@route('/cache-control-public-with-cookie/')
+def cache_control_public_with_cookie():
+    # Strict — Web Cache Deception risk.
+    return (
+        page('<h1>Cache-Control public + Set-Cookie.</h1>'),
+        {
+            'Cache-Control': 'public, max-age=3600',
+            'Set-Cookie': 'sid=abc; Secure; HttpOnly; SameSite=Strict',
+        },
+    )
+
+
+@route('/cache-control-no-private-with-cookie/')
+def cache_control_no_private_with_cookie():
+    # Warn — Set-Cookie + neither no-store nor private.
+    return (
+        page('<h1>Cache-Control max-age + Set-Cookie, no private.</h1>'),
+        {
+            'Cache-Control': 'max-age=600',
+            'Set-Cookie': 'sid=abc; Secure; HttpOnly; SameSite=Strict',
+        },
+    )
+
+
+@route('/cache-control-invalid/')
+def cache_control_invalid():
+    return (
+        page('<h1>Cache-Control garbage value.</h1>'),
+        {'Cache-Control': '   ,   ,   '},
+    )
+
+
+@route('/cache-control-unrealistic-maxage/')
+def cache_control_unrealistic_maxage():
+    return (
+        page('<h1>Cache-Control max-age > 1 year.</h1>'),
+        {'Cache-Control': 'public, max-age=99999999'},
+    )
+
+
+@route('/cache-control-contradictory/')
+def cache_control_contradictory():
+    return (
+        page('<h1>Cache-Control no-store + max-age (contradictory).</h1>'),
+        {'Cache-Control': 'no-store, max-age=60'},
+    )
+
+
+@route('/cache-control-clean/')
+def cache_control_clean():
+    # Default no-store from DEFAULT_HEADERS — passes cleanly.
+    return page('<h1>Cache-Control clean — no-store.</h1>'), {}
 
 
 # ----- Info-leak headers (opsec hygiene) -----
