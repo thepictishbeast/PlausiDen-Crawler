@@ -45,7 +45,17 @@ The operator can declare accepted-risk findings in a per-journey whitelist file 
 
 Match semantics: `kind` must match (exact, case-sensitive). `ruleId` if present must match; if absent, all ruleIds of that kind match (wildcard). `until` if present must be in the future (ISO 8601 date or datetime); expired entries DON'T match and surface in an "EXPIRED" section for renewal. The console summary additionally surfaces entries that didn't match any finding so the operator knows to remove stale entries.
 
-The crawler writes `whitelist.json` alongside the report (kept count, suppressed list, expired list, unused list) for the audit trail. The HTML report's "Accepted risks" section (queued) will surface this visually.
+The crawler writes `whitelist.json` alongside the report (kept count, suppressed list, expired list, unused list) for the audit trail. The HTML report's "Accepted risks" section (cycle 36) surfaces all three lists visually: suppressed entries grouped by their matching whitelist entry, expired entries that need renewal, and unused entries the operator should remove.
+
+### Supersociety badge (cycle 36)
+
+Every audit also writes a 140×20 px SVG badge at `runs/<run-dir>/supersociety-badge.svg` — shields.io-style, color-coded by grade. Embed in any PlausiDen repo's README via:
+
+```markdown
+![Supersociety](path/to/supersociety-badge.svg)
+```
+
+Zero external resources, zero JS, zero dependencies. A11y label exposes `Supersociety Score: grade A, 97 out of 100` to screen readers. HTML-escaped against XSS. Renders inline in GitHub markdown when committed to the repo.
 
 
 

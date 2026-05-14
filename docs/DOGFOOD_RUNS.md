@@ -1033,6 +1033,94 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (thirty-sixth entry) — HTML Accepted Risks section + supersocietyBadge
+
+### What's new since last cycle (thirty-fifth entry)
+- 1 new SECTION in `htmlReport.ts`: **"Accepted risks
+  (whitelist)"** — surfaces the cycle-35 whitelist visually
+  in the dashboard. Three sub-tables: suppressed (grouped by
+  matching entry, with count + reason + until), expired
+  (renewal needed, score deduction has resumed), unused
+  (operator should remove stale entries).
+- 1 new MODULE: **`supersocietyBadge`** — shields.io-style
+  140×20 px SVG badge at `runs/<run-dir>/supersociety-badge.svg`.
+  Embeddable in any PlausiDen repo's README via
+  `![Supersociety](path/to/supersociety-badge.svg)`.
+- 20 unit tests in `supersocietyBadge.test.ts`, all passing.
+- All 21 htmlReport unit tests still pass after the schema
+  change (optional `whitelist` field).
+- Active named-detector axis count UNCHANGED at 43. Fifth
+  consecutive UX-meta cycle (32 score + 33 trend + 34 HTML +
+  35 whitelist + 36 dashboard-completeness + badge).
+
+### Two compounding wins
+**HTML Accepted Risks section** compounds cycle 35 by closing
+the transparency loop. Without it, the dashboard hid what was
+suppressed; reviewers had to read `whitelist.json` separately
+to see what risks were accepted. Now the dashboard shows:
+
+  - Suppressed table: kind / ruleId / count / until / reason
+    — one row per whitelist entry, count of suppressed
+    findings, plus the operator's stated reason.
+  - Expired table: amber warning that score deduction has
+    RESUMED for these entries.
+  - Unused table: amber warning that these entries didn't
+    match any finding (likely stale).
+
+The two amber sub-tables only render when their respective
+lists are non-empty, so a clean run has just one section.
+
+**Supersociety badge** is a shields.io-style 140×20 px SVG
+that operators embed in their repo README. Renders the
+composite + grade in the right pill, "supersociety" label in
+the left pill, color-coded by grade (A=emerald, B=lime,
+C=amber, D=orange, F=red). aria-label exposes the meaningful
+description for screen readers.
+
+This is the moment the supersociety brand becomes VISIBLE in
+the ecosystem. A user browsing PlausiDen-Loom on GitHub sees
+the badge in the README and immediately knows the project's
+current grade.
+
+### Tomorrow-tech detail in the badge
+The badge follows the same supersociety frontend stack as the
+HTML report:
+
+  - Single SVG file. No external CSS, JS, images.
+  - Zero supply-chain attack surface (no shields.io fetch).
+  - Renders inline in GitHub markdown.
+  - aria-label + <title> for screen readers.
+  - HTML-escaped against XSS (test 9 passes a malicious grade
+    `<script>alert(1)</script>` and confirms it gets escaped).
+  - Grade-to-color via lookup table — unknown grade falls
+    back to muted colour rather than blowing up.
+  - Subtle top-gradient mimics canonical shields.io look
+    without depending on shields.io.
+
+### Verified
+- HTTP gate: 47/47 routes pass.
+- HTTPS gate: 60/60 routes pass.
+- SkillShots audit: Grade A 100/100. Badge written; HTML
+  Accepted Risks section renders with the 7 tap-targets
+  suppressed under one row.
+- 20 supersocietyBadge unit tests pass.
+- 21 htmlReport unit tests still pass (whitelist field is
+  optional — old test fixtures keep working unchanged).
+
+### Action items
+- [ ] CI integration sample `.github/workflows/audit.yml`
+      that posts the HTML report + badge as PR artefacts.
+- [ ] Email/Slack notifier on grade drop (still queued
+      from cycle 32, five cycles in arrears).
+- [ ] Trim policy for old score-history.jsonl entries.
+- [ ] Optional dark/light toggle in HTML report.
+- [ ] Multi-journey aggregate dashboard.
+- [ ] Embed the SkillShots badge in actual PlausiDen-Loom
+      and PlausiDen-Forge READMEs so the user sees the
+      score in their daily ecosystem browsing.
+
+---
+
 ## 2026-05-14 (thirty-fifth entry) — whitelist for baseline-frozen findings → SkillShots A=100
 
 ### What's new since last cycle (thirty-fourth entry)

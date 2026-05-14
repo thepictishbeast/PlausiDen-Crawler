@@ -73,6 +73,7 @@ import {
 } from './scoreHistory.js';
 import { renderHtmlReport } from './htmlReport.js';
 import { readWhitelist, applyWhitelist, renderWhitelistSummary } from './scoreWhitelist.js';
+import { renderSupersocietyBadge } from './supersocietyBadge.js';
 
 interface Budget {
   newConsoleErrors: number;
@@ -2540,8 +2541,17 @@ async function main(args: string[]): Promise<number> {
     journey: journey.name,
     timestamp: scoreHistoryEntry.timestamp,
     commit: scoreHistoryEntry.commit,
+    whitelist: whitelistResult,
   });
   writeFileSync(join(outDir, 'supersociety-report.html'), htmlReport);
+
+  // T76 cycle 36: shields.io-style SVG badge for README embeds.
+  // Operators put `![Supersociety](.../supersociety-badge.svg)` in
+  // their repo README and see the live grade at a glance.
+  writeFileSync(
+    join(outDir, 'supersociety-badge.svg'),
+    renderSupersocietyBadge(supersocietyScore),
+  );
 
   // Per-screenshot WCAG findings (axe-core), separate from discover sweep
   // findings. Both files share the same `renderAxeFindings` shape so a

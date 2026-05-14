@@ -57,6 +57,7 @@ import type {
   ScoreRegression,
   CategoryRegression,
 } from './scoreHistory.js';
+import type { WhitelistApplyResult, WhitelistedFinding, WhitelistEntry } from './scoreWhitelist.js';
 
 export interface HtmlReportInputs {
   score: SupersocietyScore;
@@ -65,6 +66,10 @@ export interface HtmlReportInputs {
   journey: string;
   timestamp: string;
   commit?: string;
+  /** Whitelist apply result — optional; renders an "Accepted
+   *  risks" section when provided so reviewers can see what
+   *  was suppressed from the score. */
+  whitelist?: WhitelistApplyResult;
 }
 
 // ----- HTML escaping -----
@@ -276,6 +281,97 @@ function renderRegressionSection(r: ScoreRegression): string {
 </div>`;
 }
 
+function renderAcceptedRisks(w: WhitelistApplyResult | undefined): string {
+  if (!w) return '';
+  if (w.whitelisted.length === 0 && w.expired.length === 0 && w.unused.length === 0) {
+    return '';
+  }
+
+  // Bucket whitelisted findings by matchedEntry for clean
+  // display — one row per whitelist entry with the count of
+  // suppressed findings.
+  const bucketsMap = new Map<WhitelistEntry, WhitelistedFinding[]>();
+  for (const wf of w.whitelisted) {
+    const arr = bucketsMap.get(wf.matchedEntry) ?? [];
+    arr.push(wf);
+    bucketsMap.set(wf.matchedEntry, arr);
+  }
+
+  const suppressedRows: string[] = [];
+  for (const [entry, items] of bucketsMap.entries()) {
+    const ruleId = entry.ruleId === undefined ? '* (wildcard)' : esc(entry.ruleId);
+    const until = entry.until ? esc(entry.until) : 'no expiry';
+    const reason = entry.reason ? esc(entry.reason) : '<em>no reason given</em>';
+    suppressedRows.push(`<tr>
+    <td><code>${esc(entry.kind)}</code></td>
+    <td><code>${ruleId}</code></td>
+    <td class="num">${items.length}</td>
+    <td>${until}</td>
+    <td class="reason">${reason}</td>
+  </tr>`);
+  }
+
+  const expiredRows = w.expired
+    .map((e) => `<tr class="expired">
+    <td><code>${esc(e.kind)}</code></td>
+    <td><code>${e.ruleId === undefined ? '* (wildcard)' : esc(e.ruleId)}</code></td>
+    <td>${e.until ? esc(e.until) : '?'}</td>
+    <td class="reason">${e.reason ? esc(e.reason) : '<em>no reason given</em>'}</td>
+  </tr>`)
+    .join('\n  ');
+
+  const unusedRows = w.unused
+    .map((e) => `<tr class="unused">
+    <td><code>${esc(e.kind)}</code></td>
+    <td><code>${e.ruleId === undefined ? '* (wildcard)' : esc(e.ruleId)}</code></td>
+    <td class="reason">${e.reason ? esc(e.reason) : '<em>no reason given</em>'}</td>
+  </tr>`)
+    .join('\n  ');
+
+  const parts: string[] = [];
+  parts.push('<section class="accepted-risks">');
+  parts.push('<h2>Accepted risks (whitelist)</h2>');
+
+  if (suppressedRows.length > 0) {
+    parts.push(`<p class="ar-blurb">${w.whitelisted.length} finding(s) suppressed from the score. They remain in the event stream for audit.</p>`);
+    parts.push(`<table class="findings ar-suppressed">
+  <thead>
+    <tr><th>kind</th><th>ruleId</th><th>matched</th><th>until</th><th>reason</th></tr>
+  </thead>
+  <tbody>
+  ${suppressedRows.join('\n  ')}
+  </tbody>
+</table>`);
+  }
+
+  if (expiredRows) {
+    parts.push(`<p class="ar-blurb ar-warn">⚠ ${w.expired.length} entry/entries are past their <code>until</code> date. Score deduction has RESUMED — renew or remove.</p>`);
+    parts.push(`<table class="findings ar-expired">
+  <thead>
+    <tr><th>kind</th><th>ruleId</th><th>until (expired)</th><th>reason</th></tr>
+  </thead>
+  <tbody>
+  ${expiredRows}
+  </tbody>
+</table>`);
+  }
+
+  if (unusedRows) {
+    parts.push(`<p class="ar-blurb ar-warn">⚠ ${w.unused.length} active entry/entries didn't match any finding this run. Remove if no longer needed.</p>`);
+    parts.push(`<table class="findings ar-unused">
+  <thead>
+    <tr><th>kind</th><th>ruleId</th><th>reason</th></tr>
+  </thead>
+  <tbody>
+  ${unusedRows}
+  </tbody>
+</table>`);
+  }
+
+  parts.push('</section>');
+  return parts.join('\n');
+}
+
 function renderFindingTable(categories: SupersocietyCategoryScore[]): string {
   const rows = categories
     .filter((c) => c.strict > 0 || c.warn > 0)
@@ -310,6 +406,7 @@ export function renderHtmlReport(inputs: HtmlReportInputs): string {
   const categoryBars = renderCategoryBars(score.categories);
   const regressionSection = renderRegressionSection(regression);
   const findingTable = renderFindingTable(score.categories);
+  const acceptedRisksSection = renderAcceptedRisks(inputs.whitelist);
 
   return `<!doctype html>
 <html lang="en">
@@ -445,6 +542,34 @@ export function renderHtmlReport(inputs: HtmlReportInputs): string {
     color: var(--text-muted);
     font-style: italic;
   }
+  section.accepted-risks h2 {
+    margin-bottom: 12px;
+  }
+  .ar-blurb {
+    color: var(--text-muted);
+    font-size: 13px;
+    margin: 12px 0;
+  }
+  .ar-blurb.ar-warn {
+    color: ${PALETTE.warn};
+  }
+  table.ar-suppressed code,
+  table.ar-expired code,
+  table.ar-unused code {
+    background: rgba(255,255,255,0.05);
+    padding: 2px 5px;
+    border-radius: 3px;
+    font-family: ui-monospace, monospace;
+    font-size: 12px;
+  }
+  td.reason {
+    color: var(--text-muted);
+    font-size: 12px;
+    max-width: 300px;
+  }
+  tr.expired td, tr.unused td {
+    opacity: 0.7;
+  }
   footer {
     margin-top: 48px;
     padding-top: 24px;
@@ -489,6 +614,8 @@ export function renderHtmlReport(inputs: HtmlReportInputs): string {
     <h2>Findings by category</h2>
     ${findingTable}
   </section>
+
+  ${acceptedRisksSection}
 
   <footer>
     <code>${esc(journey)}</code> · <code>${esc(timestamp)}</code>${commit ? ` · <code>${esc(commit)}</code>` : ''}
