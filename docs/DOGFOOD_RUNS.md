@@ -1033,6 +1033,98 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (sixty-third entry) — CSP / Reporting-API collector closes the loop
+
+### What's new since last cycle (sixty-second entry)
+- **Cross-repo fix in PlausiDen-Loom** (commit f187c9f): two
+  new POST endpoints on `loom edit-serve` — `/csp-report`
+  (legacy) and `/reports` (modern Reporting-API) — handle
+  browser-sent security reports and write them to a JSONL log
+  at `<cms_root>/../reports/violations.jsonl`. Both return 204
+  No Content per spec; bodies capped at 64 KiB.
+- **`Reporting-Endpoints` + legacy `Report-To` headers** emitted
+  on every admin response in respond_html.
+- **`report-to default` directive** added to all four admin-page
+  CSPs (index, tutorial, uploads, /about edit-form) so Chrome
+  routes violations to the new collector.
+- 25th cross-repo Loom commit since cycle 38.
+- Aggregate badge: holds at A 100/100 (15).
+
+### Why this matters
+The supersociety security stack now closes the loop:
+
+```
+detect (CSP / Trusted-Types / Document-Policy directives)
+  ↓
+enforce (browser blocks the violation)
+  ↓
+REPORT (Reporting-API POSTs to /reports)
+  ↓
+COLLECT (this cycle: handle_security_report writes JSONL)
+  ↓
+review (operator reads violations.jsonl)
+```
+
+Before today, the report half of that loop fired into
+/dev/null — the policies were active but no observability.
+Now every browser-enforced violation lands in a persistent
+log the operator can grep.
+
+### Smoke test (curl manual fixture)
+```bash
+$ curl -sw "HTTP %{http_code}\n" -X POST http://127.0.0.1:8154/csp-report \
+    -H "Content-Type: application/csp-report" \
+    --data '{"csp-report":{"document-uri":"https://example.com/",...}}'
+HTTP 204
+
+$ tail -1 /tmp/loom-edit-fixture/reports/violations.jsonl
+{"ts":1778773228,"endpoint":"csp-report","content_type":"application/csp-report",
+ "body":"{\"csp-report\":{\"document-uri\":\"https://example.com/\",
+ \"violated-directive\":\"script-src\",\"blocked-uri\":\"https://evil.example.org/x.js\"}}"}
+```
+
+Same flow works for `application/reports+json` POSTs to `/reports`.
+
+### Header verification
+```
+$ curl -sD - http://127.0.0.1:8154/ -o /dev/null
+HTTP/1.1 200 OK
+...
+Reporting-Endpoints: default="/reports"
+Report-To: {"group":"default","max_age":10886400,"endpoints":[{"url":"/reports"}]}
+Document-Policy: force-load-at-top
+X-Content-Type-Options: nosniff
+Cross-Origin-Opener-Policy: same-origin
+Cross-Origin-Resource-Policy: same-origin
+Origin-Agent-Cluster: ?1
+```
+
+The full defense-in-depth response-header stack: 7 security
+headers + Content-Type. The CSP meta then layers on top.
+
+### Score arc (cycles 41-63)
+  C62: aggregate A 100/100 (15) — first full-matrix supersociety.
+  C63: **aggregate A 100/100 (15)** — holds; now with closed
+       observability loop for production violations.
+
+### Cumulative cross-repo dogfood scoreboard (cycles 38-63)
+  25 Loom commits + 3 Forge commits + 6 crawler enhancements.
+
+### Action items
+- [ ] Cycle 64: build a Crawler detector that asserts ALL
+      security headers (Reporting-Endpoints + Report-To +
+      report-to directive) are present and consistent — closes
+      the audit side of the loop.
+- [ ] Cycle 65: extend dogfood to PlausiDen-Atrium and
+      PlausiDen-Sentinel-GUI.
+- [ ] Cycle 66: cargo-mutants run on supersocietyScore module —
+      Tier 6 meta-validation.
+- [ ] Cycle 67: build a small TUI viewer for violations.jsonl
+      so operators can browse reports without spelunking the
+      raw log.
+
+---
+
 ## 2026-05-14 (sixty-second entry) — Aggregate A 100/100 (15) — first full-matrix supersociety
 
 ### What's new since last cycle (sixty-first entry)
