@@ -1033,6 +1033,93 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (twenty-ninth entry) — Vary correctness — completes the cache-poisoning surface
+
+### What's new since last cycle (twenty-eighth entry)
+- 1 new detector axis: **`vary`** — Vary header correctness.
+  Brings the active-axis count to **41** (44 with the three
+  legacy event kinds counted separately). Four finding kinds,
+  all warn.
+- 5 new HTTPS fixture routes (4 finding-specific + 1 clean
+  control). HTTPS gate now validates **55/55** routes (was
+  50/50).
+- 17 unit tests in `varyHeader.test.ts`, all passing.
+- Eleventh response-header detector wired through the cycle-24
+  helper.
+
+### Why vary now — completing the cache-poisoning surface
+The cache-poisoning attack surface has TWO parts:
+  - "is this response cacheable at all?" — cycle 28's
+    cacheControl detector covers this.
+  - "if it IS cached, is the cache key correct?" — this
+    cycle's vary detector covers it.
+
+Sister findings fire together when both defences are missing,
+which is correct — defence in depth. cacheControl says "you're
+allowing shared caching of a cookie response — bad." vary says
+"and even if you fix that, the cache key doesn't include the
+cookie — also bad." Both must be fixed.
+
+### Threat model
+An attacker visits a victim site, gets a response with their
+account data cached by a shared CDN / corporate proxy / kiosk
+browser. The next visitor (or any cross-user request through
+the same cache) gets served the attacker's response —
+including any Set-Cookie + personal data baked into the body.
+
+Defence: cache key MUST include the request's Cookie header,
+declared via `Vary: Cookie`. Without it, the cache stores the
+response keyed by URL alone.
+
+### Detector design
+Four findings, all warn:
+
+  - vary.no-cookie-with-set-cookie-and-cacheable
+    The main one. Set-Cookie + cacheable + Vary doesn't
+    include 'cookie' (or wildcard '*').
+  - vary.star
+    Vary: * is rarely intentional. Cache-Control: no-store is
+    more intent-revealing.
+  - vary.invalid
+    Vary tokens not matching RFC 7230 token grammar.
+  - vary.duplicate-tokens
+    Same token appears more than once (case-insensitive).
+
+The detector reads BOTH Vary and Cache-Control AND Set-Cookie
+from the same headers Map. The cacheable check short-circuits
+when Cache-Control declares no-store or private (response
+won't be cached, so Vary is moot).
+
+### Verified
+- HTTP gate: 43/43 routes pass.
+- HTTPS gate: **55/55** routes pass (was 50/50; 5 new vary
+  routes).
+- SkillShots audit: 44 axes total, all silent vs prior. Site
+  on localhost so the exemption short-circuits — though the
+  Python SimpleHTTPServer doesn't set Vary at all, which
+  would normally fire if SkillShots set Set-Cookie. (It
+  doesn't; static site.)
+
+### Action items
+- [ ] **End-to-end CORP fixture verification**: spin up a
+      second TLS listener on port 8774 (cross-origin by port-
+      difference rule). Still queued from cycle 27.
+- [ ] CSP `report-only` header parser — pairs with existing
+      CSP detector. Single-value, helper applies.
+- [ ] Inline-script-without-nonce detector — second per-element
+      security audit, would re-open the perElementDetector
+      helper question.
+- [ ] Sub-resource Cache-Control + Vary audit — same shape as
+      CORP sub-resource walk. Could share a perSubResource-
+      Detector helper.
+- [ ] Server-Timing header — fold into infoLeak as 9th
+      finding kind.
+- [ ] Authorization Vary check — if response has WWW-
+      Authenticate, Vary should include 'authorization'.
+      Add as 5th finding kind to varyHeader detector.
+
+---
+
 ## 2026-05-14 (twenty-eighth entry) — Cache-Control hygiene + Web Cache Deception catch
 
 ### What's new since last cycle (twenty-seventh entry)

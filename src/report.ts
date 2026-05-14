@@ -51,6 +51,7 @@ export interface CapturedEvent {
     | 'info-leak'
     | 'corp'
     | 'cache-control'
+    | 'vary'
     | 'link-underline'
     | 'cross-page-title'
     | 'cross-page-meta-description';
@@ -136,6 +137,8 @@ export interface Report {
     corpFindingsStrict: number;
     cacheControlFindings: number;
     cacheControlFindingsStrict: number;
+    varyFindings: number;
+    varyFindingsStrict: number;
     linkUnderlineFindings: number;
     linkUnderlineFindingsStrict: number;
     crossPageTitleFindings: number;
@@ -397,6 +400,13 @@ export interface Diff {
    */
   newCacheControlFindings: CapturedEvent[];
   /**
+   * vary findings new in this run vs prior. All warn —
+   * sister to cacheControl. Set-Cookie + cacheable + Vary
+   * doesn't include 'cookie' / 'vary: *' / invalid /
+   * duplicate tokens. T76 cycle 29.
+   */
+  newVaryFindings: CapturedEvent[];
+  /**
    * link-underline findings new in this run vs prior. Warn-only:
    * inline link inside running text distinguished only by colour.
    * WCAG 1.4.1 Level A. T76.
@@ -465,6 +475,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     newInfoLeakFindings: [],
     newCorpFindings: [],
     newCacheControlFindings: [],
+    newVaryFindings: [],
     newLinkUnderlineFindings: [],
     newCrossPageTitleFindings: [],
     newCrossPageMetaDescriptionFindings: [],
@@ -511,6 +522,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     out.newInfoLeakFindings = current.events.filter(e => e.kind === 'info-leak');
     out.newCorpFindings = current.events.filter(e => e.kind === 'corp');
     out.newCacheControlFindings = current.events.filter(e => e.kind === 'cache-control');
+    out.newVaryFindings = current.events.filter(e => e.kind === 'vary');
     out.newLinkUnderlineFindings = current.events.filter(e => e.kind === 'link-underline');
     out.newCrossPageTitleFindings = current.events.filter(e => e.kind === 'cross-page-title');
     out.newCrossPageMetaDescriptionFindings = current.events.filter(e => e.kind === 'cross-page-meta-description');
@@ -558,6 +570,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     else if (e.kind === 'info-leak') out.newInfoLeakFindings.push(e);
     else if (e.kind === 'corp') out.newCorpFindings.push(e);
     else if (e.kind === 'cache-control') out.newCacheControlFindings.push(e);
+    else if (e.kind === 'vary') out.newVaryFindings.push(e);
     else if (e.kind === 'link-underline') out.newLinkUnderlineFindings.push(e);
     else if (e.kind === 'cross-page-title') out.newCrossPageTitleFindings.push(e);
     else if (e.kind === 'cross-page-meta-description') out.newCrossPageMetaDescriptionFindings.push(e);
@@ -889,6 +902,17 @@ export function renderPositiveSignal(report: Report, diff: Diff): string {
       total: report.events.filter((e) => e.kind === 'cache-control').length,
       news: diff.newCacheControlFindings.length,
       strictNews: strict(diff.newCacheControlFindings),
+    },
+    {
+      // T76 cycle 29 (Crawler): vary — Vary header
+      // correctness. Sister to cacheControl. Warn on
+      // Set-Cookie + cacheable + Vary doesn't include
+      // 'cookie' / Vary: * / invalid / duplicate tokens.
+      // Localhost exempt.
+      name: 'vary',
+      total: report.events.filter((e) => e.kind === 'vary').length,
+      news: diff.newVaryFindings.length,
+      strictNews: strict(diff.newVaryFindings),
     },
     {
       // T76 (Crawler): link-underline — WCAG 1.4.1 (Use of Color, A).

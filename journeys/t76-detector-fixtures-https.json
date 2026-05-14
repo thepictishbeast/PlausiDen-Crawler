@@ -53,7 +53,12 @@
     { "kind": "goto", "url": "https://127.0.0.1:8773/cache-control-invalid/", "label": "cache-control-invalid" },
     { "kind": "goto", "url": "https://127.0.0.1:8773/cache-control-unrealistic-maxage/", "label": "cache-control-unrealistic-maxage" },
     { "kind": "goto", "url": "https://127.0.0.1:8773/cache-control-contradictory/", "label": "cache-control-contradictory" },
-    { "kind": "goto", "url": "https://127.0.0.1:8773/cache-control-clean/", "label": "cache-control-clean" }
+    { "kind": "goto", "url": "https://127.0.0.1:8773/cache-control-clean/", "label": "cache-control-clean" },
+    { "kind": "goto", "url": "https://127.0.0.1:8773/vary-no-cookie-with-set-cookie/", "label": "vary-no-cookie-with-set-cookie" },
+    { "kind": "goto", "url": "https://127.0.0.1:8773/vary-star/", "label": "vary-star" },
+    { "kind": "goto", "url": "https://127.0.0.1:8773/vary-invalid/", "label": "vary-invalid" },
+    { "kind": "goto", "url": "https://127.0.0.1:8773/vary-duplicate/", "label": "vary-duplicate" },
+    { "kind": "goto", "url": "https://127.0.0.1:8773/vary-clean/", "label": "vary-clean" }
   ],
   "expectedFindingsByLabel": {
     "control": [],
@@ -105,6 +110,11 @@
     "cache-control-invalid": ["cache-control.invalid"],
     "cache-control-unrealistic-maxage": ["cache-control.unrealistic-maxage"],
     "cache-control-contradictory": ["cache-control.contradictory"],
-    "cache-control-clean": []
+    "cache-control-clean": [],
+    "vary-no-cookie-with-set-cookie": ["vary.no-cookie-with-set-cookie-and-cacheable"],
+    "vary-star": ["vary.star"],
+    "vary-invalid": ["vary.invalid"],
+    "vary-duplicate": ["vary.duplicate-tokens"],
+    "vary-clean": []
   }
 }

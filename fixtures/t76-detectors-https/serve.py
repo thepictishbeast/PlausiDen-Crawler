@@ -304,6 +304,52 @@ def csp_clean():
     )
 
 
+# ----- Vary correctness -----
+@route('/vary-no-cookie-with-set-cookie/')
+def vary_no_cookie_with_set_cookie():
+    # Set-Cookie + cacheable max-age + Vary missing → warn.
+    return (
+        page('<h1>Set-Cookie + max-age, no Vary: Cookie.</h1>'),
+        {
+            'Cache-Control': 'max-age=600',
+            'Set-Cookie': 'sid=abc; Secure; HttpOnly; SameSite=Strict',
+            'Vary': 'Accept-Encoding',
+        },
+    )
+
+
+@route('/vary-star/')
+def vary_star():
+    return (
+        page('<h1>Vary: *.</h1>'),
+        {'Vary': '*'},
+    )
+
+
+@route('/vary-invalid/')
+def vary_invalid():
+    return (
+        page('<h1>Vary garbage value.</h1>'),
+        {'Vary': '@@@nope@@@'},
+    )
+
+
+@route('/vary-duplicate/')
+def vary_duplicate():
+    return (
+        page('<h1>Vary with duplicate tokens.</h1>'),
+        {'Vary': 'Cookie, cookie, Accept-Language'},
+    )
+
+
+@route('/vary-clean/')
+def vary_clean():
+    # Default no-store from DEFAULT_HEADERS — Set-Cookie isn't
+    # cacheable so no Vary finding. (Add a no-Vary HTML page
+    # that's clean — uses defaults.)
+    return page('<h1>Vary clean — no Set-Cookie, no Vary needed.</h1>'), {}
+
+
 # ----- Cache-Control hygiene -----
 @route('/cache-control-missing/')
 def cache_control_missing():

@@ -225,6 +225,20 @@ Multi-token policies are honored per the W3C spec — the LAST recognised token 
 
 **Third response-header detector.** Reads from the same `topLevelResponseHeaders` Map as hsts + xFrameOptions. With three concrete examples now in hand, the ~70% structural overlap is a candidate for a generic `headerDetector(headerName, parser, classifier)` helper — extract on the next addition.
 
+### `vary` — Vary header correctness audit *(T76 cycle 29 — added 2026-05-14)*
+Source: `src/varyHeader.ts`
+
+| Finding | Sev | Catches |
+|---|---|---|
+| `vary.no-cookie-with-set-cookie-and-cacheable` | warn | Response carries Set-Cookie AND Cache-Control allows shared caching (no `private`, no `no-store`) AND Vary doesn't include `cookie` (or wildcard `*`). Sister to `cacheControl.public-with-cookie` from a different angle — defence in depth. |
+| `vary.star` | warn | `Vary: *` — explicitly tells caches the response is uncacheable because something not visible in request headers determines it (RFC 7234 §4.1). Usually unintended; `Cache-Control: no-store` is more intent-revealing. |
+| `vary.invalid` | warn | Header value contains no token matching the RFC 7230 token grammar. Browsers / proxies typically ignore. |
+| `vary.duplicate-tokens` | warn | Same token appears more than once (case-insensitive). Cosmetic; spec-conformant caches collapse but custom-proxy parser errors have been reported. |
+
+Out of scope: Authorization-specific Vary checks (less common; could add later); per-sub-resource Vary (would need cycle-27 `allResponseHeaders` Map; queued); localhost.
+
+**Eleventh response-header detector.** Uses the cycle-24 `responseHeaderDetector` helper. Sister to `cacheControl` (cycle 28) — both fire on the same defect class (cacheable + Set-Cookie without proper key) from different angles. Multiple findings on the same response = defence in depth, expected behaviour.
+
 ### `cacheControl` — Cache-Control directive hygiene audit *(T76 cycle 28 — added 2026-05-14)*
 Source: `src/cacheControl.ts`
 
