@@ -1033,6 +1033,83 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (eighty-second entry) — localStorage drafts close the 3rd data-loss vector
+
+### What's new since last cycle (eighty-first entry)
+- **Cross-repo Loom fix** (commit bcbc388): localStorage
+  draft autosave + restore banner inside the edit-form.
+- Aggregate badge holds at **A 100/100 (16)**.
+- CSP hash regenerated automatically. Trusted-Types: no
+  innerHTML, built entirely with createElement + appendChild
+  + textContent.
+
+### The three operator-data-loss vectors are now all covered
+```
+1. BROWSER-LEVEL    Cmd-S + dirty indicator + unload guard       cycle 79
+2. MID-EDIT         localStorage draft + restore banner          cycle 82  ← NEW
+3. FILE-LEVEL       auto-backup .bak.<ts>.json + retention       cycle 80
+   + operator UX    loom revisions list/show/diff/restore        cycle 81
+```
+
+Every vector now has a defense layer:
+- Browser closes? cycle 79's `beforeunload` warns.
+- Browser crashes / network drops? cycle 82 auto-saved a
+  draft to localStorage every 500ms.
+- Operator clicks Save then realises it was a mistake?
+  cycle 80 wrote the prior content as `.bak`, cycle 81
+  surfaces it for one-keystroke restore.
+
+### Implementation discipline
+- **No new dependencies**. The draft autosave + restore lives
+  inside the existing CSP-pinned `EDIT_PAGE_JS` const. The
+  cycle 54 hash-pinning machinery regenerated the script-src
+  directive automatically on rebuild — production audit
+  unchanged.
+- **Trusted-Types clean**. Banner built with
+  `document.createElement` + `appendChild` + `textContent`.
+  No `innerHTML` anywhere — the `require-trusted-types-for
+  'script'` directive (cycle 57) doesn't fire because no
+  sink is called. Honest by construction.
+- **TTL**: 7 days. Read-time check discards expired entries
+  silently. Prevents indefinitely-stale drafts from haunting
+  a slug after weeks of inactivity.
+- **Slug derivation from `location.pathname`**: no extra
+  attribute needed on the page, no hidden `<input>` to add.
+
+### Sample experience
+```
+1. Operator opens /about, types 5 fields, browser crashes.
+2. Operator re-opens /about.
+3. Top of the editor pane shows a yellow banner:
+   "Unsaved draft from 3m ago — 5 field(s) staged in your browser.
+    [Restore]  [Discard]"
+4. Click Restore → fields rehydrated, dirty indicator on.
+5. Click Save → form submits, localStorage entry cleared.
+```
+
+### Score arc (cycles 41-82)
+  C81: aggregate A 100/100 (16) — revisions operator UX.
+  C82: aggregate A 100/100 (16) — mid-edit data-loss closed.
+
+### Cumulative cross-repo dogfood scoreboard (cycles 38-82)
+  36 Loom commits + 3 Forge + 1 Sentinel-GUI + 13 crawler
+  enhancements + 4 E2E suites + property + mutation + drift
+  test suites + meta-runner + design+ops manual.
+
+### Action items
+- [ ] Cycle 83: drag-drop section reorder (HTML5 drag events,
+      no library).
+- [ ] Cycle 84: section-level "open in new tab" preview.
+- [ ] Cycle 85: pre-push git hook for `npm run test:meta`
+      (still pending from cycle 78).
+- [ ] Cycle 86: `loom revisions --all-slugs` system-wide
+      change feed.
+- [ ] Cycle 87: write SUPERSOCIETY_DATALOSS.md doc covering
+      the 4-layer prevention ladder (companion to cycle 77's
+      observability doc).
+
+---
+
 ## 2026-05-14 (eighty-first entry) — `loom revisions` — operator UX for the cycle 80 backups
 
 ### What's new since last cycle (eightieth entry)
