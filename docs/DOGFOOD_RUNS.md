@@ -1033,6 +1033,111 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (fifty-ninth entry) — Variant-journey sweep: dark-mode contrast + cross-page dedupe
+
+### What's new since last cycle (fifty-eighth entry)
+- **Cycle 58 surfaced ONE bug** (BEM-class) on the base journey.
+  Cycle 59 swept **all 12 variant journeys** (mobile, tablet,
+  themes, keyboard, rtl, zoom-200, throttled, fonts, densities,
+  first-time, ultrawide, plus Loom edit-server) with the new
+  --no-baseline flag. Two NEW classes of finding surfaced:
+- **Dark-mode contrast violation** (Loom 2562dbe + Forge 21f10d1):
+  the SkillShots feed CTA "Challenge" label was inheriting
+  primary blue (3.81:1 on dark #141414) instead of ink. The
+  cascade had `a { color: var(--loom-link) }` from the page-
+  shell baseline bleeding through .loom-composer__action's
+  color:ink. Fix: explicit color on the label span.
+- **Cross-page detector false positive** (this commit): the
+  themes journey visits `/?theme=dark`, `/?theme=light`, etc.
+  — five DIFFERENT URLs by query string but ONE page. The
+  crossPageTitle + crossPageMetaDescription detectors flagged
+  the shared title as a duplicate. Fix: dedupe by URL pathname
+  before grouping.
+- **Score: 13 of 13 audited journeys at composite 100/100**
+  with --no-baseline. First full-matrix clean run.
+
+### The two false positives
+**Keyboard dark-mode contrast** — axe reported:
+```
+[serious] color-contrast on
+  a[data-backend="challenge-create"] > .loom-composer__action-label
+  fg: #0066ff (loom-color-primary, dark mode)
+  bg: #141414 (loom-color-surface, dark mode)
+  ratio: 3.81 (needs ≥4.5 for AA)
+```
+
+Only fires in the keyboard journey because chromium-headless
+defaults to `prefers-color-scheme: dark` and the journey
+doesn't override. The cascade leak was:
+
+```css
+/* page-shell baseline (inline <style> in every page) */
+a { color: var(--loom-link); }
+/* loom-skin component layer */
+.loom-composer__action { color: var(--loom-color-ink); }
+/* The link rule's specificity is (0,0,1); the action rule is
+   (0,1,0). The action rule SHOULD win. But the LABEL is a
+   <span> CHILD of the <a>, and CSS color inheritance went
+   through the `a` element's effective color BEFORE the class
+   was applied. So the label inherited link color anyway. */
+.loom-composer__action-label {
+  font-size: var(--loom-font-sm);
+  font-weight: 500;
+  /* No explicit color → inherits primary blue */
+}
+```
+
+Fix in loom-tokens/src/skin.css:
+```css
+.loom-composer__action-label {
+  font-size: var(--loom-font-sm);
+  font-weight: 500;
+  color: var(--loom-color-ink);  /* ← cycle 59: explicit */
+}
+```
+
+**Themes-journey cross-page duplicate** — detector logic:
+```typescript
+const groups = new Map<string, Set<string>>();
+for (const { url, title } of acc.entries) {
+  groups.get(title)?.add(url) ?? ...;
+}
+// urls.size >= 2 → warn "N distinct URL(s) share title X"
+```
+
+`/?theme=dark` vs `/?theme=light` are distinct URLs by Set, but
+the same PAGE. False positive.
+
+Fix: dedupe by URL pathname before counting:
+```typescript
+const pathKey = (u: string): string => {
+  const parsed = new URL(u);
+  return parsed.origin + parsed.pathname;  // strip query + fragment
+};
+const groups = new Map<string, Map<string, string>>();  // pathKey → first-seen URL
+```
+
+Applied to both crossPageTitle.ts and crossPageMetaDescription.ts.
+
+### Score arc (cycles 41-59)
+  C58:  Loom A 100; SkillShots base journey A 100.
+  C59:  **All 13 audited journeys at 100/100 with --no-baseline.**
+        First time the dashboard is clean across the FULL audit
+        matrix.
+
+### Cumulative cross-repo dogfood scoreboard (cycles 38-59)
+  22 Loom commits + 3 Forge commits + 4 crawler enhancements.
+
+### Action items
+- [ ] Cycle 60: Document-Policy detector (Tier 3 modern
+      security — 2024-shipped browser header).
+- [ ] Cycle 61: CSP `report-uri` collector endpoint in loom-cli.
+- [ ] Cycle 62: supersociety badge SVG auto-published.
+- [ ] Cycle 63+: extend dogfood loop to PlausiDen-Atrium,
+      PlausiDen-Sentinel-GUI, and other PlausiDen surfaces.
+
+---
+
 ## 2026-05-14 (fifty-eighth entry) — --no-baseline uncovers SkillShots BEM-class bug
 
 ### What's new since last cycle (fifty-seventh entry)

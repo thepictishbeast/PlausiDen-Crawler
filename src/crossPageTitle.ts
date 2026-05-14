@@ -86,21 +86,39 @@ export function recordPageTitle(
 export function detectCrossPageTitleDuplicates(
   acc: CrossPageTitleAccumulator,
 ): CrossPageTitleFinding[] {
+  // T76 cycle 59: dedupe URLs by pathname before grouping. The
+  // SAME page visited multiple times with different query
+  // strings (e.g. `?theme=dark`, `?theme=light` in the themes
+  // journey) was being treated as "5 distinct URLs sharing a
+  // title" — which is structurally wrong: it's ONE page audited
+  // five times under different render modes. The dedupe key is
+  // the URL's origin + pathname; the evidence preserves the
+  // first representative URL with its query.
+  const pathKey = (u: string): string => {
+    try {
+      const parsed = new URL(u);
+      return parsed.origin + parsed.pathname;
+    } catch {
+      return u;
+    }
+  };
+
   // Group URLs by title. Use a Map for stable iteration.
-  const groups = new Map<string, Set<string>>();
+  const groups = new Map<string, Map<string, string>>();
   for (const { url, title } of acc.entries) {
     let urls = groups.get(title);
     if (!urls) {
-      urls = new Set<string>();
+      urls = new Map<string, string>();
       groups.set(title, urls);
     }
-    urls.add(url);
+    const k = pathKey(url);
+    if (!urls.has(k)) urls.set(k, url);
   }
 
   const out: CrossPageTitleFinding[] = [];
   for (const [title, urls] of groups) {
     if (urls.size < 2) continue;
-    const urlList = Array.from(urls);
+    const urlList = Array.from(urls.values());
     out.push({
       severity: 'warn',
       kind: 'title.cross-page-dup',

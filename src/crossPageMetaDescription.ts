@@ -76,20 +76,35 @@ export function recordPageMetaDescription(
 export function detectCrossPageMetaDescriptionDuplicates(
   acc: CrossPageMetaDescriptionAccumulator,
 ): CrossPageMetaDescriptionFinding[] {
-  const groups = new Map<string, Set<string>>();
+  // T76 cycle 59: dedupe by URL pathname so journeys that revisit
+  // the same path with different query strings (e.g. the
+  // themes journey hitting `/?theme=dark`, `/?theme=light`, …)
+  // don't get treated as distinct pages. See crossPageTitle.ts
+  // for the matching fix.
+  const pathKey = (u: string): string => {
+    try {
+      const parsed = new URL(u);
+      return parsed.origin + parsed.pathname;
+    } catch {
+      return u;
+    }
+  };
+
+  const groups = new Map<string, Map<string, string>>();
   for (const { url, description } of acc.entries) {
     let urls = groups.get(description);
     if (!urls) {
-      urls = new Set<string>();
+      urls = new Map<string, string>();
       groups.set(description, urls);
     }
-    urls.add(url);
+    const k = pathKey(url);
+    if (!urls.has(k)) urls.set(k, url);
   }
 
   const out: CrossPageMetaDescriptionFinding[] = [];
   for (const [description, urls] of groups) {
     if (urls.size < 2) continue;
-    const urlList = Array.from(urls);
+    const urlList = Array.from(urls.values());
     // Truncate the description in the detail for readability —
     // these can be 150+ chars per the metaDescription floor.
     const preview = description.length > 80
