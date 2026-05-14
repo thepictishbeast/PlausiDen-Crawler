@@ -1,0 +1,203 @@
+# =============================================================================
+# Supersociety Audit — sample CI workflow for downstream consumers
+# =============================================================================
+#
+# Drop this file at `.github/workflows/supersociety-audit.yml` in any
+# consumer repo (PlausiDen-Loom, PlausiDen-Forge, or any site you want
+# to monitor). It runs the PlausiDen-Crawler against a journey on every
+# push + pull-request, uploads the HTML dashboard + SVG badge as
+# artefacts, comments the score on PRs, and (on main branch) commits
+# the latest-* badge so README embeds stay current.
+#
+# Prerequisites in the consumer repo:
+#   * A journey JSON at `journeys/<your-journey>.json` (or somewhere
+#     reachable — pass the path via the env var below).
+#   * A target site reachable from the runner. For static sites, this
+#     can be a `python3 -m http.server` of the build output.
+#   * GitHub Actions enabled with `permissions: contents: write`
+#     (so the badge-commit step can push on main branch).
+#
+# Customise:
+#   * CRAWLER_REPO          — git URL of the PlausiDen-Crawler repo.
+#   * CRAWLER_REF           — tag/branch/sha to pin against. Pinning a
+#                              commit avoids unexpected detector changes
+#                              breaking the regression-detection signal.
+#   * AUDIT_JOURNEY         — path to the journey JSON in YOUR repo.
+#   * SITE_STARTUP_COMMAND  — how to start the site under audit.
+#   * BADGE_COMMIT_PATH     — where to commit the latest badge in your
+#                              repo so the README can reference it.
+#
+# Outputs:
+#   * Artefacts: supersociety-report.html, supersociety-badge.svg,
+#     supersociety-score.json, score-history.jsonl.
+#   * PR comment with composite + grade + regression headline.
+#   * Auto-committed `<BADGE_COMMIT_PATH>` on push-to-main, so the
+#     README badge embed stays current.
+#
+# Embed the badge in your README via:
+#   ![Supersociety](badges/supersociety.svg)
+#
+# =============================================================================
+
+name: Supersociety Audit
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+permissions:
+  contents: write       # for the badge-commit-on-main step
+  pull-requests: write  # for the PR-comment step
+
+env:
+  CRAWLER_REPO: 'https://github.com/thepictishbeast/PlausiDen-Crawler.git'
+  CRAWLER_REF: 'master'
+  AUDIT_JOURNEY: 'journeys/site-audit.json'
+  SITE_STARTUP_COMMAND: 'python3 -m http.server 8123 --directory dist &'
+  SITE_HEALTH_URL: 'http://127.0.0.1:8123/'
+  BADGE_COMMIT_PATH: 'badges/supersociety.svg'
+
+jobs:
+  audit:
+    name: Run Supersociety Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout consumer repo
+        uses: actions/checkout@v4
+        with:
+          # We need full history if the badge-commit step is going to
+          # push back on main. Shallow clones break that.
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Build / start the site under audit
+        run: |
+          # Customise this step for your site. For Forge-built sites,
+          # it's typically `loom build` then `python3 -m http.server`.
+          # For Loom CMS itself, `npm run dev` etc.
+          ${{ env.SITE_STARTUP_COMMAND }}
+          # Wait for the site to come up.
+          for _ in $(seq 1 30); do
+            if curl -fs "${{ env.SITE_HEALTH_URL }}" >/dev/null 2>&1; then
+              echo "site healthy"
+              break
+            fi
+            sleep 1
+          done
+
+      - name: Check out PlausiDen-Crawler
+        uses: actions/checkout@v4
+        with:
+          repository: thepictishbeast/PlausiDen-Crawler
+          ref: ${{ env.CRAWLER_REF }}
+          path: .crawler
+
+      - name: Install crawler deps
+        working-directory: .crawler
+        run: npm ci --no-audit --no-fund
+
+      - name: Install Playwright browser
+        working-directory: .crawler
+        run: npx playwright install --with-deps chromium
+
+      - name: Run audit
+        working-directory: .crawler
+        env:
+          CRAWLER_COMMIT_SHA: ${{ github.sha }}
+        run: |
+          # Resolve the journey path relative to the CONSUMER repo
+          # (not the crawler's working dir).
+          npm run audit -- --journey "$GITHUB_WORKSPACE/${{ env.AUDIT_JOURNEY }}"
+
+      - name: Locate audit run dir
+        id: locate
+        working-directory: .crawler
+        run: |
+          RUN_DIR=$(ls -td runs/*/ | head -1)
+          echo "run_dir=$RUN_DIR" >>"$GITHUB_OUTPUT"
+          # Journey slug for the stable latest-* artefacts. Mirrors
+          # the slug-derivation in main.ts.
+          JOURNEY_BASE=$(basename "${{ env.AUDIT_JOURNEY }}" .json)
+          JOURNEY_SLUG=$(echo "$JOURNEY_BASE" | tr -cs 'a-zA-Z0-9._-' '_')
+          echo "journey_slug=$JOURNEY_SLUG" >>"$GITHUB_OUTPUT"
+
+      - name: Upload artefacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: supersociety-${{ steps.locate.outputs.journey_slug }}
+          path: |
+            .crawler/${{ steps.locate.outputs.run_dir }}/supersociety-report.html
+            .crawler/${{ steps.locate.outputs.run_dir }}/supersociety-badge.svg
+            .crawler/${{ steps.locate.outputs.run_dir }}/supersociety-score.json
+            .crawler/${{ steps.locate.outputs.run_dir }}/whitelist.json
+            .crawler/runs/${{ steps.locate.outputs.journey_slug }}-score-history.jsonl
+
+      - name: Comment on PR with score
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const slug = '${{ steps.locate.outputs.journey_slug }}';
+            const scorePath = `.crawler/runs/${slug}-latest-score.json`;
+            const score = JSON.parse(fs.readFileSync(scorePath, 'utf8'));
+            const lines = [
+              `## Supersociety Audit — \`${slug}\``,
+              ``,
+              `**Grade ${score.grade} (${score.composite}/100)** — ${score.headline}`,
+              ``,
+              `| category | score | grade | strict | warn |`,
+              `|----------|-------|-------|--------|------|`,
+            ];
+            for (const c of score.categories) {
+              lines.push(`| ${c.category} | ${c.score} | ${c.grade} | ${c.strict} | ${c.warn} |`);
+            }
+            lines.push('');
+            lines.push(`<sub>Full HTML dashboard available as a workflow artefact.</sub>`);
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: lines.join('\n'),
+            });
+
+      - name: Commit latest badge on main branch
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+        run: |
+          mkdir -p "$(dirname "${{ env.BADGE_COMMIT_PATH }}")"
+          cp ".crawler/runs/${{ steps.locate.outputs.journey_slug }}-latest-badge.svg" \
+             "${{ env.BADGE_COMMIT_PATH }}"
+          # Only commit if there's a real change.
+          if git diff --quiet "${{ env.BADGE_COMMIT_PATH }}"; then
+            echo "Badge unchanged — skipping commit."
+            exit 0
+          fi
+          git config user.name 'PlausiDen-Crawler bot'
+          git config user.email 'bot@plausiden.com'
+          git add "${{ env.BADGE_COMMIT_PATH }}"
+          git commit -m "supersociety-badge: refresh after audit ($(date -u +%Y-%m-%dT%H:%M:%SZ))"
+          git push
+
+      - name: Fail the build on regression
+        if: github.event_name == 'pull_request'
+        env:
+          SLUG: ${{ steps.locate.outputs.journey_slug }}
+        run: |
+          # The audit itself already wrote the score; here we just
+          # parse the latest-* score.json and decide whether to fail
+          # the PR based on grade dropping. Customise the threshold
+          # by editing the jq expression below.
+          SCORE=$(jq -r '.composite' ".crawler/runs/$SLUG-latest-score.json")
+          GRADE=$(jq -r '.grade' ".crawler/runs/$SLUG-latest-score.json")
+          echo "PR composite=$SCORE grade=$GRADE"
+          # Hard floor: F → fail. Customisation point.
+          if [ "$GRADE" = 'F' ]; then
+            echo '::error::Supersociety grade F — failing the build. Fix the strict findings and re-push.'
+            exit 1
+          fi

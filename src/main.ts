@@ -2548,9 +2548,27 @@ async function main(args: string[]): Promise<number> {
   // T76 cycle 36: shields.io-style SVG badge for README embeds.
   // Operators put `![Supersociety](.../supersociety-badge.svg)` in
   // their repo README and see the live grade at a glance.
+  const badgeSvg = renderSupersocietyBadge(supersocietyScore);
+  writeFileSync(join(outDir, 'supersociety-badge.svg'), badgeSvg);
+
+  // T76 cycle 37: ALSO write stable per-journey latest-* paths
+  // that get overwritten each run. The timestamped run dir
+  // (`runs/skillshots-poc-2026-05-14T12-44-38-295Z/`) is the
+  // immutable audit trail; these `latest-*` files are the
+  // stable references for README badge embeds + "open the
+  // latest dashboard" workflows. CI integrations commit just
+  // the latest-* files; per-run dirs stay gitignored.
+  //
+  // Journey slug matches the score-history pattern so all
+  // three (history.jsonl + latest-badge.svg + latest-report.html)
+  // share a consistent naming convention.
+  const journeySlug = (journey.name.replace(/\.json$/i, '').split(/[\\/]/).pop() ?? journey.name)
+    .replace(/[^a-zA-Z0-9._-]/g, '_');
+  writeFileSync(join(runsDir, `${journeySlug}-latest-badge.svg`), badgeSvg);
+  writeFileSync(join(runsDir, `${journeySlug}-latest-report.html`), htmlReport);
   writeFileSync(
-    join(outDir, 'supersociety-badge.svg'),
-    renderSupersocietyBadge(supersocietyScore),
+    join(runsDir, `${journeySlug}-latest-score.json`),
+    JSON.stringify(supersocietyScore, null, 2),
   );
 
   // Per-screenshot WCAG findings (axe-core), separate from discover sweep

@@ -57,6 +57,30 @@ Every audit also writes a 140×20 px SVG badge at `runs/<run-dir>/supersociety-b
 
 Zero external resources, zero JS, zero dependencies. A11y label exposes `Supersociety Score: grade A, 97 out of 100` to screen readers. HTML-escaped against XSS. Renders inline in GitHub markdown when committed to the repo.
 
+### Stable latest-* paths (cycle 37)
+
+In addition to the timestamped per-run dir (`runs/<journey>-<timestamp>/...`), the crawler writes three STABLE files at the runs/ root that get overwritten each run:
+
+- `runs/<journey-slug>-latest-badge.svg`
+- `runs/<journey-slug>-latest-report.html`
+- `runs/<journey-slug>-latest-score.json`
+
+The per-run dir is the immutable audit trail; the latest-* files are the stable references that README badges + "open the dashboard" workflows point at. CI commits just the latest-* files; per-run dirs stay gitignored.
+
+### CI integration sample (cycle 37)
+
+A ready-to-copy GitHub Actions workflow at `examples/workflows/supersociety-audit.yml` automates the full audit-on-every-PR flow:
+
+- Runs on push to main + every PR.
+- Builds + starts the site under audit.
+- Checks out the crawler at a pinned ref, installs deps, runs the audit.
+- Uploads `supersociety-report.html` + badge + JSON + `score-history.jsonl` as workflow artefacts.
+- Comments the score table on PRs.
+- On push-to-main, commits the latest badge to `badges/supersociety.svg` (configurable) so README embeds stay current.
+- Fails the PR build if the grade is F (threshold customisable).
+
+Drop the file into any consumer repo's `.github/workflows/` and edit the env block. See `examples/workflows/README.md` for the full guide.
+
 
 
 

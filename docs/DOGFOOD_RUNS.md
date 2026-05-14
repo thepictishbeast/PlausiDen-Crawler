@@ -1033,6 +1033,99 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (thirty-seventh entry) — stable latest-* paths + CI workflow sample
+
+### What's new since last cycle (thirty-sixth entry)
+- 3 new STABLE artefact paths per audit (overwritten each run):
+  - `runs/<journey-slug>-latest-badge.svg`
+  - `runs/<journey-slug>-latest-report.html`
+  - `runs/<journey-slug>-latest-score.json`
+- 1 new SAMPLE: `examples/workflows/supersociety-audit.yml` — a
+  ready-to-copy GitHub Actions workflow that automates the
+  full audit-on-every-PR flow for downstream consumers
+  (PlausiDen-Loom, PlausiDen-Forge, any site).
+- 1 new sample README: `examples/workflows/README.md` — guide
+  for copying and customising.
+- Active named-detector axis count UNCHANGED at 43. Sixth
+  consecutive UX-meta cycle (32 score + 33 trend + 34 HTML +
+  35 whitelist + 36 dashboard-completeness + 37 CI/stable
+  paths).
+
+### Why stable latest-* paths
+The per-run timestamped dir is the immutable audit trail —
+great for archives, terrible for "the README needs a stable
+badge URL". This cycle adds three overwritten-each-run files
+at the runs/ root that downstream tools can reference with
+confidence.
+
+  - Badge: README embeds via `badges/supersociety.svg`
+    (committed by the CI workflow from the latest-* file).
+  - Report HTML: "open the latest dashboard" links from
+    internal team wikis / SharePoint / wherever.
+  - Score JSON: external dashboards / Datadog / Slack-bots
+    can poll a stable path without parsing the run-dir name.
+
+### Why CI workflow sample
+"Embed badges in PlausiDen-Loom / PlausiDen-Forge READMEs"
+has been a queued item for two cycles. The blocker was
+operational: there was no STABLE badge URL and no
+automated process for keeping the badge fresh. Now there
+is. The CI workflow:
+
+  1. Runs on every push to main + every PR.
+  2. Builds + starts the site under audit.
+  3. Checks out the crawler at a pinned ref (recommended —
+     prevents detector-change drift breaking regression
+     detection).
+  4. Runs the audit with CRAWLER_COMMIT_SHA stamped from
+     the consumer's commit SHA.
+  5. Uploads HTML report + badge + JSON + history as
+     workflow artefacts.
+  6. PR comment: composite + grade + per-category breakdown
+     as a markdown table.
+  7. On push-to-main: commits the latest badge back to
+     a configurable path (default `badges/supersociety.svg`)
+     so the README embed stays current.
+  8. Fails the PR build if the grade hits F. Threshold
+     customisable.
+
+This turns the crawler from "run it locally sometimes" into
+"every commit gets a visible grade". The user's PlausiDen-Loom
+README will eventually carry the badge — a user browsing the
+repo on GitHub will see the grade at a glance.
+
+### Permissions + pinning notes
+The workflow needs `contents: write` for the badge-commit step
+and `pull-requests: write` for the PR-comment step. Both are
+declared in the file. Pinning `CRAWLER_REF` to a specific tag
+or commit is strongly recommended for production audit
+pipelines — running against `master` means detector changes
+in the crawler can flip the grade without the consumer
+shipping any code change, breaking the "regression = my code
+got worse" signal.
+
+### Verified
+- HTTP gate: 47/47 routes pass.
+- HTTPS gate: 60/60 routes pass.
+- SkillShots audit: Grade A 100/100; all three latest-*
+  files present in runs/ root.
+
+### Action items
+- [ ] Actually drop the workflow into PlausiDen-Loom and
+      PlausiDen-Forge and watch the badge appear in their
+      READMEs. Cross-repo work, would need user approval per
+      memory.
+- [ ] Email/Slack notifier on grade drop (six cycles in
+      arrears, queued since cycle 32).
+- [ ] Trim policy for old score-history.jsonl entries.
+- [ ] Optional dark/light toggle in HTML report.
+- [ ] Multi-journey aggregate dashboard.
+- [ ] CRAWLER_REGRESSION_FAIL_THRESHOLD env var for the
+      workflow to flip the failure threshold without editing
+      the file — operator UX win.
+
+---
+
 ## 2026-05-14 (thirty-sixth entry) — HTML Accepted Risks section + supersocietyBadge
 
 ### What's new since last cycle (thirty-fifth entry)
