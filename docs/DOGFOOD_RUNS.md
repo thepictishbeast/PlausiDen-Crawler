@@ -873,13 +873,78 @@ Liveness gate (33/33) still PASS.
 ### Action items
 
 - [x] **DONE 2026-05-14 (sixteenth cycle)**: HTTPS fixture
-      variant for full mixedContent + hsts + xFrameOptions
-      live integration. See sixteenth entry below.
-- [x] **DONE 2026-05-14 (fifteenth cycle)**: `xFrameOptions`
-      landed. Pattern validated.
-- [ ] Add `referrerPolicy` detector — same response-header
-      capture path, third consumer (now exercisable end-to-end
-      via the new HTTPS fixture).
+      variant.
+- [x] **DONE 2026-05-14 (seventeenth cycle)**: `referrerPolicy`
+      detector. See seventeenth entry below.
+- [ ] login-flow fixture (still queued).
+- [ ] Remaining roadmap: `fontLoading`.
+
+---
+
+## 2026-05-14 (seventeenth entry) — third response-header detector
+
+### What's new since last cycle (sixteenth entry)
+- `referrerPolicy` detector landed (warn/strict/warn).
+- HTTPS fixture extended with 3 new routes (no/permissive/
+  invalid). `Referrer-Policy: strict-origin-when-cross-origin`
+  added to the HTTPS fixture's DEFAULT_HEADERS so the control
+  route stays clean.
+- Total active detector axes: **26** (was 25).
+- Liveness gates: HTTPS 12/12 (was 9/9), HTTP 33/33 unchanged.
+
+### Detector design
+
+Mirror of hsts + xFrameOptions shape:
+- `buildReferrerPolicySnapshot(url, headers) → snapshot`
+- `detectReferrerPolicyIssues(snapshot) → findings`
+- Localhost + http exempt
+- Reads from shared `topLevelResponseHeaders` Map
+
+Three findings:
+- `referrer-policy.missing` (warn) — no header. Modern browsers
+  default to `strict-origin-when-cross-origin` (safe-ish) but
+  older clients leak full URL.
+- `referrer-policy.permissive` (strict) — explicit `unsafe-url` /
+  `no-referrer-when-downgrade` / `origin-when-cross-origin`. All
+  leak more than the modern default.
+- `referrer-policy.invalid` (warn) — unknown token; intent lost.
+
+Multi-token policies honored per W3C spec — the LAST recognised
+token wins. The detector walks right-to-left, returns on first
+recognised. 14 unit tests cover every path including
+`strict-origin-when-cross-origin, unsafe-url` (last wins →
+permissive) and `no-referrer, future-token` (skips unknown,
+lands on safe).
+
+### Pattern observation (3 of a kind)
+
+Three response-header detectors now share ~70% of structure:
+- pageIsHttps + pageIsLocalhost exemptions
+- Header lookup with case-insensitive name
+- Token classification (safe/permissive/invalid in this case;
+  good/short/missing for hsts; valid/missing for xFrameOptions)
+
+The genuine differences are: which header to read, what tokens
+mean what, what severity each gets. A future generic
+`headerDetector(opts: { headerName, parseTokens, classify })`
+helper would replace ~150 lines of duplication. **NOT extracted
+yet** — three implementations is the right N to design for; do
+it on the fourth (probably `permissionsPolicy`).
+
+### SkillShots dogfood
+
+**0 referrerPolicy findings** — dev server is `http://127.0.0.1`,
+exempt at the localhost check. Same as hsts/xFrameOptions on
+this site.
+
+**ALL 33 DETECTION AXES SILENT** on SkillShots (+1 vs last cycle).
+HTTP gate (33/33), HTTPS gate (12/12).
+
+### Action items
+
+- [ ] When the FOURTH response-header detector lands
+      (permissionsPolicy is the natural next), extract a generic
+      `headerDetector` helper — kills the ~70% duplication.
 - [ ] login-flow fixture (still queued).
 - [ ] Remaining roadmap: `fontLoading`.
 

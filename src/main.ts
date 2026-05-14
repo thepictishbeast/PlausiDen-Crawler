@@ -48,6 +48,7 @@ import { newCrossPageTitleAccumulator, recordPageTitle, detectCrossPageTitleDupl
 import { newCrossPageMetaDescriptionAccumulator, recordPageMetaDescription, detectCrossPageMetaDescriptionDuplicates } from './crossPageMetaDescription.js';
 import { buildHstsSnapshot, detectHstsIssues, type HstsFinding } from './hstsHeader.js';
 import { buildXFrameOptionsSnapshot, detectXFrameOptionsIssues, type XFrameOptionsFinding } from './xFrameOptions.js';
+import { buildReferrerPolicySnapshot, detectReferrerPolicyIssues, type ReferrerPolicyFinding } from './referrerPolicy.js';
 
 interface Budget {
   newConsoleErrors: number;
@@ -991,6 +992,38 @@ async function main(args: string[]): Promise<number> {
   };
 
   /**
+   * T76: Referrer-Policy detector. Third consumer of the shared
+   * `topLevelResponseHeaders` capture path. Reports pages with no
+   * policy (warn) or an explicitly permissive policy (strict).
+   */
+  const referrerPolicyFindingsByStep: Array<{ stepLabel: string; pageUrl: string; findings: ReferrerPolicyFinding[] }> = [];
+  const checkReferrerPolicy = async (afterLabel: string) => {
+    try {
+      const pageUrl = page.url();
+      const headers = topLevelResponseHeaders.get(pageUrl);
+      const snap = buildReferrerPolicySnapshot(pageUrl, headers);
+      if (disableLocalhostExemption) snap.pageIsLocalhost = false;
+      const findings = detectReferrerPolicyIssues(snap);
+      referrerPolicyFindingsByStep.push({ stepLabel: afterLabel, pageUrl, findings });
+      for (const f of findings) {
+        log({
+          kind: 'referrer-policy',
+          text: `[${f.kind}] ${f.detail}`,
+          url: pageUrl,
+          severity: f.severity,
+          ruleId: f.kind,
+          impact: f.severity === 'strict' ? 'serious' : 'minor',
+        });
+      }
+    } catch (e) {
+      log({
+        kind: 'pageerror',
+        text: `[referrerPolicy] detector threw on step ${afterLabel}: ${(e as Error).message}`,
+      });
+    }
+  };
+
+  /**
    * T76: clickjacking-defence detector. Second consumer of
    * `topLevelResponseHeaders`. Reads X-Frame-Options +
    * Content-Security-Policy frame-ancestors and reports
@@ -1697,6 +1730,7 @@ async function main(args: string[]): Promise<number> {
       await checkMixedContent(step.label || `goto-${i}`);
       await checkHsts(step.label || `goto-${i}`);
       await checkXFrameOptions(step.label || `goto-${i}`);
+      await checkReferrerPolicy(step.label || `goto-${i}`);
       await checkWebVitals(step.label || `goto-${i}`);
     }
     // Memory snapshot at end of each step so the report shows heap growth
@@ -1829,6 +1863,8 @@ async function main(args: string[]): Promise<number> {
       hstsFindingsStrict: events.filter(e => e.kind === 'hsts' && e.severity === 'strict').length,
       xFrameOptionsFindings: events.filter(e => e.kind === 'x-frame-options').length,
       xFrameOptionsFindingsStrict: events.filter(e => e.kind === 'x-frame-options' && e.severity === 'strict').length,
+      referrerPolicyFindings: events.filter(e => e.kind === 'referrer-policy').length,
+      referrerPolicyFindingsStrict: events.filter(e => e.kind === 'referrer-policy' && e.severity === 'strict').length,
       linkUnderlineFindings: events.filter(e => e.kind === 'link-underline').length,
       linkUnderlineFindingsStrict: events.filter(e => e.kind === 'link-underline' && e.severity === 'strict').length,
       crossPageTitleFindings: events.filter(e => e.kind === 'cross-page-title').length,
@@ -1962,6 +1998,12 @@ async function main(args: string[]): Promise<number> {
       JSON.stringify(xFrameOptionsFindingsByStep, null, 2),
     );
   }
+  if (referrerPolicyFindingsByStep.length > 0) {
+    writeFileSync(
+      join(outDir, 'referrer-policy.json'),
+      JSON.stringify(referrerPolicyFindingsByStep, null, 2),
+    );
+  }
   if (linkUnderlineFindingsByStep.length > 0) {
     writeFileSync(
       join(outDir, 'link-underline.json'),
@@ -2059,6 +2101,7 @@ async function main(args: string[]): Promise<number> {
   console.log(`  mixed content:     ${report.counts.mixedContentFindings} (strict ${report.counts.mixedContentFindingsStrict})`);
   console.log(`  hsts:              ${report.counts.hstsFindings} (strict ${report.counts.hstsFindingsStrict})`);
   console.log(`  x-frame-options:   ${report.counts.xFrameOptionsFindings} (strict ${report.counts.xFrameOptionsFindingsStrict})`);
+  console.log(`  referrer-policy:   ${report.counts.referrerPolicyFindings} (strict ${report.counts.referrerPolicyFindingsStrict})`);
   console.log(`  link underline:    ${report.counts.linkUnderlineFindings} (strict ${report.counts.linkUnderlineFindingsStrict})`);
   console.log(`  cross-page title:  ${report.counts.crossPageTitleFindings} (strict ${report.counts.crossPageTitleFindingsStrict})`);
   console.log(`  cross-page meta:   ${report.counts.crossPageMetaDescriptionFindings} (strict ${report.counts.crossPageMetaDescriptionFindingsStrict})`);
@@ -2128,6 +2171,9 @@ async function main(args: string[]): Promise<number> {
     const newXfoStrict = diff.newXFrameOptionsFindings.filter(e => e.severity === 'strict').length;
     const newXfoWarn = diff.newXFrameOptionsFindings.length - newXfoStrict;
     console.log(`    NEW x-frame-options:  ${diff.newXFrameOptionsFindings.length} (strict ${newXfoStrict}, warn ${newXfoWarn})`);
+    const newRpStrict = diff.newReferrerPolicyFindings.filter(e => e.severity === 'strict').length;
+    const newRpWarn = diff.newReferrerPolicyFindings.length - newRpStrict;
+    console.log(`    NEW referrer-policy:  ${diff.newReferrerPolicyFindings.length} (strict ${newRpStrict}, warn ${newRpWarn})`);
     const newLinkUnderlineStrict = diff.newLinkUnderlineFindings.filter(e => e.severity === 'strict').length;
     const newLinkUnderlineWarn = diff.newLinkUnderlineFindings.length - newLinkUnderlineStrict;
     console.log(`    NEW link underline:   ${diff.newLinkUnderlineFindings.length} (strict ${newLinkUnderlineStrict}, warn ${newLinkUnderlineWarn})`);

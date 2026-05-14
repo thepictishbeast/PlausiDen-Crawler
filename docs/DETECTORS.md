@@ -200,6 +200,19 @@ Out of scope: http pages (HSTS doesn't apply), localhost / 127.0.0.1 / `*.localh
 
 **First response-header detector.** Reads from main.ts's `topLevelResponseHeaders: Map<url, headers>` accumulator, populated by the existing `page.on('response')` listener for any response where `request().isNavigationRequest()`. Future header-flavoured detectors (xFrameOptions, referrerPolicy, contentSecurityPolicy strict mode) read from the same Map — no new listener needed per detector.
 
+### `referrerPolicy` — Referrer-Policy response header *(T76 — added 2026-05-14)*
+Source: `src/referrerPolicy.ts`
+
+| Finding | Sev | Catches |
+|---|---|---|
+| `referrer-policy.missing` | warn | No `Referrer-Policy` header. Modern browsers fall back to a safe default but older clients may leak the full URL + query string to every third-party fetch. |
+| `referrer-policy.permissive` | strict | Policy explicitly set to `unsafe-url`, `no-referrer-when-downgrade`, or `origin-when-cross-origin` — all leak more than the modern default. |
+| `referrer-policy.invalid` | warn | Policy is set to a token not in the W3C set. Browsers fall back to default; intent is lost. |
+
+Multi-token policies are honored per the W3C spec — the LAST recognised token wins (allowing safe defaults with permissive overrides). The detector classifies based on which recognised token is most prominent.
+
+**Third response-header detector.** Reads from the same `topLevelResponseHeaders` Map as hsts + xFrameOptions. With three concrete examples now in hand, the ~70% structural overlap is a candidate for a generic `headerDetector(headerName, parser, classifier)` helper — extract on the next addition.
+
 ### `xFrameOptions` — clickjacking-defence response header *(T76 — added 2026-05-14)*
 Source: `src/xFrameOptions.ts`
 

@@ -12,7 +12,10 @@
     { "kind": "goto", "url": "https://127.0.0.1:8773/allowall-frame/", "label": "allowall-frame" },
     { "kind": "goto", "url": "https://127.0.0.1:8773/invalid-xfo/", "label": "invalid-xfo" },
     { "kind": "goto", "url": "https://127.0.0.1:8773/mixed-active/", "label": "mixed-active" },
-    { "kind": "goto", "url": "https://127.0.0.1:8773/mixed-passive/", "label": "mixed-passive" }
+    { "kind": "goto", "url": "https://127.0.0.1:8773/mixed-passive/", "label": "mixed-passive" },
+    { "kind": "goto", "url": "https://127.0.0.1:8773/no-referrer-policy/", "label": "no-referrer-policy" },
+    { "kind": "goto", "url": "https://127.0.0.1:8773/permissive-referrer/", "label": "permissive-referrer" },
+    { "kind": "goto", "url": "https://127.0.0.1:8773/invalid-referrer/", "label": "invalid-referrer" }
   ],
   "expectedFindingsByLabel": {
     "control": [],
@@ -23,6 +26,9 @@
     "allowall-frame": ["frame-options.allowall"],
     "invalid-xfo": ["frame-options.invalid"],
     "mixed-active": ["mixed-content.active"],
-    "mixed-passive": ["mixed-content.passive"]
+    "mixed-passive": ["mixed-content.passive"],
+    "no-referrer-policy": ["referrer-policy.missing"],
+    "permissive-referrer": ["referrer-policy.permissive"],
+    "invalid-referrer": ["referrer-policy.invalid"]
   }
 }

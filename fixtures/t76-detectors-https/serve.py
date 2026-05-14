@@ -125,6 +125,7 @@ def route(path):
 DEFAULT_HEADERS = {
     'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
     'X-Frame-Options': 'SAMEORIGIN',
+    'Referrer-Policy': 'strict-origin-when-cross-origin',
     'Content-Type': 'text/html; charset=utf-8',
     'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
 }
@@ -185,6 +186,31 @@ def invalid_xfo():
     return (
         page('<h1>Invalid X-Frame-Options value.</h1>'),
         {'X-Frame-Options': 'GARBAGE'},
+    )
+
+
+# ----- Referrer-Policy -----
+@route('/no-referrer-policy/')
+def no_referrer_policy():
+    return (
+        page('<h1>No Referrer-Policy header.</h1>'),
+        {'Referrer-Policy': None},
+    )
+
+
+@route('/permissive-referrer/')
+def permissive_referrer():
+    return (
+        page('<h1>Permissive referrer policy: unsafe-url.</h1>'),
+        {'Referrer-Policy': 'unsafe-url'},
+    )
+
+
+@route('/invalid-referrer/')
+def invalid_referrer():
+    return (
+        page('<h1>Invalid Referrer-Policy value.</h1>'),
+        {'Referrer-Policy': 'GIBBERISH'},
     )
 
 
