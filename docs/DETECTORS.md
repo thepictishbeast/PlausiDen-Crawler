@@ -295,6 +295,22 @@ Out of scope: bare Server names without a version (some routing infra needs Serv
 
 **Ninth response-header detector.** Uses the cycle-24 `responseHeaderDetector` helper for wiring — six lines of factory args. The classifier's parser-and-classify shape is comparable to cookieSecurity but the heuristic (per-header-name lookup, version-token regex on Server, presence-only on the rest) is genuinely different.
 
+### `inlineScript` — inline-script + event-handler + javascript: URI audit *(T76 cycle 30 — added 2026-05-14)*
+Source: `src/inlineScript.ts`
+
+| Finding | Sev | Catches |
+|---|---|---|
+| `inline-script.present-without-nonce` | warn | Inline `<script>...</script>` block without a `nonce` attribute. Strict-CSP bypass; pre-CSP stored-XSS sink. |
+| `inline-script.event-handler-attribute` | warn | `onclick`, `onload`, `onmouseover`, etc. attribute on any element. CSP cannot nonce these — they require `'unsafe-inline'` or `'unsafe-hashes'`. |
+| `inline-script.javascript-uri` | warn | `<a href="javascript:...">`, `<iframe src="javascript:...">`, etc. Old-school JS-execution sink. |
+| `inline-script.no-csp-but-inline` | warn | Inline scripts present AND no Content-Security-Policy header. Composite warn — calls out that the missing CSP makes the inline scripts particularly dangerous (defence-in-depth gap). |
+
+Out of scope: external `<script src="...">` (covered by SRI/CSP); dynamic injection via document.write / innerHTML / eval / setTimeout (runtime sinks); same-origin `<iframe>` contents (would need recursive walks; queued); `<noscript>` contents (never executed).
+
+**Second per-element security detector** (after SRI). Per-element DOM walk via `page.evaluate` with `INLINE_SCRIPT_DOM_CAPTURE_JS` exposed as a string template. Bespoke wiring; the SRI / inline-script walkers have different shapes (SRI walks two specific tag classes, inline-script walks all elements for handlers), so a `perElementDetector` helper extraction stays deferred — defer until a third per-element security detector lands.
+
+The detector checks for CSP via meta `http-equiv` in the page-side capture, then `main.ts` upgrades `hasCsp` to true if the response carries an actual `Content-Security-Policy` header (more authoritative than the meta fallback).
+
 ### `sri` — Subresource Integrity per-element DOM audit *(T76 — added 2026-05-14)*
 Source: `src/sri.ts`
 

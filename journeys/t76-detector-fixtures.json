@@ -46,7 +46,11 @@
     { "kind": "goto", "url": "http://127.0.0.1:8771/sri-cross-origin-script-weak-algo/", "label": "sri-cross-origin-script-weak-algo" },
     { "kind": "goto", "url": "http://127.0.0.1:8771/sri-cross-origin-script-malformed/", "label": "sri-cross-origin-script-malformed" },
     { "kind": "goto", "url": "http://127.0.0.1:8771/sri-clean/", "label": "sri-clean" },
-    { "kind": "goto", "url": "http://127.0.0.1:8771/sri-same-origin-no-integrity/", "label": "sri-same-origin-no-integrity" }
+    { "kind": "goto", "url": "http://127.0.0.1:8771/sri-same-origin-no-integrity/", "label": "sri-same-origin-no-integrity" },
+    { "kind": "goto", "url": "http://127.0.0.1:8771/inline-script-no-nonce/", "label": "inline-script-no-nonce" },
+    { "kind": "goto", "url": "http://127.0.0.1:8771/inline-script-with-nonce/", "label": "inline-script-with-nonce" },
+    { "kind": "goto", "url": "http://127.0.0.1:8771/event-handler-attribute/", "label": "event-handler-attribute" },
+    { "kind": "goto", "url": "http://127.0.0.1:8771/javascript-uri/", "label": "javascript-uri" }
   ],
   "expectedFindingsByLabel": {
     "control": [],
@@ -91,6 +95,10 @@
     "sri-cross-origin-script-weak-algo": ["sri.script-weak-algorithm"],
     "sri-cross-origin-script-malformed": ["sri.script-invalid-integrity-format"],
     "sri-clean": [],
-    "sri-same-origin-no-integrity": []
+    "sri-same-origin-no-integrity": [],
+    "inline-script-no-nonce": ["inline-script.present-without-nonce"],
+    "inline-script-with-nonce": [],
+    "event-handler-attribute": ["inline-script.event-handler-attribute"],
+    "javascript-uri": ["inline-script.javascript-uri"]
   }
 }

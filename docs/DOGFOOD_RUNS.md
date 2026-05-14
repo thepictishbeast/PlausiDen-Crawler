@@ -1033,6 +1033,99 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (thirtieth entry) — inline-script + event-handler + javascript: URI per-element audit
+
+### What's new since last cycle (twenty-ninth entry)
+- 1 new detector axis: **`inlineScript`** — per-element CSP-
+  bypass + stored-XSS surface audit. Brings the active-axis
+  count to **42** (45 with the three legacy event kinds
+  counted separately). Four finding kinds, all warn.
+- 4 new HTTP fixture routes (3 finding-specific + 1 clean
+  control with a nonced inline script). HTTP gate now
+  validates **47/47** routes (was 43/43).
+- 16 unit tests in `inlineScript.test.ts`, all passing.
+- SECOND per-element security detector (after SRI cycle 25).
+- THIRTIETH cycle of the T76 expansion — pure detection
+  surface gain across the security spectrum.
+
+### Why inlineScript now — closing the CSP gap
+The cycle-22 cspPolicy detector audits the response-header
+side of CSP: does the operator declare 'script-src' / 'no-
+unsafe-inline' / 'require-trusted-types-for'? But CSP only
+PROTECTS what the operator already wrote. If the page also
+embeds inline `<script>...</script>` blocks without nonces,
+those scripts are silently DROPPED under strict-CSP
+('script-src 'nonce-<random>') — which means the page either
+breaks OR (more dangerously) silently misses the security
+control because the inline script was a fallback path.
+
+The inlineScript detector closes this gap by walking the
+ACTUAL DOM and reporting:
+
+  - inline `<script>` blocks without nonce
+  - on* event-handler attributes (onclick, onload, etc.)
+  - javascript: URIs in href/src/action/formaction
+
+This catches CSP bypasses the response-header detector can't
+see. Defence-in-depth pair: cspPolicy + inlineScript.
+
+### Composite finding architecture
+The fourth finding kind (inline-script.no-csp-but-inline) is a
+COMPOSITE — it fires when ANY of the first three findings fire
+AND no CSP header is present. This pattern surfaces a
+qualitatively-worse situation (the page has nothing stopping
+stored-XSS injection from executing) without duplicating the
+csp.missing finding from cspPolicy. It's the first composite
+finding in T76 — establishes the pattern for future detectors
+that depend on cross-header / cross-detector state.
+
+### CSP detection upgrade pattern
+The page-side capture function (INLINE_SCRIPT_DOM_CAPTURE_JS)
+checks for CSP via `<meta http-equiv="content-security-policy">`
+because `page.evaluate` can't read response headers. main.ts
+then upgrades `hasCsp` to true if the actual response header
+is present (more authoritative). This pattern — page-side
+fallback, main.ts authoritative upgrade — would be useful for
+other per-element detectors that need response-header context.
+
+### Tests
+- 16 unit scenarios in `inlineScript.test.ts`, all passing —
+  covers the no-nonce path, with-nonce clean baseline,
+  aggregation count + examples cap, all-three-kinds-together,
+  the no-CSP composite, the mixed-nonced+non-nonced filter,
+  and the no-inline-no-CSP no-finding case.
+
+### Verified
+- HTTP gate: **47/47** routes pass (was 43/43; 4 new
+  inline-script routes).
+- HTTPS gate: 55/55 routes pass (no change — inline-script
+  fires via the HTTP fixture).
+- SkillShots audit: 45 axes total, all silent vs prior. SkillShots
+  is a static page that genuinely has no inline scripts, no
+  event handlers, no javascript: URIs — clean baseline. (NB
+  there's no localhost exemption on this detector because
+  the threat model isn't environmental.)
+
+### Action items
+- [ ] CSP report-only header parser — pairs with existing CSP
+      detector. Single-value, helper applies.
+- [ ] Trusted Types violation detector — runtime monitoring of
+      `securitypolicyviolation` events. Different shape from
+      DOM walk; requires page.on('console') hooks.
+- [ ] Mixed-content sub-resources via the cycle-27
+      `allResponseHeaders` Map (finally use the per-sub-
+      resource capture for something other than CORP).
+- [ ] End-to-end CORP fixture verification (still queued
+      from cycle 27).
+- [ ] `perElementDetector` helper extraction question stays
+      open. SRI walks specific tag classes; inlineScript walks
+      all elements for handlers + specific tag classes for
+      scripts. A third per-element security detector (e.g.
+      meta-refresh-redirect, postMessage-handler-without-
+      origin-check) would clarify the abstraction shape.
+
+---
+
 ## 2026-05-14 (twenty-ninth entry) — Vary correctness — completes the cache-poisoning surface
 
 ### What's new since last cycle (twenty-eighth entry)

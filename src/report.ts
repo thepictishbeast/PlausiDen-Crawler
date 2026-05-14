@@ -52,6 +52,7 @@ export interface CapturedEvent {
     | 'corp'
     | 'cache-control'
     | 'vary'
+    | 'inline-script'
     | 'link-underline'
     | 'cross-page-title'
     | 'cross-page-meta-description';
@@ -139,6 +140,8 @@ export interface Report {
     cacheControlFindingsStrict: number;
     varyFindings: number;
     varyFindingsStrict: number;
+    inlineScriptFindings: number;
+    inlineScriptFindingsStrict: number;
     linkUnderlineFindings: number;
     linkUnderlineFindingsStrict: number;
     crossPageTitleFindings: number;
@@ -407,6 +410,13 @@ export interface Diff {
    */
   newVaryFindings: CapturedEvent[];
   /**
+   * inline-script findings new in this run vs prior. All warn
+   * — per-element security audit. inline <script> without
+   * nonce, on* event-handler attributes, javascript: URIs,
+   * composite no-CSP-but-inline. T76 cycle 30.
+   */
+  newInlineScriptFindings: CapturedEvent[];
+  /**
    * link-underline findings new in this run vs prior. Warn-only:
    * inline link inside running text distinguished only by colour.
    * WCAG 1.4.1 Level A. T76.
@@ -476,6 +486,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     newCorpFindings: [],
     newCacheControlFindings: [],
     newVaryFindings: [],
+    newInlineScriptFindings: [],
     newLinkUnderlineFindings: [],
     newCrossPageTitleFindings: [],
     newCrossPageMetaDescriptionFindings: [],
@@ -523,6 +534,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     out.newCorpFindings = current.events.filter(e => e.kind === 'corp');
     out.newCacheControlFindings = current.events.filter(e => e.kind === 'cache-control');
     out.newVaryFindings = current.events.filter(e => e.kind === 'vary');
+    out.newInlineScriptFindings = current.events.filter(e => e.kind === 'inline-script');
     out.newLinkUnderlineFindings = current.events.filter(e => e.kind === 'link-underline');
     out.newCrossPageTitleFindings = current.events.filter(e => e.kind === 'cross-page-title');
     out.newCrossPageMetaDescriptionFindings = current.events.filter(e => e.kind === 'cross-page-meta-description');
@@ -571,6 +583,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     else if (e.kind === 'corp') out.newCorpFindings.push(e);
     else if (e.kind === 'cache-control') out.newCacheControlFindings.push(e);
     else if (e.kind === 'vary') out.newVaryFindings.push(e);
+    else if (e.kind === 'inline-script') out.newInlineScriptFindings.push(e);
     else if (e.kind === 'link-underline') out.newLinkUnderlineFindings.push(e);
     else if (e.kind === 'cross-page-title') out.newCrossPageTitleFindings.push(e);
     else if (e.kind === 'cross-page-meta-description') out.newCrossPageMetaDescriptionFindings.push(e);
@@ -913,6 +926,18 @@ export function renderPositiveSignal(report: Report, diff: Diff): string {
       total: report.events.filter((e) => e.kind === 'vary').length,
       news: diff.newVaryFindings.length,
       strictNews: strict(diff.newVaryFindings),
+    },
+    {
+      // T76 cycle 30 (Crawler): inline-script — per-element
+      // CSP-bypass + stored-XSS surface. Walks inline
+      // <script> blocks (warn on no-nonce), event-handler
+      // attributes (onclick etc.), javascript: URIs, and
+      // emits a composite warn when ANY inline script lives
+      // in a no-CSP page.
+      name: 'inlineScript',
+      total: report.events.filter((e) => e.kind === 'inline-script').length,
+      news: diff.newInlineScriptFindings.length,
+      strictNews: strict(diff.newInlineScriptFindings),
     },
     {
       // T76 (Crawler): link-underline — WCAG 1.4.1 (Use of Color, A).

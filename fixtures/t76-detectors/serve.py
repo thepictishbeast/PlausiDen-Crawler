@@ -431,6 +431,44 @@ def opener_explicit():
     return page('<h1>Explicit rel=opener</h1><p><a href="https://other.example/" target="_blank" rel="opener">External</a></p>')
 
 
+# ----- Inline-script + event-handler + javascript: URI -----
+@route('/inline-script-no-nonce/')
+def inline_script_no_nonce():
+    body = (
+        '<h1>Inline script without nonce</h1>'
+        '<script>console.log("inline")</script>'
+    )
+    return page(body)
+
+
+@route('/inline-script-with-nonce/')
+def inline_script_with_nonce():
+    body = (
+        '<h1>Inline script with nonce</h1>'
+        '<script nonce="abc123">console.log("nonced")</script>'
+    )
+    return page(body)
+
+
+@route('/event-handler-attribute/')
+def event_handler_attribute():
+    body = (
+        '<h1>Inline event-handler attribute</h1>'
+        '<button onclick="alert(1)">Click me</button>'
+        '<a href="#" onmouseover="alert(2)">Hover</a>'
+    )
+    return page(body)
+
+
+@route('/javascript-uri/')
+def javascript_uri():
+    body = (
+        '<h1>javascript: URI</h1>'
+        '<a href="javascript:alert(1)">JS link</a>'
+    )
+    return page(body)
+
+
 # ----- Subresource Integrity (SRI) -----
 # A 384-bit base64 placeholder hash; the detector only validates
 # format, not actual byte-match (browser does that at load time).

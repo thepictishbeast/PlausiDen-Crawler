@@ -61,6 +61,7 @@ import { buildInfoLeakSnapshot, detectInfoLeakIssues, type InfoLeakFinding } fro
 import { buildCorpSnapshot, detectCorpIssues, type CorpFinding } from './corp.js';
 import { buildCacheControlSnapshot, detectCacheControlIssues, type CacheControlFinding } from './cacheControl.js';
 import { buildVarySnapshot, detectVaryIssues, type VaryFinding } from './varyHeader.js';
+import { detectInlineScriptIssues, INLINE_SCRIPT_DOM_CAPTURE_JS, type InlineScriptFinding, type InlineScriptSnapshot } from './inlineScript.js';
 
 interface Budget {
   newConsoleErrors: number;
@@ -1046,6 +1047,57 @@ async function main(args: string[]): Promise<number> {
   };
 
   /**
+   * T76 cycle 30: inline-script + event-handler + javascript:
+   * URI per-element security audit. SECOND per-element security
+   * detector (after SRI). Catches CSP nonce-bypass surface that
+   * the response-header CSP detector can't see (CSP enforcement
+   * is per-script; this walker sees what got through the policy
+   * OR what would be vulnerable WITHOUT one).
+   *
+   * Cross-references the live response headers to detect "no CSP
+   * but inline script" composite finding — the page-side capture
+   * function checks for meta http-equiv CSP only; main.ts here
+   * upgrades hasCsp to true if the response header is present
+   * (more authoritative than the meta fallback).
+   */
+  const inlineScriptFindingsByStep: Array<{ stepLabel: string; pageUrl: string; findings: InlineScriptFinding[] }> = [];
+  const checkInlineScript = async (afterLabel: string) => {
+    try {
+      const pageUrl = page.url();
+      const snap = (await page.evaluate(INLINE_SCRIPT_DOM_CAPTURE_JS)) as InlineScriptSnapshot;
+      // Upgrade hasCsp from response-header truth (more
+      // authoritative than the meta http-equiv fallback the
+      // page-side capture uses).
+      const headers = topLevelResponseHeaders.get(pageUrl);
+      if (headers) {
+        for (const k of Object.keys(headers)) {
+          if (k.toLowerCase() === 'content-security-policy') {
+            snap.hasCsp = true;
+            break;
+          }
+        }
+      }
+      const findings = detectInlineScriptIssues(snap);
+      inlineScriptFindingsByStep.push({ stepLabel: afterLabel, pageUrl: snap.pageUrl, findings });
+      for (const f of findings) {
+        log({
+          kind: 'inline-script',
+          text: `[${f.kind}] ${f.detail}`,
+          url: snap.pageUrl,
+          severity: f.severity,
+          ruleId: f.kind,
+          impact: f.severity === 'strict' ? 'serious' : 'minor',
+        });
+      }
+    } catch (e) {
+      log({
+        kind: 'pageerror',
+        text: `[inlineScript] detector threw on step ${afterLabel}: ${(e as Error).message}`,
+      });
+    }
+  };
+
+  /**
    * T76: Subresource Integrity (SRI) detector. SECURITY-flavoured;
    * supply-chain attack mitigation. Per-element DOM walk via
    * `page.evaluate` (different shape from response-header
@@ -2001,6 +2053,7 @@ async function main(args: string[]): Promise<number> {
       await checkCoop(step.label || `goto-${i}`);
       await checkCoep(step.label || `goto-${i}`);
       await checkSri(step.label || `goto-${i}`);
+      await checkInlineScript(step.label || `goto-${i}`);
       await checkInfoLeak(step.label || `goto-${i}`);
       await checkCorp(step.label || `goto-${i}`);
       await checkCacheControl(step.label || `goto-${i}`);
@@ -2161,6 +2214,8 @@ async function main(args: string[]): Promise<number> {
       cacheControlFindingsStrict: events.filter(e => e.kind === 'cache-control' && e.severity === 'strict').length,
       varyFindings: events.filter(e => e.kind === 'vary').length,
       varyFindingsStrict: events.filter(e => e.kind === 'vary' && e.severity === 'strict').length,
+      inlineScriptFindings: events.filter(e => e.kind === 'inline-script').length,
+      inlineScriptFindingsStrict: events.filter(e => e.kind === 'inline-script' && e.severity === 'strict').length,
       linkUnderlineFindings: events.filter(e => e.kind === 'link-underline').length,
       linkUnderlineFindingsStrict: events.filter(e => e.kind === 'link-underline' && e.severity === 'strict').length,
       crossPageTitleFindings: events.filter(e => e.kind === 'cross-page-title').length,
@@ -2366,6 +2421,12 @@ async function main(args: string[]): Promise<number> {
       JSON.stringify(varyFindingsByStep, null, 2),
     );
   }
+  if (inlineScriptFindingsByStep.length > 0) {
+    writeFileSync(
+      join(outDir, 'inline-script.json'),
+      JSON.stringify(inlineScriptFindingsByStep, null, 2),
+    );
+  }
   if (linkUnderlineFindingsByStep.length > 0) {
     writeFileSync(
       join(outDir, 'link-underline.json'),
@@ -2475,6 +2536,7 @@ async function main(args: string[]): Promise<number> {
   console.log(`  corp:              ${report.counts.corpFindings} (strict ${report.counts.corpFindingsStrict})`);
   console.log(`  cache-control:     ${report.counts.cacheControlFindings} (strict ${report.counts.cacheControlFindingsStrict})`);
   console.log(`  vary:              ${report.counts.varyFindings} (strict ${report.counts.varyFindingsStrict})`);
+  console.log(`  inline-script:     ${report.counts.inlineScriptFindings} (strict ${report.counts.inlineScriptFindingsStrict})`);
   console.log(`  link underline:    ${report.counts.linkUnderlineFindings} (strict ${report.counts.linkUnderlineFindingsStrict})`);
   console.log(`  cross-page title:  ${report.counts.crossPageTitleFindings} (strict ${report.counts.crossPageTitleFindingsStrict})`);
   console.log(`  cross-page meta:   ${report.counts.crossPageMetaDescriptionFindings} (strict ${report.counts.crossPageMetaDescriptionFindingsStrict})`);
@@ -2580,6 +2642,9 @@ async function main(args: string[]): Promise<number> {
     const newVaryStrict = diff.newVaryFindings.filter(e => e.severity === 'strict').length;
     const newVaryWarn = diff.newVaryFindings.length - newVaryStrict;
     console.log(`    NEW vary:             ${diff.newVaryFindings.length} (strict ${newVaryStrict}, warn ${newVaryWarn})`);
+    const newIsStrict = diff.newInlineScriptFindings.filter(e => e.severity === 'strict').length;
+    const newIsWarn = diff.newInlineScriptFindings.length - newIsStrict;
+    console.log(`    NEW inline-script:    ${diff.newInlineScriptFindings.length} (strict ${newIsStrict}, warn ${newIsWarn})`);
     const newLinkUnderlineStrict = diff.newLinkUnderlineFindings.filter(e => e.severity === 'strict').length;
     const newLinkUnderlineWarn = diff.newLinkUnderlineFindings.length - newLinkUnderlineStrict;
     console.log(`    NEW link underline:   ${diff.newLinkUnderlineFindings.length} (strict ${newLinkUnderlineStrict}, warn ${newLinkUnderlineWarn})`);
