@@ -37,6 +37,8 @@ import { captureFormLabelsSnapshot, detectFormLabelIssues, type FormLabelFinding
 import { captureViewportMetaSnapshot, detectViewportMetaIssues, type ViewportMetaFinding } from './viewportMeta.js';
 import { captureDocTitleSnapshot, detectDocTitleIssues, type DocTitleFinding } from './docTitle.js';
 import { captureHtmlLangSnapshot, detectHtmlLangIssues, type HtmlLangFinding } from './htmlLang.js';
+import { captureSkipLinkSnapshot, detectSkipLinkIssues, type SkipLinkFinding } from './skipLink.js';
+import { captureOutboundLinksSnapshot, detectOutboundLinkIssues, type OutboundLinkFinding } from './outboundLinks.js';
 
 interface Budget {
   newConsoleErrors: number;
@@ -888,6 +890,66 @@ async function main(args: string[]): Promise<number> {
   };
 
   /**
+   * T76: skip-link detector. WCAG 2.4.1 (Bypass Blocks, Level A).
+   * Finds the page's skip-to-content link and validates it works:
+   * target exists, link is first focusable, link isn't permanently
+   * hidden.
+   */
+  const skipLinkFindingsByStep: Array<{ stepLabel: string; pageUrl: string; findings: SkipLinkFinding[] }> = [];
+  const checkSkipLink = async (afterLabel: string) => {
+    try {
+      const snap = await captureSkipLinkSnapshot(page);
+      const findings = detectSkipLinkIssues(snap);
+      skipLinkFindingsByStep.push({ stepLabel: afterLabel, pageUrl: snap.pageUrl, findings });
+      for (const f of findings) {
+        log({
+          kind: 'skip-link',
+          text: `[${f.kind}] ${f.detail}`,
+          url: snap.pageUrl,
+          severity: f.severity,
+          ruleId: f.kind,
+          impact: f.severity === 'strict' ? 'serious' : 'minor',
+        });
+      }
+    } catch (e) {
+      log({
+        kind: 'pageerror',
+        text: `[skipLink] detector threw on step ${afterLabel}: ${(e as Error).message}`,
+      });
+    }
+  };
+
+  /**
+   * T76: outbound-link safety detector. SECURITY-flavoured: catches
+   * tabnabbing-vulnerable target=_blank links (no rel=noopener),
+   * explicit rel=opener (the worst), and outbound links missing
+   * rel=noreferrer (Referer-leak through analytics).
+   */
+  const outboundLinksFindingsByStep: Array<{ stepLabel: string; pageUrl: string; findings: OutboundLinkFinding[] }> = [];
+  const checkOutboundLinks = async (afterLabel: string) => {
+    try {
+      const snap = await captureOutboundLinksSnapshot(page);
+      const findings = detectOutboundLinkIssues(snap);
+      outboundLinksFindingsByStep.push({ stepLabel: afterLabel, pageUrl: snap.pageUrl, findings });
+      for (const f of findings) {
+        log({
+          kind: 'outbound-links',
+          text: `[${f.kind}] ${f.detail}`,
+          url: snap.pageUrl,
+          severity: f.severity,
+          ruleId: f.kind,
+          impact: f.severity === 'strict' ? 'serious' : 'minor',
+        });
+      }
+    } catch (e) {
+      log({
+        kind: 'pageerror',
+        text: `[outboundLinks] detector threw on step ${afterLabel}: ${(e as Error).message}`,
+      });
+    }
+  };
+
+  /**
    * T76: <html lang> attribute detector. WCAG 3.1.1 (Language of
    * Page, Level A). Strict on missing/empty; warn on structurally
    * invalid BCP-47 or unknown-primary subtag (catches typos).
@@ -1338,6 +1400,8 @@ async function main(args: string[]): Promise<number> {
       await checkViewportMeta(step.label || `goto-${i}`);
       await checkDocTitle(step.label || `goto-${i}`);
       await checkHtmlLang(step.label || `goto-${i}`);
+      await checkSkipLink(step.label || `goto-${i}`);
+      await checkOutboundLinks(step.label || `goto-${i}`);
       await checkWebVitals(step.label || `goto-${i}`);
     }
     // Memory snapshot at end of each step so the report shows heap growth
@@ -1418,6 +1482,10 @@ async function main(args: string[]): Promise<number> {
       docTitleFindingsStrict: events.filter(e => e.kind === 'doc-title' && e.severity === 'strict').length,
       htmlLangFindings: events.filter(e => e.kind === 'html-lang').length,
       htmlLangFindingsStrict: events.filter(e => e.kind === 'html-lang' && e.severity === 'strict').length,
+      skipLinkFindings: events.filter(e => e.kind === 'skip-link').length,
+      skipLinkFindingsStrict: events.filter(e => e.kind === 'skip-link' && e.severity === 'strict').length,
+      outboundLinksFindings: events.filter(e => e.kind === 'outbound-links').length,
+      outboundLinksFindingsStrict: events.filter(e => e.kind === 'outbound-links' && e.severity === 'strict').length,
       cspViolations: events.filter(e => e.kind === 'csp-violation').length,
       total: events.length,
       stepsOk: stepResults.filter(s => s.ok).length,
@@ -1495,6 +1563,18 @@ async function main(args: string[]): Promise<number> {
     writeFileSync(
       join(outDir, 'html-lang.json'),
       JSON.stringify(htmlLangFindingsByStep, null, 2),
+    );
+  }
+  if (skipLinkFindingsByStep.length > 0) {
+    writeFileSync(
+      join(outDir, 'skip-link.json'),
+      JSON.stringify(skipLinkFindingsByStep, null, 2),
+    );
+  }
+  if (outboundLinksFindingsByStep.length > 0) {
+    writeFileSync(
+      join(outDir, 'outbound-links.json'),
+      JSON.stringify(outboundLinksFindingsByStep, null, 2),
     );
   }
   writeFileSync(join(outDir, 'report.json'), JSON.stringify(report, null, 2));
@@ -1580,6 +1660,8 @@ async function main(args: string[]): Promise<number> {
   console.log(`  viewport meta:     ${report.counts.viewportMetaFindings} (strict ${report.counts.viewportMetaFindingsStrict})`);
   console.log(`  doc title:         ${report.counts.docTitleFindings} (strict ${report.counts.docTitleFindingsStrict})`);
   console.log(`  html lang:         ${report.counts.htmlLangFindings} (strict ${report.counts.htmlLangFindingsStrict})`);
+  console.log(`  skip link:         ${report.counts.skipLinkFindings} (strict ${report.counts.skipLinkFindingsStrict})`);
+  console.log(`  outbound links:    ${report.counts.outboundLinksFindings} (strict ${report.counts.outboundLinksFindingsStrict})`);
   console.log(`  web vitals:        ${report.counts.webVitalsFindings} (strict ${report.counts.webVitalsFindingsStrict})`);
   console.log(`  csp violations:    ${report.counts.cspViolations}`);
   console.log(`  steps ok/failed:   ${report.counts.stepsOk}/${report.counts.stepsFailed}`);
@@ -1622,6 +1704,12 @@ async function main(args: string[]): Promise<number> {
     const newHtmlLangStrict = diff.newHtmlLangFindings.filter(e => e.severity === 'strict').length;
     const newHtmlLangWarn = diff.newHtmlLangFindings.length - newHtmlLangStrict;
     console.log(`    NEW html lang:        ${diff.newHtmlLangFindings.length} (strict ${newHtmlLangStrict}, warn ${newHtmlLangWarn})`);
+    const newSkipLinkStrict = diff.newSkipLinkFindings.filter(e => e.severity === 'strict').length;
+    const newSkipLinkWarn = diff.newSkipLinkFindings.length - newSkipLinkStrict;
+    console.log(`    NEW skip link:        ${diff.newSkipLinkFindings.length} (strict ${newSkipLinkStrict}, warn ${newSkipLinkWarn})`);
+    const newOutboundLinksStrict = diff.newOutboundLinksFindings.filter(e => e.severity === 'strict').length;
+    const newOutboundLinksWarn = diff.newOutboundLinksFindings.length - newOutboundLinksStrict;
+    console.log(`    NEW outbound links:   ${diff.newOutboundLinksFindings.length} (strict ${newOutboundLinksStrict}, warn ${newOutboundLinksWarn})`);
     console.log(`    NEW csp violations:   ${diff.newCspViolations.length}`);
     console.log(`    newly broken steps:   ${diff.newlyBrokenSteps.length}`);
     console.log(`    fixed steps:          ${diff.fixedSteps.length}`);

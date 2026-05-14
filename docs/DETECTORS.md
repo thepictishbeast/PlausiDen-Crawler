@@ -179,6 +179,34 @@ Source: `src/htmlLang.ts` · Rust: `html_lang.rs`
 | `lang.invalid` | warn | Value doesn't structurally match BCP-47 (underscores, whitespace, wrong-length primary, doubled hyphens). |
 | `lang.unknown-primary` | warn | Primary subtag isn't in the common ISO 639-1 set (catches typos like `engish`). |
 
+### `skipLink` — "skip to content" link *(T76 — added 2026-05-14)*
+Source: `src/skipLink.ts` · Rust: `skip_link.rs`
+
+| Finding | Sev | Catches |
+|---|---|---|
+| `skip.missing` | warn | No skip link found. WCAG 2.4.1 Level A; warn (not strict) since landmark navigation provides a partial bypass for screen readers. |
+| `skip.broken-target` | strict | Skip link href points at a non-existent id — pressing Enter does nothing. |
+| `skip.permanently-hidden` | strict | Skip link is `display:none` / `visibility:hidden` — can never be focused. |
+| `skip.not-first-focusable` | warn | Skip link exists but isn't the first focusable element on the page. WCAG technique G1. |
+
+Heuristic for "what counts as a skip link": text matches `/skip/i` or `/jump.{0,4}content/i`, OR class contains `skip`, OR is one of the first 3 anchors with href targeting a `<main>` / `id="main"` / `id="content"` element.
+
+### `outboundLinks` — outbound-link safety *(T76 — added 2026-05-14)*
+Source: `src/outboundLinks.ts` · Rust: `outbound_links.rs`
+
+SECURITY-flavoured detector. Defence-in-depth against tabnabbing
+(modern browsers default `target="_blank"` to noopener, but older /
+embedded / downgraded clients don't — and `rel="opener"` opts back in
+to the vulnerable behaviour).
+
+| Finding | Sev | Catches |
+|---|---|---|
+| `link.tabnab-vulnerable` | strict | `target="_blank"` outbound link without `rel="noopener"`. Destination can navigate the original tab to a phishing URL via `window.opener`. |
+| `link.opener-explicit` | strict | `rel="opener"` explicitly set — opts back in to tabnab vulnerability. |
+| `link.outbound-no-noreferrer` | warn | Outbound link without `rel="noreferrer"` — leaks current URL (and any session-token query params) to the destination's analytics. |
+
+"Outbound" = different `origin` from the page (resolved via `URL(href, document.baseURI)`). Same-origin and non-http(s) schemes (mailto:, tel:, javascript:, data:) are skipped.
+
 ---
 
 ## Axe rule de-duplication
@@ -275,14 +303,12 @@ first-class detector covers the multi-label collision case yet.
 Detectors queued for future T76 firings — each is high-leverage,
 zero-overlap with existing axes:
 
-- **`skipLink`** — missing "skip to content" link as the first
-  focusable element. WCAG 2.4.1.
 - **`metaDescription`** — missing or empty `<meta name="description">`,
   duplicate descriptions.
 - **`favicon`** — missing favicon, broken favicon URL.
-- **`outboundLink`** — outbound `<a>` without `rel="noopener"` —
-  tabnabbing risk.
 - **`mixedContent`** — `https://` page loading `http://` resources.
+  (Partial overlap with browser's built-in mixed-content blocker
+  + CSP-violation events; need to design dedupe.)
 - **`linkUnderline`** — links indistinguishable from surrounding
   text (no underline + colour-only differentiation, fails WCAG 1.4.1).
 - **`fontLoading`** — `font-display: swap` missing → invisible-text
@@ -292,6 +318,13 @@ zero-overlap with existing axes:
 - **`crossPageTitleDup`** — same `<title>` on every page of a
   multi-step journey. (Aggregates-layer detector — operates on
   the run report, not per-page snapshot.)
+- **`hstsHeader`** — `Strict-Transport-Security` header missing /
+  `max-age` too short (< 6 months). Server-response header check;
+  needs response-header capture path. SECURITY.
+- **`xFrameOptions`** — `X-Frame-Options` header missing (clickjacking
+  defence). SECURITY.
+- **`mixedFormSubmission`** — `<form action="http://...">` on
+  https page. SECURITY.
 
 Pick from this list for the next T76 cycle. Prefer those with no
 existing axe-core coverage or where the project-specific aggregation

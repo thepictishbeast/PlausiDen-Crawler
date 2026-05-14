@@ -31,7 +31,9 @@ export interface CapturedEvent {
     | 'form-labels'
     | 'viewport-meta'
     | 'doc-title'
-    | 'html-lang';
+    | 'html-lang'
+    | 'skip-link'
+    | 'outbound-links';
   level?: string;
   text: string;
   url?: string;
@@ -76,6 +78,10 @@ export interface Report {
     docTitleFindingsStrict: number;
     htmlLangFindings: number;
     htmlLangFindingsStrict: number;
+    skipLinkFindings: number;
+    skipLinkFindingsStrict: number;
+    outboundLinksFindings: number;
+    outboundLinksFindingsStrict: number;
     cspViolations: number;
     total: number;
     stepsOk: number;
@@ -203,6 +209,18 @@ export interface Diff {
    * missing/empty. Warn = invalid BCP-47 / unknown primary. T76.
    */
   newHtmlLangFindings: CapturedEvent[];
+  /**
+   * skip-link findings new in this run vs prior. Warn = missing /
+   * not-first-focusable. Strict = broken target / permanently
+   * hidden. WCAG 2.4.1. T76.
+   */
+  newSkipLinkFindings: CapturedEvent[];
+  /**
+   * outbound-link findings new in this run vs prior. Strict =
+   * tabnab-vulnerable / opener-explicit. Warn = no-noreferrer.
+   * Security defence-in-depth. T76.
+   */
+  newOutboundLinksFindings: CapturedEvent[];
   newlyBrokenSteps: StepResult[];
   fixedSteps: StepResult[];
 }
@@ -236,6 +254,8 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     newViewportMetaFindings: [],
     newDocTitleFindings: [],
     newHtmlLangFindings: [],
+    newSkipLinkFindings: [],
+    newOutboundLinksFindings: [],
     newlyBrokenSteps: [],
     fixedSteps: [],
   };
@@ -260,6 +280,8 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     out.newViewportMetaFindings = current.events.filter(e => e.kind === 'viewport-meta');
     out.newDocTitleFindings = current.events.filter(e => e.kind === 'doc-title');
     out.newHtmlLangFindings = current.events.filter(e => e.kind === 'html-lang');
+    out.newSkipLinkFindings = current.events.filter(e => e.kind === 'skip-link');
+    out.newOutboundLinksFindings = current.events.filter(e => e.kind === 'outbound-links');
     return out;
   }
   const priorKeys = new Set(prior.events.map(key));
@@ -285,6 +307,8 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     else if (e.kind === 'viewport-meta') out.newViewportMetaFindings.push(e);
     else if (e.kind === 'doc-title') out.newDocTitleFindings.push(e);
     else if (e.kind === 'html-lang') out.newHtmlLangFindings.push(e);
+    else if (e.kind === 'skip-link') out.newSkipLinkFindings.push(e);
+    else if (e.kind === 'outbound-links') out.newOutboundLinksFindings.push(e);
   }
   const priorStepLabels = new Map(
     prior.steps.map((s, i) => [s.step.label || `${s.step.kind}-${i}`, s])
@@ -428,6 +452,24 @@ export function renderPositiveSignal(report: Report, diff: Diff): string {
       total: report.events.filter((e) => e.kind === 'html-lang').length,
       news: diff.newHtmlLangFindings.length,
       strictNews: strict(diff.newHtmlLangFindings),
+    },
+    {
+      // T76 (Crawler): skip-link — WCAG 2.4.1 (Level A).
+      // missing/not-first-focusable (warn), broken-target/permanently-
+      // hidden (strict).
+      name: 'skipLink',
+      total: report.events.filter((e) => e.kind === 'skip-link').length,
+      news: diff.newSkipLinkFindings.length,
+      strictNews: strict(diff.newSkipLinkFindings),
+    },
+    {
+      // T76 (Crawler): outbound-links — security defence-in-depth.
+      // tabnab-vulnerable / opener-explicit (strict),
+      // outbound-no-noreferrer (warn).
+      name: 'outboundLinks',
+      total: report.events.filter((e) => e.kind === 'outbound-links').length,
+      news: diff.newOutboundLinksFindings.length,
+      strictNews: strict(diff.newOutboundLinksFindings),
     },
   ];
   const lines: string[] = [];
