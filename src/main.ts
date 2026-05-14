@@ -83,6 +83,7 @@ import {
 import { renderHtmlReport } from './htmlReport.js';
 import { readWhitelist, applyWhitelist, renderWhitelistSummary } from './scoreWhitelist.js';
 import { renderSupersocietyBadge } from './supersocietyBadge.js';
+import { computeAggregateScore, renderAggregateBadge } from './supersocietyBadgeAggregate.js';
 
 interface Budget {
   newConsoleErrors: number;
@@ -2698,6 +2699,32 @@ async function main(args: string[]): Promise<number> {
     join(runsDir, `${journeySlug}-latest-score.json`),
     JSON.stringify(supersocietyScore, null, 2),
   );
+
+  // T76 cycle 61: aggregate badge — composite of EVERY audited
+  // journey's score (worst-of-N). Emitted at the stable repo-
+  // root path `badges/supersociety.svg` so a README reference
+  // like `![Supersociety](./badges/supersociety.svg)` always
+  // resolves. The per-journey badges remain in runs/ for
+  // surface-specific dashboards; this one answers "is the
+  // WHOLE project supersociety?".
+  try {
+    const aggregate = computeAggregateScore(runsDir);
+    const aggregateBadge = renderAggregateBadge(aggregate);
+    const badgesDir = join(runsDir, '..', 'badges');
+    try { mkdirSync(badgesDir, { recursive: true }); } catch { /* exists */ }
+    writeFileSync(join(badgesDir, 'supersociety.svg'), aggregateBadge);
+    writeFileSync(
+      join(badgesDir, 'supersociety-aggregate.json'),
+      JSON.stringify(aggregate, null, 2),
+    );
+  } catch (e) {
+    // Badge generation is decorative; never fail the audit.
+    log({
+      kind: 'console',
+      level: 'warning',
+      text: `[supersociety-badge] aggregate badge write failed: ${(e as Error).message}`,
+    });
+  }
 
   // Per-screenshot WCAG findings (axe-core), separate from discover sweep
   // findings. Both files share the same `renderAxeFindings` shape so a

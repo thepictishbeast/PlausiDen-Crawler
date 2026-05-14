@@ -42,15 +42,17 @@ const LOCAL = 'http://127.0.0.1:8123/';
   assert(f.length === 0, 'full directive set → clean', JSON.stringify(f));
 }
 
-// 4. Header set but no document-write directive → warn.
+// 4. Header set with only force-load-at-top → clean.
+// T76 cycle 61: document-write directive not yet shipped in
+// Chromium; absence of `document-write=?0` is no longer flagged.
 {
   const snap = buildDocumentPolicySnapshot(PROD, {
     'document-policy': 'force-load-at-top',
   });
   const f = detectDocumentPolicyIssues(snap);
   assert(
-    f.length === 1 && f[0].kind === 'document-policy.permits-document-write',
-    'header without document-write=?0 → permits warn',
+    f.length === 0,
+    'header with only force-load-at-top → clean (document-write absence not flagged until directive ships)',
     JSON.stringify(f),
   );
 }
@@ -105,14 +107,12 @@ const LOCAL = 'http://127.0.0.1:8123/';
   assert(f.length === 0, 'mixed-case header → resolved', JSON.stringify(f));
 }
 
-// 9. Bare directive parses as ?1.
+// 9. Bare `document-write` parses as ?1 → permits warn.
 {
   const snap = buildDocumentPolicySnapshot(PROD, {
     'document-policy': 'document-write',  // bare = ?1 = ENABLED
   });
   const f = detectDocumentPolicyIssues(snap);
-  // document-write directive present but value = '?1' (default for bare).
-  // Our parse upgrades bare key to '?1'. The detector flags '?1' as permits-document-write.
   assert(
     f.length === 1 && f[0].kind === 'document-policy.permits-document-write',
     'bare document-write directive treated as ?1 → permits warn',

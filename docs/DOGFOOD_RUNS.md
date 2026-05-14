@@ -1033,6 +1033,83 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (sixty-first entry) — Aggregate badge + 5 defense-in-depth headers on Loom
+
+### What's new since last cycle (sixtieth entry)
+- **Aggregate supersociety badge** (this commit). New module
+  `supersocietyBadgeAggregate.ts` reads every `runs/<journey>-
+  latest-score.json` and emits a 200×20 SVG showing the
+  WORST-of-N composite across all journeys, plus the journey
+  count. Auto-emitted at `badges/supersociety.svg` after every
+  audit. README updated with badge reference.
+- **Test-fixture filter**: `t76-detector-fixtures*` journeys
+  are intentional-fail fixtures (designed to make detectors
+  fire on broken inputs); excluded from the aggregate so they
+  don't drag the badge to an inaccurate F.
+- **Cross-repo Loom fix** (commit e2ec026): respond_html now
+  emits FIVE response-only headers on every admin HTML — they
+  can't be sent via meta http-equiv per browser policy:
+    - `Document-Policy: force-load-at-top`
+    - `X-Content-Type-Options: nosniff`
+    - `Cross-Origin-Opener-Policy: same-origin`
+    - `Cross-Origin-Resource-Policy: same-origin`
+    - `Origin-Agent-Cluster: ?1`
+- **Score: aggregate A 99/100 across 15 audited journeys**
+  (one journey at 99, fourteen at 100). Loom edit-server holds
+  at 100/100 after the new headers landed.
+
+### Discovery: Document-Policy directive shipping state
+Cycle 60 added the detector; cycle 61's first attempt to deploy
+the directive on Loom emitted three proposed values:
+  Document-Policy: document-write=?0, force-load-at-top, unsized-media=?0
+
+Chrome console immediately complained: "Unrecognized document
+policy feature name document-write" + same for unsized-media.
+Only `force-load-at-top` is currently shipped; the other two
+are spec'd-but-unimplemented.
+
+The detector was updated to allow the narrower form (cycle 61):
+the previously-emitted `permits-document-write` warn no longer
+fires on absence (only on explicit `=?1`), because the directive
+isn't shipped yet. When Chrome ships it, the detector tightens
+again. Tests updated to match (11 still pass).
+
+### The aggregate badge
+SVG layout (200×20):
+```
+[   supersociety   |   A 99/100 (15)   ]
+        80px              120px
+```
+
+- Left half: muted grey "supersociety" pill.
+- Right half: grade-coloured "A 99/100 (15)" — grade letter,
+  composite, journey count.
+- Tooltip: per-journey breakdown so a hover reveals which
+  surface is the bottleneck.
+- A11y: `aria-label` carries the full sentence form.
+
+Generation is fire-and-forget at audit-end. Failure logs a
+warning but never fails the audit (badges are decorative).
+
+### Score arc (cycles 41-61)
+  C60: 13/13 audited journeys at A 100/100 (--no-baseline).
+  C61: **A 99/100 across 15 real-surface journeys** (aggregate
+       worst-of-N; loom-state-matrix at 99 is the floor;
+       everything else at 100).
+
+### Cumulative cross-repo dogfood scoreboard (cycles 38-61)
+  23 Loom commits + 3 Forge commits + 6 crawler enhancements.
+
+### Action items
+- [ ] Cycle 62: lift loom-state-matrix to 100/100 (it's at 99 —
+      one finding away from the floor).
+- [ ] Cycle 63: CSP `report-uri` collector endpoint in loom-cli.
+- [ ] Cycle 64: extend dogfood loop to Atrium, Sentinel-GUI.
+- [ ] Cycle 65: emit `Reporting-Endpoints` header on Loom so
+      browser CSP violations land in the collector from #63.
+
+---
+
 ## 2026-05-14 (sixtieth entry) — Document-Policy detector: axis 49
 
 ### What's new since last cycle (fifty-ninth entry)

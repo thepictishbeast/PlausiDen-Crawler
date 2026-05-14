@@ -1,0 +1,82 @@
+{
+  "composite": 99,
+  "grade": "A",
+  "journeyCount": 15,
+  "perJourney": [
+    {
+      "name": "forge-skillshots-build",
+      "composite": 100,
+      "grade": "A"
+    },
+    {
+      "name": "loom-edit-server",
+      "composite": 100,
+      "grade": "A"
+    },
+    {
+      "name": "loom-state-matrix",
+      "composite": 99,
+      "grade": "A"
+    },
+    {
+      "name": "skillshots-poc",
+      "composite": 100,
+      "grade": "A"
+    },
+    {
+      "name": "skillshots-poc-densities",
+      "composite": 100,
+      "grade": "A"
+    },
+    {
+      "name": "skillshots-poc-first-time",
+      "composite": 100,
+      "grade": "A"
+    },
+    {
+      "name": "skillshots-poc-fonts",
+      "composite": 100,
+      "grade": "A"
+    },
+    {
+      "name": "skillshots-poc-keyboard",
+      "composite": 100,
+      "grade": "A"
+    },
+    {
+      "name": "skillshots-poc-mobile",
+      "composite": 100,
+      "grade": "A"
+    },
+    {
+      "name": "skillshots-poc-rtl",
+      "composite": 100,
+      "grade": "A"
+    },
+    {
+      "name": "skillshots-poc-tablet",
+      "composite": 100,
+      "grade": "A"
+    },
+    {
+      "name": "skillshots-poc-themes",
+      "composite": 100,
+      "grade": "A"
+    },
+    {
+      "name": "skillshots-poc-throttled",
+      "composite": 100,
+      "grade": "A"
+    },
+    {
+      "name": "skillshots-poc-ultrawide",
+      "composite": 100,
+      "grade": "A"
+    },
+    {
+      "name": "skillshots-poc-zoom-200",
+      "composite": 100,
+      "grade": "A"
+    }
+  ]
+}

@@ -1,5 +1,7 @@
 # PlausiDen-Crawler
 
+![Supersociety](./badges/supersociety.svg)
+
 Headless-browser audit tool. Drives any URL through a scripted journey (click buttons, fill forms, navigate tabs) while capturing:
 
 - Every `console.log/warn/error` message.

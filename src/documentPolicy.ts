@@ -185,19 +185,18 @@ export function detectDocumentPolicyIssues(
 
   const out: DocumentPolicyFinding[] = [];
 
-  // Check that document.write is explicitly disabled. Bare key
-  // `document-write` (without =) means `?1` = ENABLED, which is
-  // the default behaviour — the operator set the header but
-  // left this dangerous default on. Same for explicit `?1`.
+  // Check that document.write is explicitly disabled IF the
+  // operator chose to set the directive. T76 cycle 61: only
+  // `force-load-at-top` is currently shipped in Chromium;
+  // `document-write` is spec'd but unimplemented as of 2026-05.
+  // Chrome emits a console warning ("Unrecognized document
+  // policy feature name document-write") if we require it
+  // unconditionally. The detector now flags only EXPLICIT
+  // `document-write=?1` (operator opted IN to the dangerous
+  // default), not absence. When Chrome ships the directive,
+  // tighten this to also flag absence again.
   const docWrite = snap.directives['document-write'];
-  if (docWrite === undefined) {
-    out.push({
-      severity: 'warn',
-      kind: 'document-policy.permits-document-write',
-      detail: `Document-Policy is set but does not include 'document-write=?0'. document.write is a parser-blocking DOM-XSS sink; modern apps should explicitly disable. Add 'document-write=?0' to the policy.`,
-      evidence: { raw: snap.raw, directives: snap.directives },
-    });
-  } else if (docWrite === '?1') {
+  if (docWrite === '?1') {
     out.push({
       severity: 'warn',
       kind: 'document-policy.permits-document-write',
