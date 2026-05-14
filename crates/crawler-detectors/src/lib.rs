@@ -46,6 +46,7 @@ pub mod form_labels;
 pub mod heading_order;
 pub mod html_lang;
 pub mod link_text;
+pub mod meta_description;
 pub mod outbound_links;
 pub mod runtime_contrast;
 pub mod runtime_focus;

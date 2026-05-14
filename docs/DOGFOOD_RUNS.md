@@ -155,9 +155,68 @@ detector we have today. To keep tightening the loop:
    never fire on this site).
 2. Build remaining roadmap detectors — they may find issues this
    one doesn't surface.
-3. Run the crawler against a deliberately broken fixture set to
+3. ~~Run the crawler against a deliberately broken fixture set to
    guarantee each axis is firing correctly (don't trust silent
-   passes alone).
+   passes alone).~~ **DONE 2026-05-14** — see entry below.
+
+---
+
+## 2026-05-14 (third entry) — Detector regression-guard fixture
+
+Built `fixtures/t76-detectors/serve.py` + `journeys/t76-detector-fixtures.json`:
+30 routes, each engineered to trigger one specific T76 finding
+kind. Closes the "silent passes can hide silent failures" gap
+the previous entry called out.
+
+### What the audit produced
+
+All 9 T76 detector axes fired with their expected findings:
+
+| Axis | findings | strict |
+|---|---|---|
+| viewportMeta | 3 | 3 (missing / no-device-width / zoom-disabled) |
+| docTitle | 4 | 1 (empty) + 3 warn (generic / too-short / too-long) |
+| htmlLang | 4 | 2 (missing / empty) + 2 warn (invalid / unknown-primary) |
+| metaDescription | 4 | 0 (all warn — missing / empty / too-short / too-long) |
+| skipLink | 3 | 1 (broken-target) + 2 warn (missing / not-first-focusable) |
+| formLabels | 3 | 1 (no-label) + 2 warn (placeholder-only / required-no-mark) |
+| tapTargets | 31 | 30 strict — fixture's per-page small skip-link triggers tap.too-small site-wide; deliberate flush of detector liveness. |
+| autocomplete | 4 | 2 (missing-credentials) + 2 warn (missing-pii / invalid-token) |
+| outboundLinks | 4 | 2 (tabnab / opener-explicit) + 2 warn (no-noreferrer) |
+
+Existing pre-T76 detectors stay silent on the fixture (as
+expected — fixture intentionally exercises ONLY the new T76
+axes), except `cssHealth` which fires `css.no-stylesheets-declared`
+on every page (fixture pages are deliberately CSS-less).
+
+### Notable observations
+
+- **tapTargets 30 strict** — the fixture's `<a class="skip">` links
+  render at default-text size (no CSS to make them visually-hidden-
+  until-focused). They fall under 24×24 on EVERY page, not just
+  `/tap-tiny/`. Useful evidence that tapTargets fires, but a
+  follow-up should add `.skip { position:absolute; left:-9999px }`
+  in fixture HTML so only the engineered routes light it up.
+- **Strict / warn split per axis** matches the design — see
+  `docs/DETECTORS.md` for the contract each finding kind promises.
+
+### What this fixture protects against
+
+The 2026-05-14 NaN-evalFn bug silently broke formLabels across
+every page of every audit. No existing test caught it. Now: if
+any future change breaks a T76 detector (parser bug, JS string
+truncation, snapshot-shape drift), the fixture run catches it
+on the next audit.
+
+### Action items
+
+- [ ] Wire the fixture into CI: `bin/check-t76-detectors.sh` that
+      starts the server, runs the audit, asserts observed
+      findings match `expectedFindingsByLabel`.
+- [ ] Tweak fixture skip-link CSS so tapTargets only flares on
+      the engineered routes.
+- [ ] Add `mixedContent` + `linkUnderline` + `fontLoading` routes
+      as those detectors land.
 
 ---
 

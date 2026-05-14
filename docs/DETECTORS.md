@@ -149,6 +149,18 @@ Source: `src/formLabels.ts` · Rust: `form_labels.rs`
 | `form.placeholder-only-label` | warn | Placeholder is the ONLY label. WCAG 3.3.2. |
 | `form.required-no-indicator` | warn | `required` / `aria-required="true"` set but no `*` or "required" in the visible label. |
 
+### `metaDescription` — page `<meta name="description">` *(T76 — added 2026-05-14)*
+Source: `src/metaDescription.ts` · Rust: `meta_description.rs`
+
+| Finding | Sev | Catches |
+|---|---|---|
+| `meta-description.missing` | warn | No `<meta name="description">` in head. Search engines synthesize one from page text (poorly). |
+| `meta-description.empty` | warn | Tag present but content empty/whitespace. |
+| `meta-description.too-short` | warn | Trimmed content < 50 chars. No useful preview to show. |
+| `meta-description.too-long` | warn | Trimmed content > 160 chars. Search engines truncate; tail invisible. |
+
+All warn — missing description doesn't break the page; just suboptimizes discovery + previews.
+
 ### `viewportMeta` — viewport meta tag *(T76 — added 2026-05-14)*
 Source: `src/viewportMeta.ts` · Rust: `viewport_meta.rs`
 
@@ -309,13 +321,46 @@ first-class detector covers the multi-label collision case yet.
 
 ---
 
+## Detector regression-guard fixture
+
+`fixtures/t76-detectors/serve.py` is a deliberately-broken fixture
+server. Each route is engineered to trigger ONE specific finding
+kind across the T76 detector axes. The matching journey at
+`journeys/t76-detector-fixtures.json` visits every route. Together
+they let an audit prove that:
+
+1. Every detector axis is alive (it fires when it should).
+2. Every detector axis is well-calibrated (it stays silent when
+   it shouldn't fire — see the `/control/` route).
+
+**Why this matters:** the 2026-05-14 NaN-evalFn bug silently broke
+the formLabels detector across every page of every audit. No test
+caught it because every existing test exercised the *detector* in
+isolation, not the *audit pipeline* through a real page.evaluate.
+The fixture closes this gap — a single audit run against the
+fixture server is a comprehensive liveness check.
+
+To run:
+
+```sh
+# Terminal 1: start the fixture server
+python3 fixtures/t76-detectors/serve.py --port 8771
+
+# Terminal 2: run the audit
+npm run audit -- --journey journeys/t76-detector-fixtures.json
+```
+
+The `expectedFindingsByLabel` map in the journey file documents
+which finding kinds each route should produce; a follow-up CI
+script can assert observed-vs-expected per label.
+
+---
+
 ## Pending detectors *(roadmap)*
 
 Detectors queued for future T76 firings — each is high-leverage,
 zero-overlap with existing axes:
 
-- **`metaDescription`** — missing or empty `<meta name="description">`,
-  duplicate descriptions.
 - **`favicon`** — missing favicon, broken favicon URL.
 - **`mixedContent`** — `https://` page loading `http://` resources.
   (Partial overlap with browser's built-in mixed-content blocker

@@ -34,7 +34,8 @@ export interface CapturedEvent {
     | 'html-lang'
     | 'skip-link'
     | 'outbound-links'
-    | 'autocomplete';
+    | 'autocomplete'
+    | 'meta-description';
   level?: string;
   text: string;
   url?: string;
@@ -85,6 +86,8 @@ export interface Report {
     outboundLinksFindingsStrict: number;
     autocompleteFindings: number;
     autocompleteFindingsStrict: number;
+    metaDescriptionFindings: number;
+    metaDescriptionFindingsStrict: number;
     cspViolations: number;
     total: number;
     stepsOk: number;
@@ -230,6 +233,11 @@ export interface Diff {
    * token. WCAG 1.3.5 AA. T76.
    */
   newAutocompleteFindings: CapturedEvent[];
+  /**
+   * meta-description findings new in this run vs prior. All warn.
+   * Missing/empty/too-short/too-long. T76.
+   */
+  newMetaDescriptionFindings: CapturedEvent[];
   newlyBrokenSteps: StepResult[];
   fixedSteps: StepResult[];
 }
@@ -266,6 +274,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     newSkipLinkFindings: [],
     newOutboundLinksFindings: [],
     newAutocompleteFindings: [],
+    newMetaDescriptionFindings: [],
     newlyBrokenSteps: [],
     fixedSteps: [],
   };
@@ -293,6 +302,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     out.newSkipLinkFindings = current.events.filter(e => e.kind === 'skip-link');
     out.newOutboundLinksFindings = current.events.filter(e => e.kind === 'outbound-links');
     out.newAutocompleteFindings = current.events.filter(e => e.kind === 'autocomplete');
+    out.newMetaDescriptionFindings = current.events.filter(e => e.kind === 'meta-description');
     return out;
   }
   const priorKeys = new Set(prior.events.map(key));
@@ -321,6 +331,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     else if (e.kind === 'skip-link') out.newSkipLinkFindings.push(e);
     else if (e.kind === 'outbound-links') out.newOutboundLinksFindings.push(e);
     else if (e.kind === 'autocomplete') out.newAutocompleteFindings.push(e);
+    else if (e.kind === 'meta-description') out.newMetaDescriptionFindings.push(e);
   }
   const priorStepLabels = new Map(
     prior.steps.map((s, i) => [s.step.label || `${s.step.kind}-${i}`, s])
@@ -490,6 +501,14 @@ export function renderPositiveSignal(report: Report, diff: Diff): string {
       total: report.events.filter((e) => e.kind === 'autocomplete').length,
       news: diff.newAutocompleteFindings.length,
       strictNews: strict(diff.newAutocompleteFindings),
+    },
+    {
+      // T76 (Crawler): meta-description — SEO + social-share preview.
+      // missing/empty/too-short/too-long (all warn).
+      name: 'metaDescription',
+      total: report.events.filter((e) => e.kind === 'meta-description').length,
+      news: diff.newMetaDescriptionFindings.length,
+      strictNews: strict(diff.newMetaDescriptionFindings),
     },
   ];
   const lines: string[] = [];

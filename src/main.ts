@@ -40,6 +40,7 @@ import { captureHtmlLangSnapshot, detectHtmlLangIssues, type HtmlLangFinding } f
 import { captureSkipLinkSnapshot, detectSkipLinkIssues, type SkipLinkFinding } from './skipLink.js';
 import { captureOutboundLinksSnapshot, detectOutboundLinkIssues, type OutboundLinkFinding } from './outboundLinks.js';
 import { captureAutocompleteSnapshot, detectAutocompleteIssues, type AutocompleteFinding } from './autocomplete.js';
+import { captureMetaDescriptionSnapshot, detectMetaDescriptionIssues, type MetaDescriptionFinding } from './metaDescription.js';
 
 interface Budget {
   newConsoleErrors: number;
@@ -921,6 +922,35 @@ async function main(args: string[]): Promise<number> {
   };
 
   /**
+   * T76: meta-description detector. SEO + social-share preview
+   * quality. All warn — no strict because a missing description
+   * doesn't break the page; it just suboptimizes discovery.
+   */
+  const metaDescriptionFindingsByStep: Array<{ stepLabel: string; pageUrl: string; findings: MetaDescriptionFinding[] }> = [];
+  const checkMetaDescription = async (afterLabel: string) => {
+    try {
+      const snap = await captureMetaDescriptionSnapshot(page);
+      const findings = detectMetaDescriptionIssues(snap);
+      metaDescriptionFindingsByStep.push({ stepLabel: afterLabel, pageUrl: snap.pageUrl, findings });
+      for (const f of findings) {
+        log({
+          kind: 'meta-description',
+          text: `[${f.kind}] ${f.detail}`,
+          url: snap.pageUrl,
+          severity: f.severity,
+          ruleId: f.kind,
+          impact: f.severity === 'strict' ? 'serious' : 'minor',
+        });
+      }
+    } catch (e) {
+      log({
+        kind: 'pageerror',
+        text: `[metaDescription] detector threw on step ${afterLabel}: ${(e as Error).message}`,
+      });
+    }
+  };
+
+  /**
    * T76: form autocomplete-attribute detector. WCAG 1.3.5
    * (Identify Input Purpose, AA). Strict on missing autocomplete
    * for credential fields (email/password/username); warn on
@@ -1434,6 +1464,7 @@ async function main(args: string[]): Promise<number> {
       await checkSkipLink(step.label || `goto-${i}`);
       await checkOutboundLinks(step.label || `goto-${i}`);
       await checkAutocomplete(step.label || `goto-${i}`);
+      await checkMetaDescription(step.label || `goto-${i}`);
       await checkWebVitals(step.label || `goto-${i}`);
     }
     // Memory snapshot at end of each step so the report shows heap growth
@@ -1520,6 +1551,8 @@ async function main(args: string[]): Promise<number> {
       outboundLinksFindingsStrict: events.filter(e => e.kind === 'outbound-links' && e.severity === 'strict').length,
       autocompleteFindings: events.filter(e => e.kind === 'autocomplete').length,
       autocompleteFindingsStrict: events.filter(e => e.kind === 'autocomplete' && e.severity === 'strict').length,
+      metaDescriptionFindings: events.filter(e => e.kind === 'meta-description').length,
+      metaDescriptionFindingsStrict: events.filter(e => e.kind === 'meta-description' && e.severity === 'strict').length,
       cspViolations: events.filter(e => e.kind === 'csp-violation').length,
       total: events.length,
       stepsOk: stepResults.filter(s => s.ok).length,
@@ -1617,6 +1650,12 @@ async function main(args: string[]): Promise<number> {
       JSON.stringify(autocompleteFindingsByStep, null, 2),
     );
   }
+  if (metaDescriptionFindingsByStep.length > 0) {
+    writeFileSync(
+      join(outDir, 'meta-description.json'),
+      JSON.stringify(metaDescriptionFindingsByStep, null, 2),
+    );
+  }
   writeFileSync(join(outDir, 'report.json'), JSON.stringify(report, null, 2));
   // Write a terminal-friendly summary too so CI output is useful at a glance.
   writeFileSync(join(outDir, 'summary.txt'), renderSummary(agg));
@@ -1703,6 +1742,7 @@ async function main(args: string[]): Promise<number> {
   console.log(`  skip link:         ${report.counts.skipLinkFindings} (strict ${report.counts.skipLinkFindingsStrict})`);
   console.log(`  outbound links:    ${report.counts.outboundLinksFindings} (strict ${report.counts.outboundLinksFindingsStrict})`);
   console.log(`  autocomplete:      ${report.counts.autocompleteFindings} (strict ${report.counts.autocompleteFindingsStrict})`);
+  console.log(`  meta description:  ${report.counts.metaDescriptionFindings} (strict ${report.counts.metaDescriptionFindingsStrict})`);
   console.log(`  web vitals:        ${report.counts.webVitalsFindings} (strict ${report.counts.webVitalsFindingsStrict})`);
   console.log(`  csp violations:    ${report.counts.cspViolations}`);
   console.log(`  steps ok/failed:   ${report.counts.stepsOk}/${report.counts.stepsFailed}`);
@@ -1754,6 +1794,9 @@ async function main(args: string[]): Promise<number> {
     const newAutocompleteStrict = diff.newAutocompleteFindings.filter(e => e.severity === 'strict').length;
     const newAutocompleteWarn = diff.newAutocompleteFindings.length - newAutocompleteStrict;
     console.log(`    NEW autocomplete:     ${diff.newAutocompleteFindings.length} (strict ${newAutocompleteStrict}, warn ${newAutocompleteWarn})`);
+    const newMetaDescStrict = diff.newMetaDescriptionFindings.filter(e => e.severity === 'strict').length;
+    const newMetaDescWarn = diff.newMetaDescriptionFindings.length - newMetaDescStrict;
+    console.log(`    NEW meta description: ${diff.newMetaDescriptionFindings.length} (strict ${newMetaDescStrict}, warn ${newMetaDescWarn})`);
     console.log(`    NEW csp violations:   ${diff.newCspViolations.length}`);
     console.log(`    newly broken steps:   ${diff.newlyBrokenSteps.length}`);
     console.log(`    fixed steps:          ${diff.fixedSteps.length}`);
