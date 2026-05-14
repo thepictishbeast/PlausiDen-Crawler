@@ -1033,6 +1033,89 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (seventieth entry) — `loom report-tail` closes the operator review loop
+
+### What's new since last cycle (sixty-ninth entry)
+- **Cross-repo Loom fix** (commit 991f970): new
+  `loom report-tail` subcommand. TUI viewer for the cycle 63
+  report collector. Closes the last gap in the supersociety
+  observability loop: until today, operators could prove the
+  collector worked but had to grep + jq raw JSONL to read it.
+- 4 new E2E tests in `loom-cli/tests/report_tail_e2e.rs`.
+- Aggregate badge holds at **A 100/100 (16)**.
+
+### Sample output
+```
+$ loom report-tail
+2025-01-09 00:00:00Z  csp-violation     [csp-report]  {"csp-report":{"violated-directive":"script-src",…}}
+2025-01-09 00:01:40Z  deprecation       [reports]     [{"type":"deprecation","body":{"id":"X"}}]
+2025-01-09 00:03:20Z  network-error     [reports]     [{"type":"network-error","body":{"phase":"connection"}}]
+```
+
+### What it can do
+- Classifies reports via the body `type` field (Reporting-API)
+  OR the `violated-directive` substring heuristic (legacy CSP).
+- Colourises by kind on TTY (red for CSP, magenta for trusted-
+  types, cyan for NEL, dim grey for other).
+- `--lines N` (default 20) truncates to recent entries.
+- `--kind <substring>` filters by body match.
+- `--follow` live-tails new entries (polls every 1s). Handles
+  log rotation gracefully: file shrinkage triggers a resync
+  from byte 0 with a stderr notice.
+
+### Implementation discipline
+- **Hand-rolled JSON field extractor**, no serde_json round-trip.
+  The viewer stays trivially auditable — every byte that comes
+  out of the tool is traceable to a known parser branch.
+- **Hand-rolled timestamp formatter** via Howard Hinnant's
+  date.cpp algorithm. No chrono dep. Verified by an E2E test
+  that asserts `1736380800` → `2025-01-09 00:00:00Z`.
+- **stdlib `IsTerminal`** for TTY detection (Rust 1.70+).
+  No libc FFI, no edition-2024 unsafe-extern complications.
+- **No new dependencies added.** The CLI's audit surface is
+  unchanged.
+
+### The supersociety observability loop is now complete
+```
+detect (CSP / Trusted-Types / Document-Policy / NEL — cycles 22+)
+  ↓
+enforce (browser policy / transport monitor)
+  ↓
+report (Reporting-API + NEL via 'default' group)
+  ↓
+collect (cycle 63, rate-limited cycle 69, E2E pinned cycle 68)
+  ↓
+audit (cycle 64 cross-consistency checks)
+  ↓
+REVIEW (cycle 70 — `loom report-tail`)
+```
+
+Six layers, each one cycle of cumulative work, all E2E tested.
+The operator can now SEE every browser-emitted security
+violation in real time, classified and human-readable.
+
+### Score arc (cycles 41-70)
+  C69: aggregate A 100/100 (16) — collector hardened against DoS.
+  C70: aggregate A 100/100 (16) — review loop now operator-usable.
+
+### Cumulative cross-repo dogfood scoreboard (cycles 38-70)
+  29 Loom commits + 3 Forge + 1 Sentinel-GUI + 8 crawler
+  enhancements + 2 test suites (property + E2E).
+
+### Action items
+- [ ] Cycle 71: log rotation on violations.jsonl (size-based
+      OR daily; configurable max-bytes / max-days).
+- [ ] Cycle 72: extend dogfood to PlausiDen-Atrium.
+- [ ] Cycle 73: mutation test — flip STRICT_PENALTY in
+      supersocietyScore to 5; verify property 5 catches it.
+- [ ] Cycle 74: a `loom report-stats` subcommand that
+      aggregates the JSONL into per-kind counts + first/last
+      seen timestamps (operator dashboard summary).
+- [ ] Cycle 75: PlausiDen-Atrium gets the same defense-in-
+      depth header stack + Trusted Types policy registration.
+
+---
+
 ## 2026-05-14 (sixty-ninth entry) — Per-IP rate limit on the report collector
 
 ### What's new since last cycle (sixty-eighth entry)
