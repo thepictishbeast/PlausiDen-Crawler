@@ -1033,6 +1033,100 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (seventy-second entry) — `loom report-stats` — operator dashboard summary
+
+### What's new since last cycle (seventy-first entry)
+- **Cross-repo Loom fix** (commit 6daf8a7): new
+  `loom report-stats` subcommand. Cross-rotation aggregator
+  for the cycle 63 collector log. Operator answer to "what's
+  been happening" — pairs with cycle 70's report-tail (per-
+  entry detail).
+- 5 new E2E tests in `loom-cli/tests/report_stats_e2e.rs`.
+- Aggregate badge holds at **A 100/100 (16)**.
+
+### Sample output
+```
+$ loom report-stats
+kind             count  first-seen           last-seen            top-url
+csp-violation    47     2025-01-09 03:00:00Z 2025-01-09 17:42:11Z https://x.example/
+nel              3      2025-01-09 12:00:00Z 2025-01-09 17:40:00Z https://y.example/
+deprecation      12     2025-01-09 01:00:00Z 2025-01-09 16:00:00Z (none)
+
+(read 4 file(s), 62 lines)
+```
+
+```
+$ loom report-stats --json | jq .
+{
+  "window": { "since": 0, "total_lines": 62, "files_read": 4 },
+  "kinds": [
+    { "kind": "csp-violation", "count": 47, "first": 1736395200,
+      "last": 1736448131, "top_url": "https://x.example/" },
+    ...
+  ]
+}
+```
+
+### What it can do
+- **Cross-rotation reads**: aggregates violations.jsonl PLUS
+  every violations-*.jsonl in the same dir. Lexical sort =
+  chronological per cycle 71's fixed-width unix-secs.ns
+  suffix. So a `--since` query that pre-dates the active
+  file still hits the rotated archives (within retention).
+- `--since <unix-secs>` filters entries by timestamp.
+- `--kind <substring>` filters by body substring.
+- `--json` emits a single-line JSON document for jq /
+  dashboards / SIEM ingest.
+- Top-URL aggregation per kind: most-common `"url":"X"`
+  (Reporting-API) or `document-uri":"X"` (legacy CSP).
+
+### Operator UX is now complete on the collector
+```
+TAIL (cycle 70)  → live per-entry detail (what just happened)
+STATS (cycle 72) → cross-rotation summary (what's been happening)
+```
+
+Both subcommands:
+- Hand-rolled JSON walker (no serde dep; auditor stays
+  trivially auditable).
+- Howard Hinnant date.cpp formatter (no chrono dep).
+- Same `report_log_classify()` so kind names match between
+  views — no operator confusion.
+- Cross-rotation read where it makes sense (stats yes,
+  live tail no — tail watches a single file).
+
+### The cycle 63 collector is now operationally complete
+- Cycle 63: built it.
+- Cycle 64: cross-consistency audit (Reporting-Endpoints ↔ CSP).
+- Cycle 68: E2E tests pin the wire format.
+- Cycle 69: per-IP rate limit (flash-burst defense).
+- Cycle 70: report-tail (live operator viewer).
+- Cycle 71: size-based rotation + retention (long-run defense).
+- **Cycle 72: report-stats (cross-rotation operator summary).**
+
+Seven cycles of cumulative work on one feature. Full E2E
+test coverage: 6 collector + 4 tail + 5 stats = 15 integration
+tests for one ~400-line endpoint.
+
+### Score arc (cycles 41-72)
+  C71: aggregate A 100/100 (16) — collector storage hardened.
+  C72: aggregate A 100/100 (16) — collector operator UX complete.
+
+### Cumulative cross-repo dogfood scoreboard (cycles 38-72)
+  31 Loom commits + 3 Forge + 1 Sentinel-GUI + 8 crawler
+  enhancements + 3 E2E test suites + property test suite.
+
+### Action items
+- [ ] Cycle 73: extend dogfood to PlausiDen-Atrium.
+- [ ] Cycle 74: mutation test on supersocietyScore — flip
+      STRICT_PENALTY = 5; verify property 5 catches it.
+- [ ] Cycle 75: Atrium gets the same defense-in-depth
+      header stack + Trusted Types policy.
+- [ ] Cycle 76: report-stats `--top N` flag to surface the
+      top N URLs per kind, not just one.
+
+---
+
 ## 2026-05-14 (seventy-first entry) — Size-based log rotation closes the long-run growth gap
 
 ### What's new since last cycle (seventieth entry)
