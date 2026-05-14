@@ -649,10 +649,87 @@ axes: 21.
 
 ### Action items
 
-- [ ] Loom: extend `loom-card-feed-item__title-link` /
-      `loom-aside-link` CSS to add `text-decoration: underline`
-      OR `font-weight: 600` (closes the 6 SkillShots findings
-      at the source).
+- [x] Loom: extend panel-link CSS to add visual cue beyond
+      colour. **DONE 2026-05-14** — see eleventh entry below.
+- [ ] HTTPS fixture variant for mixedContent live integration.
+- [ ] login-flow fixture (still queued).
+- [ ] Remaining roadmap: `fontLoading`, `hstsHeader`,
+      `xFrameOptions`, `crossPageTitleDup`.
+
+---
+
+## 2026-05-14 (eleventh entry) — linkUnderline detector bug + Loom panel-link weight
+
+### What's new since last cycle (tenth entry)
+- Detector fix: `linkUnderline.isInsideRunningText` now walks
+  the FULL ancestor chain.
+- Loom CSS: `.loom-panel__list-link` bumped to `font-weight: 600`
+  for visible affordance.
+- Total active detector axes: still 21 (no new axes).
+
+### Detector bug found and fixed
+
+The 6 "real defects" from last cycle's tenth entry were
+actually **false positives** caused by a bug in
+`isInsideRunningText`:
+
+```js
+// BEFORE (bug):
+while (parent && hops < 8) {
+  if (chrome tag) foundChrome = true;
+  if (running tag) return !foundChrome;  // ← returns here
+  parent = parent.parentElement;
+}
+```
+
+The function returned `!foundChrome` at the first running-text
+ancestor — without finishing the walk. So when an `<a>` was
+inside `<aside> > <section> > <ul> > <li>`:
+
+1. LI is the first hop → running tag → return `!foundChrome`
+2. foundChrome was still `false` (we hadn't gotten to ASIDE yet)
+3. Function returned `true` → link treated as in-running-text
+4. ASIDE chrome above LI never seen
+
+Fix: walk the FULL 8-hop chain, set both `foundRunning` and
+`foundChrome` flags, return `foundRunning && !foundChrome`.
+
+After the fix, the 6 SkillShots aside-panel links are
+correctly skipped — they ARE in chrome.
+
+### Loom CSS improvement (independent of detector fix)
+
+The aside-panel links also had a real UX issue separate from
+WCAG 1.4.1: they used `color: var(--loom-color-ink)` (same as
+surrounding text) and `text-decoration: none`. A user without
+a mouse could not visually distinguish a link from a non-link
+row.
+
+`.loom-panel__list-link` now sets `font-weight: 600`. The 200-
+unit contrast vs the parent's default 400 is enough for
+sighted users to spot the link AND would pass even a stricter
+detector variant that didn't honour the aside-chrome exception.
+
+### Re-audit result
+
+**ALL 28 DETECTION AXES SILENT** — same cleanest-on-record
+result. Liveness gate (32/32 fixture routes) still PASS.
+
+### What this cycle taught us
+
+**Per-page detectors that walk ancestors need to walk the FULL
+chain** — early-return optimisations can miss higher ancestor
+state. The pattern is now: collect ALL relevant ancestor
+properties first, then decide. Worth adding a test that
+specifically exercises a "running tag inside chrome" scenario
+when adding similar ancestor-walking detectors in future.
+
+### Action items
+
+- [ ] Add a `_dbg-link-in-chrome` route to t76-fixtures (e.g.
+      `<aside><ul><li><a>` with color-only style) and assert
+      it produces NO linkUnderline finding. This locks the
+      fix.
 - [ ] HTTPS fixture variant for mixedContent live integration.
 - [ ] login-flow fixture (still queued).
 - [ ] Remaining roadmap: `fontLoading`, `hstsHeader`,

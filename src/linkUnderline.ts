@@ -105,24 +105,30 @@ export async function captureLinkUnderlineSnapshot(
     // button-styled links; layout context is sufficient.
     const isInsideRunningText = function(el) {
       const runningTags = ['P', 'LI', 'DD', 'BLOCKQUOTE', 'TD', 'TH'];
+      // Walk the FULL ancestor chain (up to 8 hops). The link is
+      // "in running text" iff:
+      //   1. ANY ancestor is a running-text tag, AND
+      //   2. NO ancestor (above OR below the running tag) is chrome.
+      // The previous version returned at the first running tag,
+      // missing chrome ABOVE it (e.g. <aside><section><ul><li><a>
+      // — LI hit first, ASIDE never checked, link wrongly treated
+      // as running-text and flagged).
       let parent = el.parentElement;
       let hops = 0;
       let foundChrome = false;
+      let foundRunning = false;
       while (parent && hops < 8) {
         const tag = parent.tagName;
         if (tag === 'NAV' || tag === 'HEADER' || tag === 'FOOTER' || tag === 'ASIDE') {
           foundChrome = true;
         }
         if (runningTags.indexOf(tag) >= 0) {
-          // Found a running-text ancestor. If we ALSO found chrome
-          // earlier in the walk, the running-text element is INSIDE
-          // chrome (e.g. a <p> inside <footer>) — still chrome-y.
-          return !foundChrome;
+          foundRunning = true;
         }
         parent = parent.parentElement;
         hops += 1;
       }
-      return false;
+      return foundRunning && !foundChrome;
     };
 
     /**

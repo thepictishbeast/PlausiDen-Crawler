@@ -334,6 +334,25 @@ def link_color_only():
     return page(body)
 
 
+@route('/link-in-chrome/')
+def link_in_chrome():
+    # Same color-only link, but nested inside <aside><ul><li>.
+    # The chrome exception applies: the user expects clickable
+    # rows in an aside (button-styled by convention), and an
+    # earlier detector bug returned at the first running-text
+    # ancestor (LI) without checking ASIDE above it. This route
+    # locks the fix — it must NOT produce a link-underline
+    # finding.
+    body = (
+        '<h1>Same color-only link, but inside chrome</h1>'
+        '<aside><section><ul><li>'
+        '<a href="/x" style="color:#0066cc;text-decoration:none">'
+        'aside-panel link</a>'
+        '</li></ul></section></aside>'
+    )
+    return page(body)
+
+
 # ----- favicon family -----
 @route('/no-favicon/')
 def no_favicon():

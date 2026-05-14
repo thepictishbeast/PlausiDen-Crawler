@@ -50,21 +50,24 @@ pub const LINK_UNDERLINE_JS: &str = r##"(() => {
 
     const isInsideRunningText = function(el) {
       const runningTags = ['P', 'LI', 'DD', 'BLOCKQUOTE', 'TD', 'TH'];
+      // Walk full ancestor chain — chrome ABOVE the running tag
+      // still counts as chrome (e.g. <aside><ul><li><a>).
       let parent = el.parentElement;
       let hops = 0;
       let foundChrome = false;
+      let foundRunning = false;
       while (parent && hops < 8) {
         const tag = parent.tagName;
         if (tag === 'NAV' || tag === 'HEADER' || tag === 'FOOTER' || tag === 'ASIDE') {
           foundChrome = true;
         }
         if (runningTags.indexOf(tag) >= 0) {
-          return !foundChrome;
+          foundRunning = true;
         }
         parent = parent.parentElement;
         hops += 1;
       }
-      return false;
+      return foundRunning && !foundChrome;
     };
 
     const hasNonColorDistinction = function(el, cs, parentCs) {
