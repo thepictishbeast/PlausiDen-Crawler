@@ -1033,6 +1033,103 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (eighty-fifth entry) — Drag-drop section reorder; contrast bug self-caught
+
+### What's new since last cycle (eighty-fourth entry)
+- **Cross-repo Loom fix** (commit dba1e45): drag-drop section
+  reorder. New POST `/<slug>/sections/reorder` endpoint +
+  drag handlers inside the existing CSP-pinned EDIT_PAGE_JS.
+- **Cycle 85a self-caught regression**: drag handle `⋮⋮`
+  first shipped with `color:#888` → axe-static-a11y flagged
+  3.54:1 contrast on white. Cycle 85b restored
+  `color:#595959` (~7:1). Aggregate badge dropped to A 97
+  and immediately returned to A 100 after the contrast fix.
+- Aggregate badge holds at **A 100/100 (16)**.
+
+### How drag-drop survives the supersociety stack
+The CSP on /about declares:
+```
+require-trusted-types-for 'script';
+script-src 'self' 'sha256-…';
+```
+
+Naïve drag-drop libraries call `innerHTML` constantly and
+would be blocked by Trusted Types. The cycle 85
+implementation:
+
+1. **No external library**. Native HTML5 drag events. ~50
+   lines added to the existing EDIT_PAGE_JS const.
+2. **No `innerHTML`**. Build the submit form with
+   `document.createElement` + `appendChild`. Trusted Types
+   compliant by construction.
+3. **No `fetch`**. Use a hidden form's `submit()` to POST.
+   No async API surface, no error-prone Promise chains.
+4. **CSP hash auto-regenerated**. The cycle 54 machinery
+   recomputed `script-src 'sha256-...'` on rebuild — no
+   manual CSP update needed.
+
+### Cycle 85a → 85b: the dogfood loop catches a 0.96-ratio bug
+First commit shipped drag handle as `color:#888` (a
+common neutral-gray default). Crawler audit ran:
+```
+✗ 1 axis/axes regressed (strict): runtimeContrast (+1)
+```
+
+Detail file showed:
+```
+selector: body > main > div > form:nth-of-type(1) > fieldset > legend > span
+fg: rgb(136, 136, 136) (#888)
+bg: rgb(255, 255, 255) (#fff)
+ratio: 3.54, required: 4.5
+text: ⋮⋮
+```
+
+The drag handle is `aria-hidden="true"` (decorative, not
+SR-readable), but axe-static-a11y doesn't trust that —
+visible elements get the AA contrast check regardless.
+And it's right to: a sighted low-vision user benefits from
+the affordance being visible.
+
+Fix: change `color:#888` → `color:#595959`. 3.54 → ~7
+contrast ratio. Audit runs clean. Score restored to 100.
+
+This pattern — "ship the UX, dogfood, find the
+2nd-order regression, fix" — has been the supersociety
+doctrine since cycle 38. Every UX cycle catches at least
+one defect the developer didn't notice manually.
+
+### Server-side discipline
+Reorder endpoint:
+- Routes through cycle 60 WriteCapability.
+- Snapshots via cycle 80 save_cms_revision before overwrite.
+- Same 303 redirect pattern as the existing up/down/delete
+  endpoints. Browser refresh shows the new order.
+- No-op shortcut (from==to) avoids a redundant write + redundant
+  backup.
+
+### Score arc (cycles 41-85)
+  C84: aggregate A 100/100 (16) — pre-push hook + all-slugs.
+  C85a: aggregate A 97/100 (16) — drag handle contrast bug
+        (self-caught).
+  C85b: **aggregate A 100/100 (16)** — drag-drop ships clean
+        after contrast fix.
+
+### Cumulative cross-repo dogfood scoreboard (cycles 38-85)
+  38 Loom commits + 3 Forge + 1 Sentinel-GUI + 15 crawler
+  enhancements + 4 E2E suites + property + mutation + drift
+  test suites + meta-runner + 2 design+ops manuals + pre-push
+  hook.
+
+### Action items
+- [ ] Cycle 86: section-level "open in new tab" preview.
+- [ ] Cycle 87: JSON-aware diff replacement for cycle 81's
+      line-set diff.
+- [ ] Cycle 88: SSE stream for `report-tail --follow`.
+- [ ] Cycle 89: E2E tests for the reorder endpoint —
+      cycle 85 only smoke-tested via curl.
+
+---
+
 ## 2026-05-14 (eighty-fourth entry) — Pre-push hook + revisions --all-slugs change feed
 
 ### What's new since last cycle (eighty-third entry)
