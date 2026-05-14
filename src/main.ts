@@ -71,6 +71,7 @@ import {
   detectScoreRegression,
   renderScoreRegression,
 } from './scoreHistory.js';
+import { renderHtmlReport } from './htmlReport.js';
 
 interface Budget {
   newConsoleErrors: number;
@@ -2497,6 +2498,22 @@ async function main(args: string[]): Promise<number> {
   const priorScoreHistory = readScoreHistory(runsDir, journey.name);
   appendScoreHistoryEntry(runsDir, scoreHistoryEntry);
   const scoreRegression = detectScoreRegression(scoreHistoryEntry, priorScoreHistory);
+
+  // T76 cycle 34: single-file HTML report — self-contained,
+  // no external CSS/JS/images. Renders the Supersociety
+  // Score + trend chart + per-category bars + regression
+  // block + findings table. Operators open in any browser.
+  // Includes the current run, so the trend chart shows
+  // priorScoreHistory + this run combined.
+  const htmlReport = renderHtmlReport({
+    score: supersocietyScore,
+    history: [...priorScoreHistory, scoreHistoryEntry],
+    regression: scoreRegression,
+    journey: journey.name,
+    timestamp: scoreHistoryEntry.timestamp,
+    commit: scoreHistoryEntry.commit,
+  });
+  writeFileSync(join(outDir, 'supersociety-report.html'), htmlReport);
 
   // Per-screenshot WCAG findings (axe-core), separate from discover sweep
   // findings. Both files share the same `renderAxeFindings` shape so a

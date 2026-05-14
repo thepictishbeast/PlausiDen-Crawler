@@ -16,6 +16,18 @@ Regression policy: composite drop ≥ 5 points OR category drop ≥ 10 points OR
 
 Optional `CRAWLER_COMMIT_SHA` env var stamps each entry with the commit, letting operators trace regressions back to a release.
 
+### HTML report (cycle 34)
+
+Every audit also writes a single self-contained HTML file at `runs/<run-dir>/supersociety-report.html` — open it in any browser, no server needed. The file embeds:
+
+- Composite score + grade in giant numbers, coloured by grade.
+- Trend chart: composite over time across the journey's history (inline SVG line chart, grade-band reference lines at 60/70/80/90).
+- Per-category bars: current score + grade for each of the 11 categories (inline SVG horizontal bars).
+- Regression block: green "stable" / "improved" or red "REGRESSION" with worst-first category list.
+- Findings table: one row per category that has findings, with strict + warn counts and contributing detector kinds.
+
+**Supersociety frontend stack**: zero external CSS, zero external JS, zero external images — every byte is emitted by `src/htmlReport.ts`. No CDN, no npm chart library, no React. Works offline, works in any browser, works in 2030. All input strings are HTML-escaped so the report can be rendered on untrusted journey names without XSS.
+
 
 
 

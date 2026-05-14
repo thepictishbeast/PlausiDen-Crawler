@@ -1033,6 +1033,95 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (thirty-fourth entry) — single-file HTML dashboard
+
+### What's new since last cycle (thirty-third entry)
+- 1 new MODULE: **`htmlReport`** — single-file HTML report
+  generator. Operators get a charted dashboard they can open
+  in any browser — no server, no build step, no npm deps.
+- New file per audit: `runs/<run-dir>/supersociety-report.html`
+  (~12 KB self-contained).
+- 21 unit tests in `htmlReport.test.ts`, all passing —
+  including XSS-protection check (untrusted journey names get
+  HTML-escaped) and the "no external CSS/JS/img" sanity check.
+- Active named-detector axis count UNCHANGED at 43. Third
+  consecutive UX-meta cycle (32 score, 33 trend, 34 dashboard).
+
+### Why HTML now
+JSON dumps are great for CI / scripting but operators want a
+visual dashboard. SkillShots' Grade A 97/100 means more when
+you SEE the trend line, the per-category bar at 65 in red,
+and the regression block in green saying "stable".
+
+### Supersociety frontend stack
+The HTML report is deliberately built on the most boring,
+durable, secure stack possible:
+
+  - SINGLE FILE. No external CSS, no external JS, no images.
+    Every byte is emitted by `src/htmlReport.ts`.
+  - Inline SVG charts. No D3, no Chart.js, no anything.
+    Vanilla `<line>`, `<rect>`, `<circle>`, `<text>`.
+  - Zero supply-chain attack surface. No npm chart dep that
+    could get hijacked or shipped a typosquat.
+  - Zero JS-framework lock-in. The HTML works without
+    JavaScript at all.
+  - Maximum forward-compatibility. HTML 5 + SVG 1.1 are
+    forever. Loads in any browser, works offline, works in
+    a 2030 museum exhibit.
+  - HTML-escaped inputs. The `esc()` helper protects against
+    XSS even if the operator passes a journey name like
+    `<script>alert(1)</script>`. Verified by unit test 3.
+
+### Visual design
+- Premium dark palette aligned with PlausiDen feedback memory
+  (gradient hero, soft shadows, custom typography via
+  system-ui stack — no Google Fonts dep).
+- Composite score in giant numbers, coloured by grade.
+- Per-category bars use grade colours (A=emerald, B=lime,
+  C=amber, D=orange, F=red) so a glance shows the weak spot.
+- Trend chart has grade-band reference lines (90/80/70/60)
+  with subtle dashed strokes — the operator sees instantly
+  whether the score is in A territory or sliding into B.
+- Hover tooltips on trend dots via SVG `<title>` (works in
+  every browser, no JS).
+
+### Architecture
+- `renderHtmlReport(inputs) → string`: pure function, no I/O.
+- `renderTrendChart(history)`: SVG line chart, auto-scales
+  X-axis to history length, Y-axis fixed to 0..100.
+- `renderCategoryBars(categories)`: SVG horizontal bars.
+- `renderRegressionSection(r)`: green/red badge.
+- `renderFindingTable(categories)`: one row per category with
+  findings, including the contributing detector kinds.
+- `esc()`: HTML-escape every interpolated string.
+
+### Verified
+- HTTP gate: 47/47 routes pass.
+- HTTPS gate: 60/60 routes pass.
+- SkillShots audit: HTML report ~12 KB, opens correctly in
+  browser (verified via the file's structure — doctype,
+  inline `<style>`, inline SVG, no external refs).
+- 21 htmlReport unit tests pass — including the XSS-
+  protection scenario and the "no external resources" check.
+
+### Action items
+- [ ] Whitelist mechanism for baseline-frozen findings
+      (queued from cycles 32 + 33, three cycles in arrears).
+- [ ] CI integration sample `.github/workflows/audit.yml`
+      that posts the HTML report as a PR artefact.
+- [ ] Email/Slack notifier on grade drop.
+- [ ] Trim policy for old score-history.jsonl entries.
+- [ ] Optional dark/light toggle in the HTML report (JS
+      toggle that flips a `<body class="theme-light">` —
+      vanilla DOM, ~20 lines).
+- [ ] Multi-journey aggregate report — if a project has 5
+      journeys, show ONE dashboard with all 5 trends side
+      by side. Useful for the user's premium-design ethos
+      (one PD repo = one composite score across all its
+      facets).
+
+---
+
 ## 2026-05-14 (thirty-third entry) — score history + regression detection
 
 ### What's new since last cycle (thirty-second entry)
