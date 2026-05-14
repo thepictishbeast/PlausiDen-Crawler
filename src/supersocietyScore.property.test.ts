@@ -253,7 +253,21 @@ const MAX_EVENTS_PER_CASE = 60;
     `${failures}/${CASES} cases violate. First: ${firstFail}`);
 }
 
-// --- Property 5: a single strict penalises >= a single warn (same kind).
+// --- Property 5 (T76 cycle 76, tightened from cycle 66's
+// `>=` to `>`): a single strict penalises STRICTLY MORE than
+// a single warn (same kind, same baseline). Closes mutation
+// gap M1 (STRICT_PENALTY = WARN_PENALTY).
+//
+// Rationale: if strict and warn cost the same, the
+// severity distinction is meaningless — a "strict" finding
+// would carry no extra weight than a "warn", which violates
+// the supersociety doctrine where strict = "blocks ship" and
+// warn = "advisory". The tightening makes that contract
+// machine-checked.
+//
+// Tested at the CATEGORY level (per cycle 75 insight):
+// rounded composite isn't sensitive enough; check the
+// affected category's score directly.
 {
   let failures = 0;
   let firstFail: string | null = null;
@@ -263,15 +277,30 @@ const MAX_EVENTS_PER_CASE = 60;
     const baseline = calculateSupersocietyScore([]);
     const withStrict = calculateSupersocietyScore([{ kind, severity: 'strict' }]);
     const withWarn = calculateSupersocietyScore([{ kind, severity: 'warn' }]);
-    const strictDrop = baseline.composite - withStrict.composite;
-    const warnDrop = baseline.composite - withWarn.composite;
-    if (strictDrop < warnDrop) {
+    // Find the affected category in the strict run; its
+    // baseline score is 100 (clean), strict drop = 25,
+    // warn drop = 5 → strictDrop > warnDrop holds at 100→75
+    // vs 100→95.
+    const hitCat = withStrict.categories.find(
+      (c) => c.strict + c.warn > 0,
+    );
+    if (!hitCat) continue; // unbucketed kind; skip.
+    const baselineCat = baseline.categories.find(
+      (c) => c.category === hitCat.category,
+    );
+    const warnCat = withWarn.categories.find(
+      (c) => c.category === hitCat.category,
+    );
+    if (!baselineCat || !warnCat) continue;
+    const strictDrop = baselineCat.score - hitCat.score;
+    const warnDrop = baselineCat.score - warnCat.score;
+    if (strictDrop <= warnDrop) {
       failures += 1;
       if (firstFail === null)
-        firstFail = `${kind} strict drop ${strictDrop} < warn drop ${warnDrop}`;
+        firstFail = `${kind} (${hitCat.category}) strict drop ${strictDrop} <= warn drop ${warnDrop}`;
     }
   }
-  assert(failures === 0, 'strict penalty >= warn penalty (same kind)',
+  assert(failures === 0, 'strict penalty STRICTLY > warn penalty (same kind, category-level)',
     `${failures}/${CASES} cases violate. First: ${firstFail}`);
 }
 
