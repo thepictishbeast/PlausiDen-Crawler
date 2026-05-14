@@ -27,7 +27,8 @@ export interface CapturedEvent {
     | 'runtime-landmarks'
     | 'link-text'
     | 'placeholder-text'
-    | 'tap-targets';
+    | 'tap-targets'
+    | 'form-labels';
   level?: string;
   text: string;
   url?: string;
@@ -64,6 +65,8 @@ export interface Report {
     webVitalsFindingsStrict: number;
     tapTargetsFindings: number;
     tapTargetsFindingsStrict: number;
+    formLabelsFindings: number;
+    formLabelsFindingsStrict: number;
     cspViolations: number;
     total: number;
     stepsOk: number;
@@ -170,6 +173,12 @@ export interface Diff {
    * (WCAG 2.5.5 AAA + Apple/Material recommendation). T76.
    */
   newTapTargetsFindings: CapturedEvent[];
+  /**
+   * form-label findings new in this run vs prior. Strict = no
+   * accessible name. Warn = placeholder-only or required without
+   * visible indicator. WCAG 1.3.1 / 4.1.2 / 3.3.2. T76.
+   */
+  newFormLabelsFindings: CapturedEvent[];
   newlyBrokenSteps: StepResult[];
   fixedSteps: StepResult[];
 }
@@ -199,6 +208,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     newLinkTextFindings: [],
     newPlaceholderTextFindings: [],
     newTapTargetsFindings: [],
+    newFormLabelsFindings: [],
     newlyBrokenSteps: [],
     fixedSteps: [],
   };
@@ -219,6 +229,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     out.newLinkTextFindings = current.events.filter(e => e.kind === 'link-text');
     out.newPlaceholderTextFindings = current.events.filter(e => e.kind === 'placeholder-text');
     out.newTapTargetsFindings = current.events.filter(e => e.kind === 'tap-targets');
+    out.newFormLabelsFindings = current.events.filter(e => e.kind === 'form-labels');
     return out;
   }
   const priorKeys = new Set(prior.events.map(key));
@@ -240,6 +251,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     else if (e.kind === 'link-text') out.newLinkTextFindings.push(e);
     else if (e.kind === 'placeholder-text') out.newPlaceholderTextFindings.push(e);
     else if (e.kind === 'tap-targets') out.newTapTargetsFindings.push(e);
+    else if (e.kind === 'form-labels') out.newFormLabelsFindings.push(e);
   }
   const priorStepLabels = new Map(
     prior.steps.map((s, i) => [s.step.label || `${s.step.kind}-${i}`, s])
@@ -350,6 +362,15 @@ export function renderPositiveSignal(report: Report, diff: Diff): string {
       total: report.events.filter((e) => e.kind === 'tap-targets').length,
       news: diff.newTapTargetsFindings.length,
       strictNews: strict(diff.newTapTargetsFindings),
+    },
+    {
+      // T76 (Crawler): form-labels — WCAG 1.3.1 + 4.1.2 + 3.3.2.
+      // no-label (strict), placeholder-only (warn),
+      // required-no-indicator (warn).
+      name: 'formLabels',
+      total: report.events.filter((e) => e.kind === 'form-labels').length,
+      news: diff.newFormLabelsFindings.length,
+      strictNews: strict(diff.newFormLabelsFindings),
     },
   ];
   const lines: string[] = [];

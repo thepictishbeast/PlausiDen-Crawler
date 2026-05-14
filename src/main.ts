@@ -33,6 +33,7 @@ import { captureRuntimeLandmarksSnapshot, detectRuntimeLandmarksIssues, type Run
 import { captureLinkTextSnapshot, detectLinkTextIssues, type LinkTextFinding } from './linkText.js';
 import { capturePlaceholderTextSnapshot, detectPlaceholderTextIssues, type PlaceholderTextFinding } from './placeholderText.js';
 import { captureTapTargetsSnapshot, detectTapTargetIssues, type TapTargetFinding } from './tapTargets.js';
+import { captureFormLabelsSnapshot, detectFormLabelIssues, type FormLabelFinding } from './formLabels.js';
 
 interface Budget {
   newConsoleErrors: number;
@@ -854,6 +855,35 @@ async function main(args: string[]): Promise<number> {
   };
 
   /**
+   * T76: form-label association detector. WCAG 1.3.1 + 4.1.2 + 3.3.2.
+   * Catches no-label / placeholder-only / required-no-indicator —
+   * the three highest-impact form-UX bugs in real applications.
+   */
+  const formLabelsFindingsByStep: Array<{ stepLabel: string; pageUrl: string; findings: FormLabelFinding[] }> = [];
+  const checkFormLabels = async (afterLabel: string) => {
+    try {
+      const snap = await captureFormLabelsSnapshot(page);
+      const findings = detectFormLabelIssues(snap);
+      formLabelsFindingsByStep.push({ stepLabel: afterLabel, pageUrl: snap.pageUrl, findings });
+      for (const f of findings) {
+        log({
+          kind: 'form-labels',
+          text: `[${f.kind}] ${f.detail}`,
+          url: snap.pageUrl,
+          severity: f.severity,
+          ruleId: f.kind,
+          impact: f.severity === 'strict' ? 'serious' : 'minor',
+        });
+      }
+    } catch (e) {
+      log({
+        kind: 'pageerror',
+        text: `[formLabels] detector threw on step ${afterLabel}: ${(e as Error).message}`,
+      });
+    }
+  };
+
+  /**
    * T76: tap-target size detector. WCAG 2.5.8 (24×24 AA strict) +
    * 2.5.5 (44×44 AAA warn). Runs after each goto so per-step
    * regressions are visible. Mobile UX defect — top-3 most
@@ -1210,6 +1240,7 @@ async function main(args: string[]): Promise<number> {
       await checkLinkText(step.label || `goto-${i}`);
       await checkPlaceholderText(step.label || `goto-${i}`);
       await checkTapTargets(step.label || `goto-${i}`);
+      await checkFormLabels(step.label || `goto-${i}`);
       await checkWebVitals(step.label || `goto-${i}`);
     }
     // Memory snapshot at end of each step so the report shows heap growth
@@ -1282,6 +1313,8 @@ async function main(args: string[]): Promise<number> {
       webVitalsFindingsStrict: events.filter(e => e.kind === 'web-vitals' && e.severity === 'strict').length,
       tapTargetsFindings: events.filter(e => e.kind === 'tap-targets').length,
       tapTargetsFindingsStrict: events.filter(e => e.kind === 'tap-targets' && e.severity === 'strict').length,
+      formLabelsFindings: events.filter(e => e.kind === 'form-labels').length,
+      formLabelsFindingsStrict: events.filter(e => e.kind === 'form-labels' && e.severity === 'strict').length,
       cspViolations: events.filter(e => e.kind === 'csp-violation').length,
       total: events.length,
       stepsOk: stepResults.filter(s => s.ok).length,
@@ -1335,6 +1368,12 @@ async function main(args: string[]): Promise<number> {
     writeFileSync(
       join(outDir, 'tap-targets.json'),
       JSON.stringify(tapTargetsFindingsByStep, null, 2),
+    );
+  }
+  if (formLabelsFindingsByStep.length > 0) {
+    writeFileSync(
+      join(outDir, 'form-labels.json'),
+      JSON.stringify(formLabelsFindingsByStep, null, 2),
     );
   }
   writeFileSync(join(outDir, 'report.json'), JSON.stringify(report, null, 2));
@@ -1416,6 +1455,7 @@ async function main(args: string[]): Promise<number> {
   console.log(`  runtime images:    ${report.counts.runtimeImagesFindings} (strict ${report.counts.runtimeImagesFindingsStrict})`);
   console.log(`  runtime focus:     ${report.counts.runtimeFocusFindings} (strict ${report.counts.runtimeFocusFindingsStrict})`);
   console.log(`  tap targets:       ${report.counts.tapTargetsFindings} (strict ${report.counts.tapTargetsFindingsStrict})`);
+  console.log(`  form labels:       ${report.counts.formLabelsFindings} (strict ${report.counts.formLabelsFindingsStrict})`);
   console.log(`  web vitals:        ${report.counts.webVitalsFindings} (strict ${report.counts.webVitalsFindingsStrict})`);
   console.log(`  csp violations:    ${report.counts.cspViolations}`);
   console.log(`  steps ok/failed:   ${report.counts.stepsOk}/${report.counts.stepsFailed}`);
@@ -1446,6 +1486,9 @@ async function main(args: string[]): Promise<number> {
     const newTapTargetsStrict = diff.newTapTargetsFindings.filter(e => e.severity === 'strict').length;
     const newTapTargetsWarn = diff.newTapTargetsFindings.length - newTapTargetsStrict;
     console.log(`    NEW tap targets:      ${diff.newTapTargetsFindings.length} (strict ${newTapTargetsStrict}, warn ${newTapTargetsWarn})`);
+    const newFormLabelsStrict = diff.newFormLabelsFindings.filter(e => e.severity === 'strict').length;
+    const newFormLabelsWarn = diff.newFormLabelsFindings.length - newFormLabelsStrict;
+    console.log(`    NEW form labels:      ${diff.newFormLabelsFindings.length} (strict ${newFormLabelsStrict}, warn ${newFormLabelsWarn})`);
     console.log(`    NEW csp violations:   ${diff.newCspViolations.length}`);
     console.log(`    newly broken steps:   ${diff.newlyBrokenSteps.length}`);
     console.log(`    fixed steps:          ${diff.fixedSteps.length}`);
