@@ -1033,6 +1033,140 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (fifty-second entry) — Loom edit-serve A 93: favicon + meta-desc + 2 unmasked bug fixes
+
+### What's new since last cycle (fifty-first entry)
+- **Cross-repo fix in PlausiDen-Loom** (commits e82b3d9 + 3d6f83e):
+  Two-commit cycle 52 — first added favicon+meta-description to
+  all admin pages emitted by `loom edit-serve`, which unmasked
+  TWO previously-invisible reliability bugs that the second
+  commit then fixed.
+- **Score: A 91 → A 93** (+2). uxHygiene F=35 → C=70.
+  Reliability briefly broke to D=65 (when bugs unmasked) then
+  recovered to A=100 in the same cycle.
+- 14th + 15th cross-repo Loom commit since cycle 38.
+- Active named-detector axis count UNCHANGED at 44.
+
+### Commit 1: cycle 52a — favicon + meta-description (e82b3d9)
+8 warns clear: 4× favicon.missing-link + 4× meta-description.missing.
+
+The favicon is an inline SVG data URL — Loom 'L' wordmark on
+PlausiDen-blue, 16×16, zero HTTP overhead, no separate /favicon.ico
+hosting. The meta-description is intentionally the same string on
+all admin pages ("Loom edit — typed CMS editor for PlausiDen
+sites...") since these are operator UIs, not search-indexed pages.
+
+That intentional duplication trips a single crossPageMetaDescription
+warn (one warn, acknowledged baseline).
+
+### Surprise: cycle 52a unmasked 2 reliability bugs
+Removing the favicon/desc warns dropped uxHygiene from F → C. But
+the audit suddenly showed NEW console-error + failed-requests strict
+findings:
+
+1. `GET /preview-edit/about.html → 500 Internal Server Error`
+2. `GET /preview/loom-skin.css → 404 Not Found`
+
+Both errors were ALREADY present before cycle 52a — they were
+suppressed in the diff because the prior baseline included them.
+When the baseline regenerated cleanly (favicon+desc fix changed
+all 4 page outputs significantly), these surfaced.
+
+This is exactly the dogfood loop's value proposition: visible
+defects → fixes → previously-hidden defects → next-cycle fixes.
+
+### Commit 2: cycle 52b — two unmasked-bug fixes (3d6f83e)
+
+**Fix 1: Hero `subtitle` alias for `lede`** (loom-cms-render):
+The fixture's cms/about.json was written by an older binary that
+used `subtitle`. The field was later renamed to `lede` with
+`deny_unknown_fields` set → renderer 500s on read.
+
+```rust
+Hero {
+    eyebrow: Option<String>,
+    title: String,
+    #[serde(alias = "subtitle")]  // ← cycle 52b
+    lede: Option<String>,
+    cta: Option<HeroCta>,
+}
+```
+
+Save path was already scrubbing legacy keys; read path now
+accepts both. Legacy fixtures round-trip without manual migration.
+New test: `hero_legacy_subtitle_field_alias_to_lede` pins the
+fix forever.
+
+**Fix 2: `/preview/loom-skin.css` fallback to BASE_THEME_CSS**
+(loom-cli serve_preview):
+The editor preview iframe hard-codes
+`<link rel="stylesheet" href="/preview/loom-skin.css">` even when
+forge hasn't generated the skin yet. 404 → console.error +
+failed-requests strict.
+
+```rust
+if !p.is_file() {
+    if rel == "loom-skin.css" {
+        // serve BASE_THEME_CSS as 200 text/css fallback
+        return Ok(...);
+    }
+    return respond_text(request, 404, "not found");
+}
+```
+
+Editor is now self-contained — works without a prior forge
+generate. Production previews (with real loom-skin.css) still
+hit the on-disk file because `p.is_file()` returns true first.
+
+### Score arc (cycles 41-52)
+  C41 pre:  B 82, 19 strict, accessibility F=0.
+  C46:      B 85, 3 strict (F-clamp accessibility BREAKS).
+  C49:      B 87, 3 strict (skip-link works after detector fix).
+  C50:      B 89, 2 strict (accessibility F → C=70).
+  C51:      A 91, 1 strict (uxHygiene F=10 → F=35).
+  C52a:     A 90, 2 strict (uxHygiene → C=70, reliability bugs unmasked).
+  C52b:     **A 93, 1 strict** (reliability bugs fixed, A=100).
+
+### What's left (1 strict + 10 warn)
+- 1× overflow.text-clipped on /uploads (the `<style>` block
+  inside `<main>` is text-content; needs structural rework
+  to move it to head context).
+- 10 warns spread across accessibility (6 — form-labels + tap-targets),
+  contentSecurity (3 — inline-script), uxHygiene (1 — duplicate
+  meta-description acknowledged).
+
+### Cumulative cross-repo dogfood scoreboard (cycles 38-52)
+  C38 Loom:  state-matrix CSS         C 75 → A 99.
+  C39 Loom:  nav-link 44px            A 95 → A 100.
+  C40 Forge: CMS title disambiguate   A 100 → A 100 (0).
+  C41-44 Loom (4 cycles):              B 82 → B 83 (-15 strict).
+  C45 (originAgentCluster axis added.)
+  C46 Loom:  fieldset labels          B 83 → B 85 (F-clamp BREAKS).
+  C47 Loom:  defensive cleanup        B 85 stable.
+  C48 Loom:  required * markers       B 85 (-1 warn).
+  C49 Loom+Crawler: skip-link + DETECTOR FIX → B 87.
+  C50 Loom:  fieldset button colour   B 87 → B 89 (F-clamp BREAKS again).
+  C51 Loom:  box-sizing + slug cleanup B 89 → A 91 (GRADE A reached!).
+  C52a Loom: favicon + meta-desc      A 91 → A 90 (bugs unmasked).
+  C52b Loom: subtitle alias + skin fallback A 90 → **A 93**.
+
+Total: 15 cross-repo Loom commits + 1 Forge + 1 crawler
+detector improvement. **Cycle 52 illustrates the dogfood
+loop's deepest value: fixes uncover previously-hidden bugs,
+which the next iteration of the same cycle fixes.**
+
+### Action items
+- [ ] Cycle 53: the last overflow strict on /uploads (move
+      `<style>` blocks out of `<main>` — structural change).
+- [ ] Cycle 54: detector axis pivot (CSP-Report-Only).
+- [ ] Cycle 55: deeper bug-finder mode — disable the "frozen
+      baseline" so all extant runtime errors surface, not just
+      new ones.
+- [ ] Add a Trusted Types runtime monitor detector
+      (Tier 3 security).
+
+---
+
 ## 2026-05-14 (fifty-first entry) — Loom edit-serve crosses into GRADE A (91)
 
 ### What's new since last cycle (fiftieth entry)
