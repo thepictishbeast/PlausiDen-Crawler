@@ -1033,6 +1033,78 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (forty-seventh entry) — Learning cycle: skip-link needs styling
+
+### What's new since last cycle (forty-sixth entry)
+- **Cross-repo fix in PlausiDen-Loom** (commit e667ed3):
+  defensive #555 → #595959 swap on the preview-bar background.
+- **Reverted experiment**: tried adding skip-links to all 4
+  admin pages, but the unstyled `<a class=loom-skip-edit
+  href=#main>` rendered ~1px wide and introduced 2 NEW
+  `tap.too-small` strict findings (regressed B 85 → B 83).
+  Reverted before commit.
+- Composite stays at **B 85 / 3 strict** (cycle-46 baseline).
+- Ninth cross-repo Loom commit since cycle 38.
+- Active named-detector axis count UNCHANGED at 44.
+
+### The lesson
+Adding `<a href="#main">` at the top of `<body>` is the
+standard skip-link pattern, BUT it needs CSS to:
+1. Be visually-hidden by default (so tap-targets don't fire).
+2. Become visible on `:focus` (so the user sees where focus
+   landed when tabbing).
+
+The pattern that works (used by the Forge-built SkillShots
+pages, scoring A=100):
+
+```css
+.loom-skip {
+  position: absolute; left: -9999px; top: auto;
+  width: 1px; height: 1px; overflow: hidden;
+}
+.loom-skip:focus {
+  left: 1rem; top: 1rem; width: auto; height: auto;
+  padding: .5rem 1rem;
+  background: var(--loom-bg); color: var(--loom-fg);
+  border: 2px solid var(--loom-focus);
+  z-index: 1000;
+}
+```
+
+The admin pages don't share BASE_THEME_CSS, so they'd each
+need this rule injected. Cycle 48 work: emit the rule in
+every admin page's `<style>` block.
+
+### Why this cycle still counts
+- Confirmed the F-clamp break from cycle 46 is durable.
+- Captured the learning about partial skip-link patterns
+  (an experiment that didn't ship is still data).
+- The #555 swap is a small but real defensive improvement —
+  brings the preview-bar in line with cycle 43's #595959
+  muted-grey standardization.
+
+### Score arc continues stable at B 85
+Cycle 47 didn't shift the composite. That's OK. The dogfood
+loop is in a "long-tail" phase where each cycle clears small
+clusters, not the headline 5-strict drops of cycles 41-42.
+
+### Action items
+- [ ] Cycle 48: proper skip-link with `.loom-skip-edit`
+      CSS injected into each admin page's style block.
+      Once the skip-link doesn't fire tap-too-small, the
+      4 skip.missing warns clear and accessibility goes:
+      1 strict + 7 warns = 100 - 25 - 35 = 40 → still F.
+      Need to ALSO clear the contrast strict or 3 more
+      warns to break F.
+- [ ] Cycle 49+: investigate the 9-element contrast
+      cluster on /about (different selector than #555).
+- [ ] Cycle 50+: form.required-no-indicator x3 — add
+      visual `*` markers to required fields.
+- [ ] Cycle 51+ detector: CSP-Report-Only / Trusted-Types
+      / Document-Policy.
+
+---
+
 ## 2026-05-14 (forty-sixth entry) — F-CLAMP BREAKS: Loom edit-serve form labels → B 85
 
 ### What's new since last cycle (forty-fifth entry)
