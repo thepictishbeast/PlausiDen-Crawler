@@ -1033,6 +1033,99 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (thirty-ninth entry) — dogfood Forge-built SkillShots → A=100 via Loom nav-link fix
+
+### What's new since last cycle (thirty-eighth entry)
+- New crawler journey: `journeys/forge-skillshots-build.json`
+  — audits the Forge-built static output of the SkillShots
+  site (PlausiDen-Forge/static/) served locally on port 8125.
+  Targets what Forge actually emits + ships, not the original
+  dev-server SkillShots that `skillshots-poc.json` covers.
+- **Cross-repo fix in PlausiDen-Loom** (commit a9c7299):
+  `nav.loom-page-nav a` in BASE_THEME_CSS now ships with
+  `min-height:44px; padding:.5rem .25rem` so every nav link
+  meets WCAG 2.1 SC 2.5.5 AAA + Apple HIG + Material Design.
+- Active named-detector axis count UNCHANGED at 43. Second
+  consecutive dogfood cycle. The supersociety loop continues
+  producing real wins.
+
+### Score arc on Forge-built SkillShots
+  - Pre-fix:    A (95/100). 9 warns dragging accessibility F=55.
+  - Post-fix:   A (100/100). accessibility F → A.
+
+### The defect
+Every Loom-emitted nav link across every page of every Forge-
+generated site was 24px tall (1rem line-height, no padding),
+failing WCAG 2.1 SC 2.5.5 AAA (≥44×44 touch targets) + Apple
+HIG + Material Design recommendations. Real-world impact:
+mis-tap rate on touchscreens estimated 2-3x higher than at
+44px targets.
+
+The fix lives in **one CSS rule** in
+`loom-cms-render/src/lib.rs::BASE_THEME_CSS`:
+
+```css
+nav.loom-page-nav a{
+  text-decoration:none;
+  color:var(--loom-fg);
+  display:inline-flex;           /* NEW */
+  align-items:center;            /* NEW */
+  min-height:44px;               /* NEW */
+  padding:.5rem .25rem;          /* NEW */
+}
+```
+
+The flex-inline + align-items pair keeps text vertically
+centred without changing label position relative to the
+header. Padding adds horizontal hit area without altering
+the visual gap (the parent's `gap:1rem` controls inter-link
+distance, not the padding).
+
+### CSP hash safety
+BASE_THEME_CSS is hashed at runtime via `csp_sha256(BASE_
+THEME_CSS.as_bytes())` and the result is interpolated into
+the CSP `style-src` directive. Any change to the CSS
+automatically updates the hash → no pinned-hash test broke.
+73/73 loom-cms-render tests pass.
+
+### Why this matters
+This is the SECOND consecutive cycle where the supersociety
+dashboard caught a real defect that ships to every PlausiDen-
+generated site. Multiplied effect:
+
+  - Cycle 38: state-matrix-missing-CSS — affected the
+    state-matrix showcase output.
+  - Cycle 39: nav-link-too-small — affected EVERY page of
+    EVERY Forge-built site.
+
+A single 4-line CSS change closed the entire 9-warning
+accessibility regression across the SkillShots site. The
+broader PlausiDen ecosystem benefits the next time anyone
+runs `forge build` against any project.
+
+### Verified
+- HTTP gate: 47/47 routes pass.
+- HTTPS gate: 60/60 routes pass.
+- Forge-built SkillShots: A (95/100) → A (100/100).
+- Loom state-matrix: stable at A (99/100) — fix doesn't
+  regress the showcase.
+- 73/73 loom-cms-render unit tests pass.
+
+### Action items
+- [ ] Wire `forge-skillshots-build.json` into PlausiDen-Forge's
+      CI so this regression can't happen again silently. The
+      existing `forge build`'s crawl-phase invocation already
+      runs a journey; this one is more comprehensive.
+- [ ] Try `forge.toml` / `forge mode=production` build and
+      audit THAT — different output than `mode=poc`.
+- [ ] Audit Atrium / Tidy / Purge once they have buildable
+      surfaces.
+- [ ] Fix the lone remaining `cross-page-title` warn (one
+      page shares its title with another).
+- [ ] Email/Slack grade-drop notifier (7+ cycles in arrears).
+
+---
+
 ## 2026-05-14 (thirty-eighth entry) — dogfood Loom state-matrix, real bug found + fixed cross-repo
 
 ### What's new since last cycle (thirty-seventh entry)

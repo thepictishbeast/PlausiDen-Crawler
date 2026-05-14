@@ -1,0 +1,17 @@
+{
+  "name": "forge-skillshots-build",
+  "description": "Audit the Forge-built static output of the SkillShots site (PlausiDen-Forge/static/) served locally on port 8125. Different from skillshots-poc.json which audits the original dev-server SkillShots; this journey targets what Forge actually emits + ships. Closes the dogfood loop on the Forge phase pipeline (`forge build`).",
+  "baseUrl": "http://127.0.0.1:8125",
+  "viewport": { "width": 1280, "height": 900 },
+  "steps": [
+    { "kind": "goto", "url": "http://127.0.0.1:8125/", "label": "index" },
+    { "kind": "goto", "url": "http://127.0.0.1:8125/about.html", "label": "about" },
+    { "kind": "goto", "url": "http://127.0.0.1:8125/challenge.html", "label": "challenge" },
+    { "kind": "goto", "url": "http://127.0.0.1:8125/compose.html", "label": "compose" },
+    { "kind": "goto", "url": "http://127.0.0.1:8125/leaderboard.html", "label": "leaderboard" },
+    { "kind": "goto", "url": "http://127.0.0.1:8125/my-wins.html", "label": "my-wins" },
+    { "kind": "goto", "url": "http://127.0.0.1:8125/post-skill.html", "label": "post-skill" },
+    { "kind": "goto", "url": "http://127.0.0.1:8125/profile.html", "label": "profile" },
+    { "kind": "goto", "url": "http://127.0.0.1:8125/votes.html", "label": "votes" }
+  ]
+}
