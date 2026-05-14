@@ -265,6 +265,65 @@ serves CSS-less HTML by design — one signal per route).
 
 ---
 
+## 2026-05-14 (fifth entry) — eventsByStep windowing fix + SkillShots regression
+
+The check-t76 script's URL-based matching was a workaround for a
+real bug in main.ts: `report.eventsByStep` used cumulative
+`s.durationMs` as window boundaries. `s.durationMs` only counts
+`runStep`'s page action — it doesn't count the ~17 detector
+`page.evaluate()` calls that happen AFTER runStep returns. So
+detector findings landed in the NEXT step's window.
+
+Concrete repro before the fix (from a kept run dir):
+- `lang-empty` step's events bucket contained `lang.unknown-primary`
+  (which only fires on `<html lang="xx">`, the lang-unknown route)
+- `lang-invalid` step's bucket contained `meta-description.empty`
+  (from the meta-desc-empty route 2 steps later)
+
+Fix: replaced cumulative-duration windows with WALL-CLOCK windows
+captured during the goto loop. Each iteration now records
+`{stepStartedT, stepEndedT}` based on `Date.now() - startEpoch` at
+top and bottom of the step body. The eventsByStep build phase
+uses those times directly.
+
+After the fix, every label's bucket contains exactly its own
+detector findings:
+- `lang-empty` → `lang.empty`
+- `lang-invalid` → `lang.invalid`
+- `lang-unknown` → `lang.unknown-primary`
+- `no-meta-desc` → `meta-description.missing`
+- ... and so on across all 30 fixture routes.
+
+scripts/check-t76-detectors.sh still uses URL match (it's
+strictly more robust than time windows — events tag their own
+URL at capture time), but now ANY consumer of report.eventsByStep
+gets accurate per-step grouping too.
+
+### SkillShots re-audit (post-windowing-fix, post-metaDescription)
+
+Same SkillShots site, run with the new metaDescription detector
+active and the windowing fix in main.ts. Picks up ONE real
+defect:
+
+  meta-description.too-short (warn) on leaderboard.html —
+  current description is 42 characters: "Top earners this
+  week. Voted by your crew." Search-result previews need
+  ~50-160 chars to fill the snippet line.
+
+Action items captured:
+
+- [ ] Extend leaderboard.html's meta description to 50+ chars
+      (e.g. add "...with weekly pot splits and per-category
+      ranking shown side by side.")
+- [ ] Audit every page's meta description against the 50-160
+      char band, fix the same way.
+- [ ] Pre-T76-fix audits had no `metaDescription` axis at all,
+      so this finding wasn't visible. Add a "what's new since
+      last cycle" section to dogfood reports for axes added
+      mid-stream.
+
+---
+
 *Update this file whenever a fresh dogfood run lands. Each entry
 should record what was new, what the site exposed in the crawler,
 and what gaps remain — turning the dogfood loop into a public

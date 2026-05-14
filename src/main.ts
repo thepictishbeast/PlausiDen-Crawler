@@ -1342,8 +1342,19 @@ async function main(args: string[]): Promise<number> {
 
   // Execute each step sequentially. Screenshot steps are handled inline
   // (runStep is a no-op for them) so we can track the filename.
+  // T76 fix: track WALL-CLOCK start/end of each step's full
+  // processing (including the per-step detector calls AFTER
+  // runStep returns). Without this, the per-step grouping in
+  // report.eventsByStep used cumulative durationMs, which
+  // under-counts the detector wall-clock time and causes
+  // findings to spill into the next step's bucket. URL-based
+  // grouping (used by scripts/check-t76-detectors.sh) doesn't
+  // have this problem, but ANYTHING else that consumes
+  // eventsByStep does — including a future visualizer.
+  const stepClockWindows: Array<{ stepIndex: number; startedT: number; endedT: number }> = [];
   for (let i = 0; i < journey.steps.length; i++) {
     const step = journey.steps[i];
+    const stepStartedT = Date.now() - startEpoch;
     console.log(`[crawler] step ${i + 1}/${journey.steps.length}: ${step.kind}${step.label ? ' · ' + step.label : ''}`);
 
     // Screenshot steps: take the shot AND an accessibility snapshot.
@@ -1391,6 +1402,7 @@ async function main(args: string[]): Promise<number> {
         for (const ev of axeEventsFor(axeResult, startEpoch)) events.push(ev);
       } catch { /* axe is best-effort */ }
       stepResults.push({ step, index: i, ok: true, durationMs: 0, screenshot: imgPath });
+      stepClockWindows.push({ stepIndex: i, startedT: stepStartedT, endedT: Date.now() - startEpoch });
       continue;
     }
 
@@ -1413,6 +1425,7 @@ async function main(args: string[]): Promise<number> {
         JSON.stringify(result.pages, null, 2),
       );
       console.log(`[crawler] discover complete: ${result.pages.length} pages, ${result.events.length} events`);
+      stepClockWindows.push({ stepIndex: i, startedT: stepStartedT, endedT: Date.now() - startEpoch });
       continue;
     }
 
@@ -1429,6 +1442,7 @@ async function main(args: string[]): Promise<number> {
       stepResults.push(...result.stepResults);
       for (const ev of result.events) events.push(ev);
       console.log(`[crawler] probe complete: ${result.findings.length} findings, ${result.totalRequests} requests, ${result.templatesProbed} templates`);
+      stepClockWindows.push({ stepIndex: i, startedT: stepStartedT, endedT: Date.now() - startEpoch });
       continue;
     }
 
@@ -1470,6 +1484,7 @@ async function main(args: string[]): Promise<number> {
     // Memory snapshot at end of each step so the report shows heap growth
     // across the journey. Cheap (one page.evaluate call).
     await snapshotMemory(page, step.label || step.kind, startEpoch, telemetry);
+    stepClockWindows.push({ stepIndex: i, startedT: stepStartedT, endedT: Date.now() - startEpoch });
   }
 
   // Capture service-worker state once before close.
@@ -1489,25 +1504,31 @@ async function main(args: string[]): Promise<number> {
 
   // Walk through events and bucket them by step — answers the user's
   // question "what was the crawler doing when this log happened?"
-  // Each event.t is ms since run start. Steps don't carry their own
-  // start offset, so we compute it from the cumulative durationMs.
-  const stepWindows: Array<{ start: number; end: number; step: StepResult }> = [];
-  {
-    let cursor = 0;
-    for (const s of stepResults) {
-      const start = cursor;
-      const end = cursor + Math.max(s.durationMs || 0, 100) + 200; // inclusive of the 200ms post-step settle
-      stepWindows.push({ start, end, step: s });
-      cursor = end;
-    }
-  }
-  const eventsByStep = stepWindows.map(({ start, end, step }) => ({
-    stepIndex: step.index,
-    stepLabel: step.step.label || step.step.kind,
-    stepKind: step.step.kind,
-    windowMs: [start, end] as [number, number],
-    events: events.filter(e => e.t >= start && e.t <= end),
-  })).filter(b => b.events.length > 0);
+  // Each event.t is ms since run start.
+  //
+  // T76 fix (2026-05-14): use the WALL-CLOCK windows captured during
+  // the goto loop (stepClockWindows). Previous logic used cumulative
+  // s.durationMs which only measured the page action — not the
+  // ~17 detector page.evaluate calls that happen AFTER runStep
+  // returns. Detector findings landed in the NEXT step's window
+  // (caught by scripts/check-t76-detectors.sh on the
+  // t76-detector-fixtures journey).
+  //
+  // The new windows are aligned to actual elapsed time. Map step
+  // index → result so the bucket carries the same shape downstream
+  // consumers expect.
+  const stepResultByIndex = new Map<number, StepResult>();
+  for (const s of stepResults) stepResultByIndex.set(s.index, s);
+  const eventsByStep = stepClockWindows.map(({ stepIndex, startedT, endedT }) => {
+    const step = stepResultByIndex.get(stepIndex);
+    return {
+      stepIndex,
+      stepLabel: step?.step.label || step?.step.kind || `step-${stepIndex}`,
+      stepKind: step?.step.kind || 'unknown',
+      windowMs: [startedT, endedT] as [number, number],
+      events: events.filter(e => e.t >= startedT && e.t <= endedT),
+    };
+  }).filter(b => b.events.length > 0);
 
   // Aggregate the rich telemetry bundle into actionable leaderboards.
   const agg = aggregate(telemetry);
