@@ -1033,6 +1033,97 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (forty-first entry) — Loom edit-serve admin UI, partial fix (B 82→83)
+
+### What's new since last cycle (fortieth entry)
+- New crawler journey: `journeys/loom-edit-server.json` —
+  audits the `loom edit-serve` CMS editor UI (T42-on). This
+  is the most user-visible Loom surface (non-technical users
+  editing site content).
+- **Cross-repo fix in PlausiDen-Loom** (commit 29f347f):
+  every edit-serve HTML emission site now ships `<html
+  lang=en>` + `<meta viewport>`. 8 sites updated in one
+  find-and-replace.
+- Fourth consecutive cross-repo dogfood win.
+- Active named-detector axis count UNCHANGED at 43.
+
+### Score arc on Loom edit-serve
+  Pre-fix:  Grade B (82/100). 19 strict + 22 warn.
+            accessibility=F (0/100), uxHygiene=F (0/100).
+  Post-fix: Grade B (83/100). 11 strict + 22 warn.
+            accessibility=F (still 0 — too many remaining
+            findings to break the clamp), uxHygiene=F (10/100).
+
+### What was fixed
+- **4× viewport.missing** — admin pages now scale properly
+  on mobile.
+- **4× lang.missing** — `<html lang=en>` declared, WCAG
+  3.1.1 satisfied, screen-reader + browser language tooling
+  get correct hints.
+
+### What's still strict (deferred to next cycle)
+- 4× landmarks.no-main — needs `<main>` wrapper added at 8
+  emission sites + `</main>` close. Larger refactor.
+- 3× contrast.body-text-below-aa — needs colour-token audit
+  in the inline styles.
+- 2× overflow.text-clipped — needs CSS investigation.
+- 1× tap.too-small — one small interactive target.
+- 1× form.no-label — one input missing a `<label>`.
+
+### Why the small composite move (82→83)?
+The accessibility category was already at F=0 from the
+strict-deduction clamp (13 strict × 25 = 325 deductions,
+clamped to 0). Removing 4 strict findings still leaves 9
+strict findings — still way past the clamp threshold (4
+strict × 25 = 100 = score 0). To get accessibility above F,
+the remaining 9 strict findings need to drop to ≤3 strict
+(which would put the score at 25 = D).
+
+This is a useful CALIBRATION moment for the scoring policy:
+once a category clamps at F, additional fixes feel
+invisible until enough land to break the clamp. A "partial
+credit" tweak could be considered for a future cycle (e.g.
+fewer-strict-deductions vs prior run shows up as a positive
+delta even within F).
+
+### Cumulative cross-repo dogfood scoreboard
+  Cycle 38 (Loom): state-matrix missing CSS → emit it.
+                   Loom state-matrix: C 75 → A 99.
+  Cycle 39 (Loom): nav-link 44px min-height.
+                   Forge SkillShots: A 95 → A 100.
+  Cycle 40 (Forge): CMS title disambiguation.
+                    Forge SkillShots: A 100 → A 100 (0 findings).
+  Cycle 41 (Loom): edit-serve HTML viewport + lang.
+                   Loom edit-serve: B 82 → B 83.
+
+Total cross-repo commits: 4 across PlausiDen-Loom (×3) +
+PlausiDen-Forge (×1).
+
+### Verified
+- HTTP gate: 47/47 routes pass.
+- HTTPS gate: 60/60 routes pass.
+- 297/297 loom-cli + loom-cms-render unit tests pass.
+- Loom edit-serve audit: B (83/100) post-fix.
+- Loom state-matrix: A (99/100) unchanged.
+- Forge SkillShots: A (100/100) unchanged.
+- SkillShots dev server: A (100/100) unchanged.
+
+### Action items
+- [ ] Cycle-42: add `<main>` wrapper + close to all 8
+      edit-serve HTML emission sites. Will lift accessibility
+      out of F clamp.
+- [ ] Cycle-43+: contrast-token audit on edit-serve inline
+      styles.
+- [ ] Cycle-44+: form input labels.
+- [ ] Eventually: consider migrating edit-serve HTML
+      generation to a typed template helper (`loom_edit_html`)
+      so accessibility + viewport scaffolding is baked in by
+      design, not per-site.
+- [ ] Reconsider scoring policy "partial credit within F"
+      so fixes still register on the composite.
+
+---
+
 ## 2026-05-14 (fortieth entry) — Forge SkillShots → A=100/100, zero findings, supersociety baseline met
 
 ### What's new since last cycle (thirty-ninth entry)
