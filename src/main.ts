@@ -34,6 +34,7 @@ import { captureLinkTextSnapshot, detectLinkTextIssues, type LinkTextFinding } f
 import { capturePlaceholderTextSnapshot, detectPlaceholderTextIssues, type PlaceholderTextFinding } from './placeholderText.js';
 import { captureTapTargetsSnapshot, detectTapTargetIssues, type TapTargetFinding } from './tapTargets.js';
 import { captureFormLabelsSnapshot, detectFormLabelIssues, type FormLabelFinding } from './formLabels.js';
+import { captureViewportMetaSnapshot, detectViewportMetaIssues, type ViewportMetaFinding } from './viewportMeta.js';
 
 interface Budget {
   newConsoleErrors: number;
@@ -855,6 +856,38 @@ async function main(args: string[]): Promise<number> {
   };
 
   /**
+   * T76: viewport meta tag detector. WCAG 1.4.10 (Reflow, AA) +
+   * 1.4.4 (Resize text, AA). Catches missing tag, no
+   * width=device-width, and zoom-disabling content (user-scalable=no
+   * / maximum-scale ≤ 1) — three of the most common mobile-UX
+   * failures and an explicit accessibility blocker for low-vision
+   * users.
+   */
+  const viewportMetaFindingsByStep: Array<{ stepLabel: string; pageUrl: string; findings: ViewportMetaFinding[] }> = [];
+  const checkViewportMeta = async (afterLabel: string) => {
+    try {
+      const snap = await captureViewportMetaSnapshot(page);
+      const findings = detectViewportMetaIssues(snap);
+      viewportMetaFindingsByStep.push({ stepLabel: afterLabel, pageUrl: snap.pageUrl, findings });
+      for (const f of findings) {
+        log({
+          kind: 'viewport-meta',
+          text: `[${f.kind}] ${f.detail}`,
+          url: snap.pageUrl,
+          severity: f.severity,
+          ruleId: f.kind,
+          impact: f.severity === 'strict' ? 'serious' : 'minor',
+        });
+      }
+    } catch (e) {
+      log({
+        kind: 'pageerror',
+        text: `[viewportMeta] detector threw on step ${afterLabel}: ${(e as Error).message}`,
+      });
+    }
+  };
+
+  /**
    * T76: form-label association detector. WCAG 1.3.1 + 4.1.2 + 3.3.2.
    * Catches no-label / placeholder-only / required-no-indicator —
    * the three highest-impact form-UX bugs in real applications.
@@ -1241,6 +1274,7 @@ async function main(args: string[]): Promise<number> {
       await checkPlaceholderText(step.label || `goto-${i}`);
       await checkTapTargets(step.label || `goto-${i}`);
       await checkFormLabels(step.label || `goto-${i}`);
+      await checkViewportMeta(step.label || `goto-${i}`);
       await checkWebVitals(step.label || `goto-${i}`);
     }
     // Memory snapshot at end of each step so the report shows heap growth
@@ -1315,6 +1349,8 @@ async function main(args: string[]): Promise<number> {
       tapTargetsFindingsStrict: events.filter(e => e.kind === 'tap-targets' && e.severity === 'strict').length,
       formLabelsFindings: events.filter(e => e.kind === 'form-labels').length,
       formLabelsFindingsStrict: events.filter(e => e.kind === 'form-labels' && e.severity === 'strict').length,
+      viewportMetaFindings: events.filter(e => e.kind === 'viewport-meta').length,
+      viewportMetaFindingsStrict: events.filter(e => e.kind === 'viewport-meta' && e.severity === 'strict').length,
       cspViolations: events.filter(e => e.kind === 'csp-violation').length,
       total: events.length,
       stepsOk: stepResults.filter(s => s.ok).length,
@@ -1374,6 +1410,12 @@ async function main(args: string[]): Promise<number> {
     writeFileSync(
       join(outDir, 'form-labels.json'),
       JSON.stringify(formLabelsFindingsByStep, null, 2),
+    );
+  }
+  if (viewportMetaFindingsByStep.length > 0) {
+    writeFileSync(
+      join(outDir, 'viewport-meta.json'),
+      JSON.stringify(viewportMetaFindingsByStep, null, 2),
     );
   }
   writeFileSync(join(outDir, 'report.json'), JSON.stringify(report, null, 2));
@@ -1456,6 +1498,7 @@ async function main(args: string[]): Promise<number> {
   console.log(`  runtime focus:     ${report.counts.runtimeFocusFindings} (strict ${report.counts.runtimeFocusFindingsStrict})`);
   console.log(`  tap targets:       ${report.counts.tapTargetsFindings} (strict ${report.counts.tapTargetsFindingsStrict})`);
   console.log(`  form labels:       ${report.counts.formLabelsFindings} (strict ${report.counts.formLabelsFindingsStrict})`);
+  console.log(`  viewport meta:     ${report.counts.viewportMetaFindings} (strict ${report.counts.viewportMetaFindingsStrict})`);
   console.log(`  web vitals:        ${report.counts.webVitalsFindings} (strict ${report.counts.webVitalsFindingsStrict})`);
   console.log(`  csp violations:    ${report.counts.cspViolations}`);
   console.log(`  steps ok/failed:   ${report.counts.stepsOk}/${report.counts.stepsFailed}`);
@@ -1489,6 +1532,9 @@ async function main(args: string[]): Promise<number> {
     const newFormLabelsStrict = diff.newFormLabelsFindings.filter(e => e.severity === 'strict').length;
     const newFormLabelsWarn = diff.newFormLabelsFindings.length - newFormLabelsStrict;
     console.log(`    NEW form labels:      ${diff.newFormLabelsFindings.length} (strict ${newFormLabelsStrict}, warn ${newFormLabelsWarn})`);
+    const newViewportMetaStrict = diff.newViewportMetaFindings.filter(e => e.severity === 'strict').length;
+    const newViewportMetaWarn = diff.newViewportMetaFindings.length - newViewportMetaStrict;
+    console.log(`    NEW viewport meta:    ${diff.newViewportMetaFindings.length} (strict ${newViewportMetaStrict}, warn ${newViewportMetaWarn})`);
     console.log(`    NEW csp violations:   ${diff.newCspViolations.length}`);
     console.log(`    newly broken steps:   ${diff.newlyBrokenSteps.length}`);
     console.log(`    fixed steps:          ${diff.fixedSteps.length}`);

@@ -49,6 +49,7 @@ pub mod runtime_images;
 pub mod runtime_landmarks;
 pub mod tap_targets;
 pub mod ui_overflow;
+pub mod viewport_meta;
 pub mod web_vitals;
 
 /// Severity bucket shared across every detector axis. Mirrors the
