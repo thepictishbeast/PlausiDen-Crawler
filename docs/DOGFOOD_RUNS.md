@@ -1033,6 +1033,139 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (twenty-first entry) — permissionsPolicy detector
+
+### What's new since last cycle (twentieth entry)
+- 1 new detector axis: **`permissionsPolicy`** — Permissions-Policy
+  response-header audit. Brings the active-axis count to **33**
+  (the SkillShots audit reports 36 because three of the legacy
+  axes — console-errors, page-errors, failed-requests — are
+  counted separately from the named detectors).
+- 5 new HTTPS fixture routes:
+  `/no-permissions-policy/`, `/permissions-policy-camera-allowall/`,
+  `/permissions-policy-invalid/`, `/permissions-policy-partial/`,
+  `/permissions-policy-clean/`. HTTPS gate now validates **22/22**
+  routes (was 17/17).
+- Fixture hygiene: added `_DEFAULT_PERMISSIONS_POLICY` (a deny-all
+  string) to the HTTPS fixture's `DEFAULT_HEADERS` so unrelated
+  routes don't leak `permissions-policy.missing` into their
+  audit notes.
+
+### Why permissionsPolicy now
+The supersociety threat model assumes embedded iframes are an
+attack surface — third-party widgets, ad networks, analytics
+scripts. Without a Permissions-Policy header, every browser API
+(camera, microphone, geolocation, payment, USB, serial, MIDI,
+HID, Bluetooth, motion sensors, display-capture, screen-wake-lock)
+defaults to `*`, meaning ANY embedded iframe inherits ambient
+permission to use those APIs. A malicious or compromised iframe
+can prompt the user for camera access on any site that embeds
+it. Permissions-Policy is the W3C-blessed (formerly Feature-
+Policy) defence — and the only one — against this category of
+attack.
+
+The motion-sensor inclusions (accelerometer / gyroscope /
+magnetometer) deserve special note. Websites use these
+legitimately for orientation features, but the side-channel
+literature (TouchLogger, AccessLogger and similar mobile-
+keystroke side-channels) proves they enable keystroke recovery
+when allowed cross-origin. Defence-in-depth requires denying
+them for every iframe by default.
+
+### Detector design
+Five finding kinds, two severities:
+- `permissions-policy.missing` (warn) — no header at all;
+  every feature defaults to `*`.
+- `permissions-policy.allow-all-<feature>` (strict) — high-risk
+  feature explicitly set to `*` (`camera=*`, `microphone=*`,
+  `geolocation=*`, etc.).
+- `permissions-policy.invalid` (warn) — header is present but
+  unparseable into any directive.
+- `permissions-policy.high-risk-omitted` (warn) — partial policy
+  that lists some directives but leaves a high-risk feature at
+  the `*` default by omission. The detector enumerates which
+  features are missing so the operator can extend their policy
+  exhaustively.
+
+Acceptable allowlist forms:
+- `feature=()` — denied for everyone (best).
+- `feature=(self)` — page itself only.
+- `feature=(self "https://example.com")` — page + named origin.
+- `feature=self` — non-paren shorthand the W3C spec allows.
+
+Out of scope: localhost (same family as hsts/xframe/referrer/
+cookie). Unlike Secure cookies, Permissions-Policy CAN apply
+over http, so the http-page exemption from `cookieSecurity`
+does not carry over.
+
+### Helper-extract decision (third deferral)
+Per the cycle-17 doctrine the FOURTH and now FIFTH response-header
+detector should trigger the `headerDetector(headerName, parser,
+classifier)` extraction. After implementing permissionsPolicy
+and observing the multi-directive shape, the extraction is
+**deferred again**:
+
+  - hsts / xframeOptions / referrerPolicy each parse a SINGLE
+    value and classify into one of N severities.
+  - cookieSecurity parses a list of (name, attributes) tuples
+    where attributes are positionally set, and aggregates
+    findings across the list.
+  - permissionsPolicy parses a list of (feature, allowlist)
+    pairs where the allowlist itself has structure (deny / self
+    / origins / star), and runs PER-FEATURE classification PLUS
+    a cross-cutting "is X feature missing from the declared
+    set" check.
+
+A naive helper would shoe-horn all three shapes into one. The
+queue now reads: **wait for the SIXTH multi-value header
+detector (full CSP)** to clarify whether the right abstraction
+is `responseHeaderDetector(headerName, snapshotBuilder,
+classifier)` (passes the parsed snapshot through to a
+classifier callback) or two sister helpers — one for single-
+value, one for multi-directive. Implementation defer pays
+compound interest; abstraction defer pays the same.
+
+### Tests
+- 17 unit scenarios in `permissionsPolicy.test.ts`, all passing —
+  no-header, localhost-exempt, comprehensive-deny, garbage,
+  camera-allow-all, all-14-features-allow-all (strict-count
+  invariant), partial-omits, self-only, origin-allowlist,
+  bare-self-shorthand, unknown-feature-ignored, header-name-
+  case-insensitive, mixed-allow-deny (only allow flagged),
+  empty-header, trailing-comma, whitespace-in-allowlist,
+  single-quotes-in-origins.
+
+### Verified
+- HTTP gate: 36/36 routes pass.
+- HTTPS gate: 22/22 routes pass (17 prior + 5 new permissions
+  routes).
+- SkillShots audit: 36 axes total (33 named detectors + 3
+  legacy event kinds), all silent vs prior. permissionsPolicy
+  appears in the positive-signal table; SkillShots is served on
+  localhost so the exemption short-circuits — correct
+  behaviour, the detector is wired and active.
+
+### Action items
+- [ ] Sixth multi-value response-header detector. Strong
+      candidate: full Content-Security-Policy parser (we already
+      check `frame-ancestors` indirectly via `xFrameOptions`,
+      but `default-src`, `script-src`, `style-src`,
+      `connect-src` etc. are first-class supersociety controls).
+- [ ] After the sixth lands, decide between
+      `responseHeaderDetector` (single-value-snapshot →
+      classifier) and a sibling `multiValueHeaderDetector`.
+- [ ] Cross-Origin-Opener-Policy / Cross-Origin-Embedder-Policy
+      detector — Spectre / SharedArrayBuffer cross-origin
+      isolation. Two more single-value response-header
+      detectors that would fit the existing pattern cleanly.
+- [ ] Subresource Integrity (SRI) detector — per-element DOM
+      check (every cross-origin `<script>` and
+      `<link rel=stylesheet>` should have an `integrity=`
+      attribute). Different shape from response-header
+      detectors; its own module. CDN-compromise mitigation.
+
+---
+
 ## 2026-05-14 (twentieth entry) — cookieSecurity detector + Set-Cookie capture fix
 
 ### What's new since last cycle (nineteenth entry)

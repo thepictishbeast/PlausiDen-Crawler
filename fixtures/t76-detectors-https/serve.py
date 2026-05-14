@@ -122,10 +122,19 @@ def route(path):
 
 # Default protective headers applied to every route UNLESS the
 # route returns its own override (see Handler.do_GET below).
+_DEFAULT_PERMISSIONS_POLICY = ', '.join(
+    f'{f}=()' for f in [
+        'camera', 'microphone', 'geolocation', 'payment', 'usb', 'serial', 'midi',
+        'hid', 'bluetooth', 'accelerometer', 'gyroscope', 'magnetometer',
+        'display-capture', 'screen-wake-lock',
+    ]
+)
+
 DEFAULT_HEADERS = {
     'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
     'X-Frame-Options': 'SAMEORIGIN',
     'Referrer-Policy': 'strict-origin-when-cross-origin',
+    'Permissions-Policy': _DEFAULT_PERMISSIONS_POLICY,
     'Content-Type': 'text/html; charset=utf-8',
     'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
 }
@@ -211,6 +220,57 @@ def invalid_referrer():
     return (
         page('<h1>Invalid Referrer-Policy value.</h1>'),
         {'Referrer-Policy': 'GIBBERISH'},
+    )
+
+
+# ----- Permissions-Policy -----
+# Reuse the deny-all string already wired into DEFAULT_HEADERS so
+# the "high-risk-omitted" warning doesn't pile on top of the
+# focused finding under test.
+PP_DENY_ALL = _DEFAULT_PERMISSIONS_POLICY
+
+
+@route('/no-permissions-policy/')
+def no_permissions_policy():
+    return (
+        page('<h1>No Permissions-Policy header.</h1>'),
+        {'Permissions-Policy': None},
+    )
+
+
+@route('/permissions-policy-camera-allowall/')
+def permissions_policy_camera_allowall():
+    # camera=* allow-all → strict.
+    return (
+        page('<h1>Permissions-Policy explicitly allow-alls camera.</h1>'),
+        {'Permissions-Policy': PP_DENY_ALL.replace('camera=()', 'camera=*')},
+    )
+
+
+@route('/permissions-policy-invalid/')
+def permissions_policy_invalid():
+    # Garbage value, no `=` separator anywhere.
+    return (
+        page('<h1>Permissions-Policy garbage value.</h1>'),
+        {'Permissions-Policy': 'totally not a policy'},
+    )
+
+
+@route('/permissions-policy-partial/')
+def permissions_policy_partial():
+    # Declares non-high-risk features; high-risk omitted (default *).
+    return (
+        page('<h1>Permissions-Policy declares only non-high-risk features.</h1>'),
+        {'Permissions-Policy': 'autoplay=(), fullscreen=(self)'},
+    )
+
+
+@route('/permissions-policy-clean/')
+def permissions_policy_clean():
+    # Comprehensive deny → no findings.
+    return (
+        page('<h1>Permissions-Policy comprehensive deny — clean.</h1>'),
+        {'Permissions-Policy': PP_DENY_ALL},
     )
 
 

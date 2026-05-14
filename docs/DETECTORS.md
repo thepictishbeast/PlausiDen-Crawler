@@ -225,6 +225,22 @@ Multi-token policies are honored per the W3C spec — the LAST recognised token 
 
 **Third response-header detector.** Reads from the same `topLevelResponseHeaders` Map as hsts + xFrameOptions. With three concrete examples now in hand, the ~70% structural overlap is a candidate for a generic `headerDetector(headerName, parser, classifier)` helper — extract on the next addition.
 
+### `permissionsPolicy` — Permissions-Policy response header *(T76 — added 2026-05-14)*
+Source: `src/permissionsPolicy.ts`
+
+| Finding | Sev | Catches |
+|---|---|---|
+| `permissions-policy.missing` | warn | No `Permissions-Policy` header. Every browser API (camera, microphone, geolocation, payment, USB, serial, MIDI, HID, Bluetooth, accelerometer, gyroscope, magnetometer, display-capture, screen-wake-lock) defaults to `*` — every embedded iframe inherits ambient permission. |
+| `permissions-policy.allow-all-<feature>` | strict | A high-risk feature (camera/microphone/geolocation/payment/usb/serial/midi/hid/bluetooth/sensors/display-capture/screen-wake-lock) is set to `*` — explicitly allowed for every embedded iframe. The strictest finding — the operator either misunderstood the directive syntax or forgot to restrict it. |
+| `permissions-policy.invalid` | warn | Header is present but couldn't be parsed into any valid directive. Browsers ignore unparseable values, so the header has no effect. |
+| `permissions-policy.high-risk-omitted` | warn | Policy declares some directives but omits at least one high-risk feature, which therefore inherits the browser default of `*`. The detector flags the omitted features by name so the operator can extend their policy exhaustively. |
+
+High-risk features: `camera`, `microphone`, `geolocation`, `payment`, `usb`, `serial`, `midi`, `hid`, `bluetooth`, `accelerometer`, `gyroscope`, `magnetometer`, `display-capture`, `screen-wake-lock`. The motion-sensor APIs are intentionally included even though websites use them for legitimate orientation features — the side-channel literature (TouchLogger, AccessLogger and similar) proves they enable keystroke recovery on mobile when allowed cross-origin.
+
+Out of scope: localhost / 127.0.0.1 / `*.localhost` (consistent with the response-header detector family). Unlike Secure cookies, Permissions-Policy CAN apply over http, so the http-page exemption from `cookieSecurity` does not carry over.
+
+**Fifth response-header detector.** Reads from the same `topLevelResponseHeaders` Map as hsts / xframe / referrer / cookieSecurity. Permissions-Policy IS a multi-directive header (comma-separated `feature=allowlist` directives) but each directive's allowlist parsing is feature-dependent enough that extracting the deferred `multiValueHeaderDetector` helper now would still be premature. After a SIXTH multi-value header detector lands (probable: full Content-Security-Policy directive parser), the shape will be clearer.
+
 ### `cookieSecurity` — Set-Cookie attribute audit *(T76 — added 2026-05-14)*
 Source: `src/cookieSecurity.ts`
 

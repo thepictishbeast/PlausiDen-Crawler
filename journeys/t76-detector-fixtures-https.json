@@ -20,7 +20,12 @@
     { "kind": "goto", "url": "https://127.0.0.1:8773/cookie-no-samesite/", "label": "cookie-no-samesite" },
     { "kind": "goto", "url": "https://127.0.0.1:8773/cookie-samesite-none-no-secure/", "label": "cookie-samesite-none-no-secure" },
     { "kind": "goto", "url": "https://127.0.0.1:8773/cookie-session-no-httponly/", "label": "cookie-session-no-httponly" },
-    { "kind": "goto", "url": "https://127.0.0.1:8773/cookie-clean/", "label": "cookie-clean" }
+    { "kind": "goto", "url": "https://127.0.0.1:8773/cookie-clean/", "label": "cookie-clean" },
+    { "kind": "goto", "url": "https://127.0.0.1:8773/no-permissions-policy/", "label": "no-permissions-policy" },
+    { "kind": "goto", "url": "https://127.0.0.1:8773/permissions-policy-camera-allowall/", "label": "permissions-policy-camera-allowall" },
+    { "kind": "goto", "url": "https://127.0.0.1:8773/permissions-policy-invalid/", "label": "permissions-policy-invalid" },
+    { "kind": "goto", "url": "https://127.0.0.1:8773/permissions-policy-partial/", "label": "permissions-policy-partial" },
+    { "kind": "goto", "url": "https://127.0.0.1:8773/permissions-policy-clean/", "label": "permissions-policy-clean" }
   ],
   "expectedFindingsByLabel": {
     "control": [],
@@ -39,6 +44,11 @@
     "cookie-no-samesite": ["cookie.no-samesite"],
     "cookie-samesite-none-no-secure": ["cookie.samesite-none-no-secure"],
     "cookie-session-no-httponly": ["cookie.session-no-httponly"],
-    "cookie-clean": []
+    "cookie-clean": [],
+    "no-permissions-policy": ["permissions-policy.missing"],
+    "permissions-policy-camera-allowall": ["permissions-policy.allow-all-camera"],
+    "permissions-policy-invalid": ["permissions-policy.invalid"],
+    "permissions-policy-partial": ["permissions-policy.high-risk-omitted"],
+    "permissions-policy-clean": []
   }
 }

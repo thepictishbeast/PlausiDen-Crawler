@@ -51,6 +51,7 @@ import { buildXFrameOptionsSnapshot, detectXFrameOptionsIssues, type XFrameOptio
 import { buildReferrerPolicySnapshot, detectReferrerPolicyIssues, type ReferrerPolicyFinding } from './referrerPolicy.js';
 import { captureFontLoadingSnapshot, detectFontLoadingIssues, type FontLoadingFinding } from './fontLoading.js';
 import { buildCookieSecuritySnapshot, detectCookieSecurityIssues, type CookieSecurityFinding } from './cookieSecurity.js';
+import { buildPermissionsPolicySnapshot, detectPermissionsPolicyIssues, type PermissionsPolicyFinding } from './permissionsPolicy.js';
 
 interface Budget {
   newConsoleErrors: number;
@@ -1049,6 +1050,41 @@ async function main(args: string[]): Promise<number> {
    * Secure / SameSite / HttpOnly / SameSite=None+Secure
    * combinations.
    */
+  /**
+   * T76: Permissions-Policy header audit. FIFTH consumer of the
+   * shared `topLevelResponseHeaders` capture path. Reports
+   * missing header (warn), unparseable (warn), high-risk
+   * features explicitly allow-all'd (strict), and partial
+   * policies that leave high-risk features at the `*` default
+   * (warn). Localhost exempt.
+   */
+  const permissionsPolicyFindingsByStep: Array<{ stepLabel: string; pageUrl: string; findings: PermissionsPolicyFinding[] }> = [];
+  const checkPermissionsPolicy = async (afterLabel: string) => {
+    try {
+      const pageUrl = page.url();
+      const headers = topLevelResponseHeaders.get(pageUrl);
+      const snap = buildPermissionsPolicySnapshot(pageUrl, headers);
+      if (disableLocalhostExemption) snap.pageIsLocalhost = false;
+      const findings = detectPermissionsPolicyIssues(snap);
+      permissionsPolicyFindingsByStep.push({ stepLabel: afterLabel, pageUrl, findings });
+      for (const f of findings) {
+        log({
+          kind: 'permissions-policy',
+          text: `[${f.kind}] ${f.detail}`,
+          url: pageUrl,
+          severity: f.severity,
+          ruleId: f.kind,
+          impact: f.severity === 'strict' ? 'serious' : 'minor',
+        });
+      }
+    } catch (e) {
+      log({
+        kind: 'pageerror',
+        text: `[permissionsPolicy] detector threw on step ${afterLabel}: ${(e as Error).message}`,
+      });
+    }
+  };
+
   const cookieSecurityFindingsByStep: Array<{ stepLabel: string; pageUrl: string; findings: CookieSecurityFinding[] }> = [];
   const checkCookieSecurity = async (afterLabel: string) => {
     try {
@@ -1818,6 +1854,7 @@ async function main(args: string[]): Promise<number> {
       await checkReferrerPolicy(step.label || `goto-${i}`);
       await checkFontLoading(step.label || `goto-${i}`);
       await checkCookieSecurity(step.label || `goto-${i}`);
+      await checkPermissionsPolicy(step.label || `goto-${i}`);
       await checkWebVitals(step.label || `goto-${i}`);
     }
     // Memory snapshot at end of each step so the report shows heap growth
@@ -1956,6 +1993,8 @@ async function main(args: string[]): Promise<number> {
       fontLoadingFindingsStrict: events.filter(e => e.kind === 'font-loading' && e.severity === 'strict').length,
       cookieSecurityFindings: events.filter(e => e.kind === 'cookie-security').length,
       cookieSecurityFindingsStrict: events.filter(e => e.kind === 'cookie-security' && e.severity === 'strict').length,
+      permissionsPolicyFindings: events.filter(e => e.kind === 'permissions-policy').length,
+      permissionsPolicyFindingsStrict: events.filter(e => e.kind === 'permissions-policy' && e.severity === 'strict').length,
       linkUnderlineFindings: events.filter(e => e.kind === 'link-underline').length,
       linkUnderlineFindingsStrict: events.filter(e => e.kind === 'link-underline' && e.severity === 'strict').length,
       crossPageTitleFindings: events.filter(e => e.kind === 'cross-page-title').length,
@@ -2107,6 +2146,12 @@ async function main(args: string[]): Promise<number> {
       JSON.stringify(cookieSecurityFindingsByStep, null, 2),
     );
   }
+  if (permissionsPolicyFindingsByStep.length > 0) {
+    writeFileSync(
+      join(outDir, 'permissions-policy.json'),
+      JSON.stringify(permissionsPolicyFindingsByStep, null, 2),
+    );
+  }
   if (linkUnderlineFindingsByStep.length > 0) {
     writeFileSync(
       join(outDir, 'link-underline.json'),
@@ -2207,6 +2252,7 @@ async function main(args: string[]): Promise<number> {
   console.log(`  referrer-policy:   ${report.counts.referrerPolicyFindings} (strict ${report.counts.referrerPolicyFindingsStrict})`);
   console.log(`  font loading:      ${report.counts.fontLoadingFindings} (strict ${report.counts.fontLoadingFindingsStrict})`);
   console.log(`  cookie security:   ${report.counts.cookieSecurityFindings} (strict ${report.counts.cookieSecurityFindingsStrict})`);
+  console.log(`  permissions policy:${report.counts.permissionsPolicyFindings} (strict ${report.counts.permissionsPolicyFindingsStrict})`);
   console.log(`  link underline:    ${report.counts.linkUnderlineFindings} (strict ${report.counts.linkUnderlineFindingsStrict})`);
   console.log(`  cross-page title:  ${report.counts.crossPageTitleFindings} (strict ${report.counts.crossPageTitleFindingsStrict})`);
   console.log(`  cross-page meta:   ${report.counts.crossPageMetaDescriptionFindings} (strict ${report.counts.crossPageMetaDescriptionFindingsStrict})`);
@@ -2285,6 +2331,9 @@ async function main(args: string[]): Promise<number> {
     const newCsStrict = diff.newCookieSecurityFindings.filter(e => e.severity === 'strict').length;
     const newCsWarn = diff.newCookieSecurityFindings.length - newCsStrict;
     console.log(`    NEW cookie security:  ${diff.newCookieSecurityFindings.length} (strict ${newCsStrict}, warn ${newCsWarn})`);
+    const newPpStrict = diff.newPermissionsPolicyFindings.filter(e => e.severity === 'strict').length;
+    const newPpWarn = diff.newPermissionsPolicyFindings.length - newPpStrict;
+    console.log(`    NEW permissions policy: ${diff.newPermissionsPolicyFindings.length} (strict ${newPpStrict}, warn ${newPpWarn})`);
     const newLinkUnderlineStrict = diff.newLinkUnderlineFindings.filter(e => e.severity === 'strict').length;
     const newLinkUnderlineWarn = diff.newLinkUnderlineFindings.length - newLinkUnderlineStrict;
     console.log(`    NEW link underline:   ${diff.newLinkUnderlineFindings.length} (strict ${newLinkUnderlineStrict}, warn ${newLinkUnderlineWarn})`);

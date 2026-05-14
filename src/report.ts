@@ -43,6 +43,7 @@ export interface CapturedEvent {
     | 'referrer-policy'
     | 'font-loading'
     | 'cookie-security'
+    | 'permissions-policy'
     | 'link-underline'
     | 'cross-page-title'
     | 'cross-page-meta-description';
@@ -112,6 +113,8 @@ export interface Report {
     fontLoadingFindingsStrict: number;
     cookieSecurityFindings: number;
     cookieSecurityFindingsStrict: number;
+    permissionsPolicyFindings: number;
+    permissionsPolicyFindingsStrict: number;
     linkUnderlineFindings: number;
     linkUnderlineFindingsStrict: number;
     crossPageTitleFindings: number;
@@ -313,6 +316,13 @@ export interface Diff {
    */
   newCookieSecurityFindings: CapturedEvent[];
   /**
+   * permissions-policy findings new in this run vs prior. Warn
+   * = missing / invalid / partial-policy-omits-high-risk.
+   * Strict = high-risk feature (camera/mic/geo/payment/usb/...)
+   * explicitly allow-all'd to every embedded iframe. T76.
+   */
+  newPermissionsPolicyFindings: CapturedEvent[];
+  /**
    * link-underline findings new in this run vs prior. Warn-only:
    * inline link inside running text distinguished only by colour.
    * WCAG 1.4.1 Level A. T76.
@@ -373,6 +383,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     newReferrerPolicyFindings: [],
     newFontLoadingFindings: [],
     newCookieSecurityFindings: [],
+    newPermissionsPolicyFindings: [],
     newLinkUnderlineFindings: [],
     newCrossPageTitleFindings: [],
     newCrossPageMetaDescriptionFindings: [],
@@ -411,6 +422,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     out.newReferrerPolicyFindings = current.events.filter(e => e.kind === 'referrer-policy');
     out.newFontLoadingFindings = current.events.filter(e => e.kind === 'font-loading');
     out.newCookieSecurityFindings = current.events.filter(e => e.kind === 'cookie-security');
+    out.newPermissionsPolicyFindings = current.events.filter(e => e.kind === 'permissions-policy');
     out.newLinkUnderlineFindings = current.events.filter(e => e.kind === 'link-underline');
     out.newCrossPageTitleFindings = current.events.filter(e => e.kind === 'cross-page-title');
     out.newCrossPageMetaDescriptionFindings = current.events.filter(e => e.kind === 'cross-page-meta-description');
@@ -450,6 +462,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     else if (e.kind === 'referrer-policy') out.newReferrerPolicyFindings.push(e);
     else if (e.kind === 'font-loading') out.newFontLoadingFindings.push(e);
     else if (e.kind === 'cookie-security') out.newCookieSecurityFindings.push(e);
+    else if (e.kind === 'permissions-policy') out.newPermissionsPolicyFindings.push(e);
     else if (e.kind === 'link-underline') out.newLinkUnderlineFindings.push(e);
     else if (e.kind === 'cross-page-title') out.newCrossPageTitleFindings.push(e);
     else if (e.kind === 'cross-page-meta-description') out.newCrossPageMetaDescriptionFindings.push(e);
@@ -693,6 +706,17 @@ export function renderPositiveSignal(report: Report, diff: Diff): string {
       total: report.events.filter((e) => e.kind === 'cookie-security').length,
       news: diff.newCookieSecurityFindings.length,
       strictNews: strict(diff.newCookieSecurityFindings),
+    },
+    {
+      // T76 (Crawler): permissions-policy — Permissions-Policy
+      // header. Warn on missing/invalid/partial-omits; strict
+      // on high-risk feature (camera/mic/geo/payment/usb/serial/
+      // midi/hid/bluetooth/sensors/display-capture) explicitly
+      // allow-all'd to embedded iframes. Localhost exempt.
+      name: 'permissionsPolicy',
+      total: report.events.filter((e) => e.kind === 'permissions-policy').length,
+      news: diff.newPermissionsPolicyFindings.length,
+      strictNews: strict(diff.newPermissionsPolicyFindings),
     },
     {
       // T76 (Crawler): link-underline — WCAG 1.4.1 (Use of Color, A).
