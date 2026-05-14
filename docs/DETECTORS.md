@@ -158,6 +158,27 @@ Source: `src/viewportMeta.ts` · Rust: `viewport_meta.rs`
 | `viewport.no-device-width` | strict | Tag present but content lacks `width=device-width`. |
 | `viewport.zoom-disabled` | strict | `user-scalable=no/0` OR `maximum-scale ≤ 1`. WCAG 1.4.4 AA. |
 
+### `docTitle` — document title quality *(T76 — added 2026-05-14)*
+Source: `src/docTitle.ts` · Rust: `doc_title.rs`
+
+| Finding | Sev | Catches |
+|---|---|---|
+| `title.missing` | strict | No `<title>` in `<head>`. Screen readers announce "untitled document". |
+| `title.empty` | strict | `<title></title>` or whitespace-only. Same effect as missing. |
+| `title.generic` | warn | Word/IDE leftovers: "Document", "Untitled", "Untitled Document", "New Page", etc. (whole-string match, case-insensitive) |
+| `title.too-short` | warn | ≤ 2 characters after trimming. |
+| `title.too-long` | warn | ≥ 70 characters — search engines truncate. |
+
+### `htmlLang` — `<html lang>` attribute *(T76 — added 2026-05-14)*
+Source: `src/htmlLang.ts` · Rust: `html_lang.rs`
+
+| Finding | Sev | Catches |
+|---|---|---|
+| `lang.missing` | strict | `<html>` has no `lang` attribute. WCAG 3.1.1 Level A. |
+| `lang.empty` | strict | `<html lang="">` — same effect as missing. |
+| `lang.invalid` | warn | Value doesn't structurally match BCP-47 (underscores, whitespace, wrong-length primary, doubled hyphens). |
+| `lang.unknown-primary` | warn | Primary subtag isn't in the common ISO 639-1 set (catches typos like `engish`). |
+
 ---
 
 ## Axe rule de-duplication
@@ -254,11 +275,6 @@ first-class detector covers the multi-label collision case yet.
 Detectors queued for future T76 firings — each is high-leverage,
 zero-overlap with existing axes:
 
-- **`docTitle`** — empty / "Document" / "Untitled" `<title>`,
-  duplicate titles across pages, > 70 char title (SEO truncation),
-  ≤ 2 char title.
-- **`htmlLang`** — missing `<html lang>`, invalid lang code (per
-  ISO 639-1), `lang=""`.
 - **`skipLink`** — missing "skip to content" link as the first
   focusable element. WCAG 2.4.1.
 - **`metaDescription`** — missing or empty `<meta name="description">`,
@@ -273,6 +289,9 @@ zero-overlap with existing axes:
   flash (FOIT).
 - **`autocomplete`** — login/email/address forms missing
   `autocomplete` attribute hints.
+- **`crossPageTitleDup`** — same `<title>` on every page of a
+  multi-step journey. (Aggregates-layer detector — operates on
+  the run report, not per-page snapshot.)
 
 Pick from this list for the next T76 cycle. Prefer those with no
 existing axe-core coverage or where the project-specific aggregation

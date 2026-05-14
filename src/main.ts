@@ -35,6 +35,8 @@ import { capturePlaceholderTextSnapshot, detectPlaceholderTextIssues, type Place
 import { captureTapTargetsSnapshot, detectTapTargetIssues, type TapTargetFinding } from './tapTargets.js';
 import { captureFormLabelsSnapshot, detectFormLabelIssues, type FormLabelFinding } from './formLabels.js';
 import { captureViewportMetaSnapshot, detectViewportMetaIssues, type ViewportMetaFinding } from './viewportMeta.js';
+import { captureDocTitleSnapshot, detectDocTitleIssues, type DocTitleFinding } from './docTitle.js';
+import { captureHtmlLangSnapshot, detectHtmlLangIssues, type HtmlLangFinding } from './htmlLang.js';
 
 interface Budget {
   newConsoleErrors: number;
@@ -856,6 +858,65 @@ async function main(args: string[]): Promise<number> {
   };
 
   /**
+   * T76: document title quality detector. Per-page check covering
+   * missing/empty titles (strict), generic Word/IDE leftovers,
+   * and length boundaries (warn). Title is the strongest single
+   * signal for SEO and is what screen readers announce first.
+   */
+  const docTitleFindingsByStep: Array<{ stepLabel: string; pageUrl: string; findings: DocTitleFinding[] }> = [];
+  const checkDocTitle = async (afterLabel: string) => {
+    try {
+      const snap = await captureDocTitleSnapshot(page);
+      const findings = detectDocTitleIssues(snap);
+      docTitleFindingsByStep.push({ stepLabel: afterLabel, pageUrl: snap.pageUrl, findings });
+      for (const f of findings) {
+        log({
+          kind: 'doc-title',
+          text: `[${f.kind}] ${f.detail}`,
+          url: snap.pageUrl,
+          severity: f.severity,
+          ruleId: f.kind,
+          impact: f.severity === 'strict' ? 'serious' : 'minor',
+        });
+      }
+    } catch (e) {
+      log({
+        kind: 'pageerror',
+        text: `[docTitle] detector threw on step ${afterLabel}: ${(e as Error).message}`,
+      });
+    }
+  };
+
+  /**
+   * T76: <html lang> attribute detector. WCAG 3.1.1 (Language of
+   * Page, Level A). Strict on missing/empty; warn on structurally
+   * invalid BCP-47 or unknown-primary subtag (catches typos).
+   */
+  const htmlLangFindingsByStep: Array<{ stepLabel: string; pageUrl: string; findings: HtmlLangFinding[] }> = [];
+  const checkHtmlLang = async (afterLabel: string) => {
+    try {
+      const snap = await captureHtmlLangSnapshot(page);
+      const findings = detectHtmlLangIssues(snap);
+      htmlLangFindingsByStep.push({ stepLabel: afterLabel, pageUrl: snap.pageUrl, findings });
+      for (const f of findings) {
+        log({
+          kind: 'html-lang',
+          text: `[${f.kind}] ${f.detail}`,
+          url: snap.pageUrl,
+          severity: f.severity,
+          ruleId: f.kind,
+          impact: f.severity === 'strict' ? 'serious' : 'minor',
+        });
+      }
+    } catch (e) {
+      log({
+        kind: 'pageerror',
+        text: `[htmlLang] detector threw on step ${afterLabel}: ${(e as Error).message}`,
+      });
+    }
+  };
+
+  /**
    * T76: viewport meta tag detector. WCAG 1.4.10 (Reflow, AA) +
    * 1.4.4 (Resize text, AA). Catches missing tag, no
    * width=device-width, and zoom-disabling content (user-scalable=no
@@ -1275,6 +1336,8 @@ async function main(args: string[]): Promise<number> {
       await checkTapTargets(step.label || `goto-${i}`);
       await checkFormLabels(step.label || `goto-${i}`);
       await checkViewportMeta(step.label || `goto-${i}`);
+      await checkDocTitle(step.label || `goto-${i}`);
+      await checkHtmlLang(step.label || `goto-${i}`);
       await checkWebVitals(step.label || `goto-${i}`);
     }
     // Memory snapshot at end of each step so the report shows heap growth
@@ -1351,6 +1414,10 @@ async function main(args: string[]): Promise<number> {
       formLabelsFindingsStrict: events.filter(e => e.kind === 'form-labels' && e.severity === 'strict').length,
       viewportMetaFindings: events.filter(e => e.kind === 'viewport-meta').length,
       viewportMetaFindingsStrict: events.filter(e => e.kind === 'viewport-meta' && e.severity === 'strict').length,
+      docTitleFindings: events.filter(e => e.kind === 'doc-title').length,
+      docTitleFindingsStrict: events.filter(e => e.kind === 'doc-title' && e.severity === 'strict').length,
+      htmlLangFindings: events.filter(e => e.kind === 'html-lang').length,
+      htmlLangFindingsStrict: events.filter(e => e.kind === 'html-lang' && e.severity === 'strict').length,
       cspViolations: events.filter(e => e.kind === 'csp-violation').length,
       total: events.length,
       stepsOk: stepResults.filter(s => s.ok).length,
@@ -1416,6 +1483,18 @@ async function main(args: string[]): Promise<number> {
     writeFileSync(
       join(outDir, 'viewport-meta.json'),
       JSON.stringify(viewportMetaFindingsByStep, null, 2),
+    );
+  }
+  if (docTitleFindingsByStep.length > 0) {
+    writeFileSync(
+      join(outDir, 'doc-title.json'),
+      JSON.stringify(docTitleFindingsByStep, null, 2),
+    );
+  }
+  if (htmlLangFindingsByStep.length > 0) {
+    writeFileSync(
+      join(outDir, 'html-lang.json'),
+      JSON.stringify(htmlLangFindingsByStep, null, 2),
     );
   }
   writeFileSync(join(outDir, 'report.json'), JSON.stringify(report, null, 2));
@@ -1499,6 +1578,8 @@ async function main(args: string[]): Promise<number> {
   console.log(`  tap targets:       ${report.counts.tapTargetsFindings} (strict ${report.counts.tapTargetsFindingsStrict})`);
   console.log(`  form labels:       ${report.counts.formLabelsFindings} (strict ${report.counts.formLabelsFindingsStrict})`);
   console.log(`  viewport meta:     ${report.counts.viewportMetaFindings} (strict ${report.counts.viewportMetaFindingsStrict})`);
+  console.log(`  doc title:         ${report.counts.docTitleFindings} (strict ${report.counts.docTitleFindingsStrict})`);
+  console.log(`  html lang:         ${report.counts.htmlLangFindings} (strict ${report.counts.htmlLangFindingsStrict})`);
   console.log(`  web vitals:        ${report.counts.webVitalsFindings} (strict ${report.counts.webVitalsFindingsStrict})`);
   console.log(`  csp violations:    ${report.counts.cspViolations}`);
   console.log(`  steps ok/failed:   ${report.counts.stepsOk}/${report.counts.stepsFailed}`);
@@ -1535,6 +1616,12 @@ async function main(args: string[]): Promise<number> {
     const newViewportMetaStrict = diff.newViewportMetaFindings.filter(e => e.severity === 'strict').length;
     const newViewportMetaWarn = diff.newViewportMetaFindings.length - newViewportMetaStrict;
     console.log(`    NEW viewport meta:    ${diff.newViewportMetaFindings.length} (strict ${newViewportMetaStrict}, warn ${newViewportMetaWarn})`);
+    const newDocTitleStrict = diff.newDocTitleFindings.filter(e => e.severity === 'strict').length;
+    const newDocTitleWarn = diff.newDocTitleFindings.length - newDocTitleStrict;
+    console.log(`    NEW doc title:        ${diff.newDocTitleFindings.length} (strict ${newDocTitleStrict}, warn ${newDocTitleWarn})`);
+    const newHtmlLangStrict = diff.newHtmlLangFindings.filter(e => e.severity === 'strict').length;
+    const newHtmlLangWarn = diff.newHtmlLangFindings.length - newHtmlLangStrict;
+    console.log(`    NEW html lang:        ${diff.newHtmlLangFindings.length} (strict ${newHtmlLangStrict}, warn ${newHtmlLangWarn})`);
     console.log(`    NEW csp violations:   ${diff.newCspViolations.length}`);
     console.log(`    newly broken steps:   ${diff.newlyBrokenSteps.length}`);
     console.log(`    fixed steps:          ${diff.fixedSteps.length}`);

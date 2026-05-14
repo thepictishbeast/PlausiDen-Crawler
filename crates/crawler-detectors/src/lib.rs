@@ -40,8 +40,10 @@
 use serde::{Deserialize, Serialize};
 
 pub mod css_health;
+pub mod doc_title;
 pub mod form_labels;
 pub mod heading_order;
+pub mod html_lang;
 pub mod link_text;
 pub mod runtime_contrast;
 pub mod runtime_focus;

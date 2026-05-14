@@ -29,7 +29,9 @@ export interface CapturedEvent {
     | 'placeholder-text'
     | 'tap-targets'
     | 'form-labels'
-    | 'viewport-meta';
+    | 'viewport-meta'
+    | 'doc-title'
+    | 'html-lang';
   level?: string;
   text: string;
   url?: string;
@@ -70,6 +72,10 @@ export interface Report {
     formLabelsFindingsStrict: number;
     viewportMetaFindings: number;
     viewportMetaFindingsStrict: number;
+    docTitleFindings: number;
+    docTitleFindingsStrict: number;
+    htmlLangFindings: number;
+    htmlLangFindingsStrict: number;
     cspViolations: number;
     total: number;
     stepsOk: number;
@@ -187,6 +193,16 @@ export interface Diff {
    * missing tag / no width=device-width / zoom-disabled. T76.
    */
   newViewportMetaFindings: CapturedEvent[];
+  /**
+   * doc-title findings new in this run vs prior. Strict =
+   * missing/empty. Warn = generic / too-short / too-long. T76.
+   */
+  newDocTitleFindings: CapturedEvent[];
+  /**
+   * html-lang findings new in this run vs prior. Strict =
+   * missing/empty. Warn = invalid BCP-47 / unknown primary. T76.
+   */
+  newHtmlLangFindings: CapturedEvent[];
   newlyBrokenSteps: StepResult[];
   fixedSteps: StepResult[];
 }
@@ -218,6 +234,8 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     newTapTargetsFindings: [],
     newFormLabelsFindings: [],
     newViewportMetaFindings: [],
+    newDocTitleFindings: [],
+    newHtmlLangFindings: [],
     newlyBrokenSteps: [],
     fixedSteps: [],
   };
@@ -240,6 +258,8 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     out.newTapTargetsFindings = current.events.filter(e => e.kind === 'tap-targets');
     out.newFormLabelsFindings = current.events.filter(e => e.kind === 'form-labels');
     out.newViewportMetaFindings = current.events.filter(e => e.kind === 'viewport-meta');
+    out.newDocTitleFindings = current.events.filter(e => e.kind === 'doc-title');
+    out.newHtmlLangFindings = current.events.filter(e => e.kind === 'html-lang');
     return out;
   }
   const priorKeys = new Set(prior.events.map(key));
@@ -263,6 +283,8 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     else if (e.kind === 'tap-targets') out.newTapTargetsFindings.push(e);
     else if (e.kind === 'form-labels') out.newFormLabelsFindings.push(e);
     else if (e.kind === 'viewport-meta') out.newViewportMetaFindings.push(e);
+    else if (e.kind === 'doc-title') out.newDocTitleFindings.push(e);
+    else if (e.kind === 'html-lang') out.newHtmlLangFindings.push(e);
   }
   const priorStepLabels = new Map(
     prior.steps.map((s, i) => [s.step.label || `${s.step.kind}-${i}`, s])
@@ -390,6 +412,22 @@ export function renderPositiveSignal(report: Report, diff: Diff): string {
       total: report.events.filter((e) => e.kind === 'viewport-meta').length,
       news: diff.newViewportMetaFindings.length,
       strictNews: strict(diff.newViewportMetaFindings),
+    },
+    {
+      // T76 (Crawler): doc-title — missing/empty (strict),
+      // generic / too-short / too-long (warn).
+      name: 'docTitle',
+      total: report.events.filter((e) => e.kind === 'doc-title').length,
+      news: diff.newDocTitleFindings.length,
+      strictNews: strict(diff.newDocTitleFindings),
+    },
+    {
+      // T76 (Crawler): html-lang — WCAG 3.1.1 (Level A).
+      // missing/empty (strict), invalid BCP-47 / unknown primary (warn).
+      name: 'htmlLang',
+      total: report.events.filter((e) => e.kind === 'html-lang').length,
+      news: diff.newHtmlLangFindings.length,
+      strictNews: strict(diff.newHtmlLangFindings),
     },
   ];
   const lines: string[] = [];
