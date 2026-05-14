@@ -1033,6 +1033,91 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (sixty-ninth entry) — Per-IP rate limit on the report collector
+
+### What's new since last cycle (sixty-eighth entry)
+- **Cross-repo Loom fix** (commit a206775): per-IP sliding-
+  window rate limit on the cycle 63 report collector. Defence
+  against attacker-spammed JSONL log fills.
+- **5th E2E test**: `collector_rate_limits_after_100_reports_
+  per_min_same_ip` — fires 150 requests from 127.0.0.1,
+  asserts ALL return 204 but ~100 land in the log.
+- 5/5 E2E tests pass in 0.06s.
+- Score: aggregate **A 100/100 (16)** holds.
+
+### The threat model
+Without rate-limiting, the collector is a DoS vector:
+- POST 100k reports/sec at 64 KiB each = 6+ GiB/sec JSONL.
+- Disk fills in minutes; real reports drown in attacker noise.
+- Operator pages on disk-full — but the JSONL log file is
+  the only forensic record of what happened.
+
+### The defense
+Per-IP sliding window:
+- `Map<ip-string, VecDeque<unix-sec>>` protected by a Mutex.
+- 100 reports/min per IP. Above the cap, drop silently.
+- 1024 distinct IPs capped; LRU-ish eviction on overflow
+  defends against IP-spray attacks that try to OOM the map.
+- Stderr warning once per minute per IP — log doesn't
+  itself become a DoS vector.
+
+### The crucial design choice
+Rate-limited requests STILL return 204 (No Content). Why:
+- W3C Reporting-API spec requires 204 from collectors.
+- A 4xx would trigger browsers to retry-storm, AMPLIFYING
+  the attack instead of mitigating it.
+- The drop is invisible on the wire; only the operator sees
+  the rate-limit warning in stderr.
+
+The JSONL log shrinks under hostile load instead of growing
+unboundedly. Real reports continue to land (legitimate browsers
+send ≪100/min per page).
+
+### What this completes
+The supersociety observability stack:
+```
+detect (CSP / Trusted-Types / Document-Policy / NEL)
+  ↓
+enforce (browser policy / transport monitor)
+  ↓
+report (Reporting-API + NEL via 'default' group)
+  ↓
+COLLECT (cycle 63 + RATE-LIMITED cycle 69)
+  ↓
+audit (cycle 64 cross-consistency checks)
+  ↓
+review (operator reads violations.jsonl)
+```
+
+Cycle 63 built it. Cycle 64 audited the config. Cycle 65 added
+NEL. Cycle 67 deployed it on a new surface. Cycle 68 pinned the
+wire format with E2E tests. Cycle 69 closes the resilience hole:
+the collector is now hardened against hostile load.
+
+### Score arc (cycles 41-69)
+  C68: aggregate A 100/100 (16) — collector pinned by E2E.
+  C69: aggregate A 100/100 (16) — collector hardened against DoS.
+
+### Cumulative cross-repo dogfood scoreboard (cycles 38-69)
+  28 Loom commits + 3 Forge + 1 Sentinel-GUI + 8 crawler
+  enhancements + property test suite + E2E test suite.
+
+### Action items
+- [ ] Cycle 70: log rotation on violations.jsonl — even with
+      rate-limiting, the log grows monotonically. Add daily
+      rotation with N-day retention (e.g. 30 days).
+- [ ] Cycle 71: TUI viewer for violations.jsonl
+      (`loom report-tail` subcommand).
+- [ ] Cycle 72: extend dogfood to PlausiDen-Atrium.
+- [ ] Cycle 73: mutation testing — flip STRICT_PENALTY in
+      supersocietyScore and verify property 5 catches it.
+- [ ] Cycle 74: rate-limit at the connection level too (a
+      single attacker IP can still ring the doorbell 100k
+      times/sec — we just don't WRITE — but the read+ack
+      cost is still nonzero).
+
+---
+
 ## 2026-05-14 (sixty-eighth entry) — E2E integration test contractually pins the collector
 
 ### What's new since last cycle (sixty-seventh entry)
