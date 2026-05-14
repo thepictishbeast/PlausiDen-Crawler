@@ -1033,6 +1033,81 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (eighty-fourth entry) — Pre-push hook + revisions --all-slugs change feed
+
+### What's new since last cycle (eighty-third entry)
+- **Pre-push git hook** at `.githooks/pre-push`: blocks `git push`
+  if `npm run test:meta` (property + mutation + drift) fails.
+  Opt-in via `git config core.hooksPath .githooks`. README
+  links to the file + opt-in instructions.
+- **Cross-repo Loom fix** (commit f51bd9a): `loom revisions
+  list --all-slugs` system-wide change feed. Walks the
+  cms_root for ALL backup files, prints newest-first with a
+  slug column.
+- **2 new E2E tests** in revisions_e2e.rs (8 total, all pass).
+- Aggregate badge holds at **A 100/100 (16)**.
+
+### Pre-push hook design
+Standalone bash script committed at `.githooks/pre-push`. Two
+opt-in switches:
+1. Per-developer: `git config core.hooksPath .githooks`.
+2. Per-push: `git push --no-verify` (standard git skip).
+
+The hook:
+1. Detects PlausiDen-Crawler root (looks for package.json
+   with a `test:meta` script).
+2. Runs `npm run --silent test:meta`, captures output.
+3. On success: brief log, exit 0.
+4. On failure: print captured output, instructions for
+   bypass, exit 1.
+
+Verified locally — runs property + mutation + drift in
+sequence, all pass.
+
+### revisions --all-slugs design
+Walks `<cms-root>/*.bak.<unix>.<nanos>.json`, parses each
+filename to `(slug, ts)`, sorts by unix-secs newest-first.
+Adds a `slug` column to the table. Caps output with
+`--lines N` (default 50) and prints a "showing N of M"
+footer when truncated.
+
+Operator use case: "What changed across the whole site in
+the last hour" — without enumerating slugs manually. Pairs
+with cycle 70/72's report-tail/report-stats (same
+chronological-feed pattern, different data source).
+
+### The four-layer cycle 80+81 ladder is now complete
+```
+Layer 3 (cycle 80)  save → snapshot to cms/<slug>.bak.<ts>.json
+                    + LRU retention (default 10)
+Layer 4a (cycle 81) per-slug operator UX:
+                    list / show / diff / restore <slug> [N]
+Layer 4b (cycle 84) system-wide change feed:
+                    list --all-slugs [--lines N]    ← NEW
+```
+
+### Score arc (cycles 41-84)
+  C83: aggregate A 100/100 (16) — SUPERSOCIETY_DATALOSS.md.
+  C84: aggregate A 100/100 (16) — pre-push hook + all-slugs feed.
+
+### Cumulative cross-repo dogfood scoreboard (cycles 38-84)
+  37 Loom commits + 3 Forge + 1 Sentinel-GUI + **15 crawler
+  enhancements** + 4 E2E suites + property + mutation + drift
+  test suites + meta-runner + 2 design+ops manuals + pre-push
+  hook.
+
+### Action items
+- [ ] Cycle 85: drag-drop section reorder (HTML5 drag events,
+      Trusted-Types clean — createElement only).
+- [ ] Cycle 86: section-level "open in new tab" preview.
+- [ ] Cycle 87: JSON-aware diff replacement for cycle 81's
+      line-set diff.
+- [ ] Cycle 88: server-sent-events stream for
+      `loom report-tail --follow` so polling is not 1s but
+      push-driven.
+
+---
+
 ## 2026-05-14 (eighty-third entry) — SUPERSOCIETY_DATALOSS.md — companion doc to cycle 77
 
 ### What's new since last cycle (eighty-second entry)

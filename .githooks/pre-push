@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# T76 cycle 84: pre-push hook that runs the Tier-6 meta-test
+# stack (property + mutation + drift) before allowing a push.
+#
+# Opt in with one command:
+#   git config core.hooksPath .githooks
+#
+# This file is committed to the repo; per-developer opt-in is
+# via the `core.hooksPath` config. `.git/hooks/` (the default)
+# is NOT version-controlled, so we don't try to overwrite it.
+#
+# Skip mechanism: `git push --no-verify` bypasses (standard git
+# behaviour). Use sparingly — the meta-tests cover three bug
+# classes that cycles 73 + 78 surfaced as silent score
+# inflation in production code.
+#
+# Failure semantics:
+#   * exit 0 = let the push proceed
+#   * exit non-zero = abort the push, print the failure
+#
+# REGRESSION-GUARD: the script never modifies the repo or
+# uses network. It runs the same `npm run test:meta` an
+# operator would run by hand; the only added behaviour is
+# blocking push on failure.
+
+set -e
+
+# Detect that we're at the Crawler repo root (where
+# package.json lives with the test:meta script).
+if [ ! -f package.json ]; then
+  echo "[pre-push] not at PlausiDen-Crawler root; skipping meta-test gate" >&2
+  exit 0
+fi
+
+if ! grep -q '"test:meta"' package.json; then
+  echo "[pre-push] package.json has no test:meta script; skipping" >&2
+  exit 0
+fi
+
+echo "[pre-push] running Tier-6 meta-validation (property + mutation + drift)…"
+
+# Suppress the verbose per-test output unless something fails.
+# Capture stdout+stderr; on failure print everything.
+TMP=$(mktemp -t loom-pre-push.XXXXXX)
+trap 'rm -f "$TMP"' EXIT
+
+if npm run --silent test:meta >"$TMP" 2>&1; then
+  echo "[pre-push] meta-tests passed; allowing push"
+  exit 0
+else
+  echo
+  echo "[pre-push] meta-tests FAILED. Output:" >&2
+  cat "$TMP" >&2
+  echo
+  echo "[pre-push] aborting push. Fix the failures or override" >&2
+  echo "          with \`git push --no-verify\` (NOT RECOMMENDED)." >&2
+  exit 1
+fi

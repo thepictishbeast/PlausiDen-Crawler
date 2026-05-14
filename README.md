@@ -2,6 +2,10 @@
 
 ![Supersociety](./badges/supersociety.svg)
 
+> **Pre-push hook**: opt in with `git config core.hooksPath .githooks` —
+> blocks push if `npm run test:meta` (property + mutation + drift)
+> doesn't pass. See [`.githooks/pre-push`](./.githooks/pre-push).
+
 Headless-browser audit tool. Drives any URL through a scripted journey (click buttons, fill forms, navigate tabs) while capturing:
 
 - Every `console.log/warn/error` message.
