@@ -1033,6 +1033,92 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (eighty-first entry) — `loom revisions` — operator UX for the cycle 80 backups
+
+### What's new since last cycle (eightieth entry)
+- **Cross-repo Loom fix** (commit 4d17bca): `loom revisions
+  <action> <slug> [N]` subcommand family. 4 actions:
+  `list / show / diff / restore`. Operator UX for cycle 80's
+  auto-backup files.
+- **6 E2E tests** in `loom-cli/tests/revisions_e2e.rs` —
+  all pass in 0.00s.
+- Aggregate badge holds at **A 100/100 (16)**.
+
+### Sample usage
+```
+$ loom revisions list about
+  n  when                       bytes  filename
+  1  2026-05-14 16:58:24Z         221  about.bak.1778777904.091001370.json
+  2  2026-05-14 16:58:24Z         221  about.bak.1778777904.086218577.json
+  …
+ 10  2026-05-14 16:58:24Z         219  about.bak.1778777904.046006121.json
+
+$ loom revisions diff about 1
+--- about.bak.1778777904.091001370.json (revision 1)
++++ about.json (active)
+-  "description": "Test save 13"
+-  "title": "Cycle 80 save 13"
++  "description": "Test save 14"
++  "title": "Cycle 80 save 14"
+
+$ loom revisions restore about 5
+loom revisions restore: 'about' restored from revision 5 (219 bytes)
+(the prior active content was snapshotted as a new backup;
+ run `loom revisions list about` to confirm)
+```
+
+### Implementation discipline (same as cycles 70/72)
+- Hand-rolled unified diff. Line-set membership; no
+  `diff` binary required. Honest about its bluntness —
+  doesn't claim minimal-edit-script semantics.
+- Shared date formatter (`report_log_format_unix`) with the
+  cycle 70/72/76 report subcommands. Same look everywhere.
+- Atomic restore: write to tmp file in same dir + rename.
+  Mirrors cycle 60's `WriteCapability::write_atomic`.
+- Restore SNAPSHOTS the active file first — the cycle 80
+  backup ladder has no terminal step. Botched restore is
+  itself reversible.
+- 1-based indexing (matches operator mental model:
+  "revision 1" = most-recent backup).
+
+### The cycle 63+80 data-loss-prevention ladder is now usable
+```
+Layer A: report collector       (cycle 63)        write
+Layer B: rate-limit              (cycle 69)        defend
+Layer C: rotation                (cycle 71)        bound
+Layer D: report-tail viewer      (cycle 70)        review live
+Layer E: report-stats summary    (cycle 72)        review history
+
+Layer F: CMS auto-backup         (cycle 80)        write
+Layer G: revisions list/show/diff (cycle 81, NEW)  review history
+Layer H: revisions restore        (cycle 81, NEW)  recover
+```
+
+Two parallel pipelines (security telemetry + content data),
+same architectural pattern, fully E2E-tested at every layer.
+
+### Score arc (cycles 41-81)
+  C80: aggregate A 100/100 (16) — file-level backup shipped.
+  C81: aggregate A 100/100 (16) — operator UX for backups.
+
+### Cumulative cross-repo dogfood scoreboard (cycles 38-81)
+  35 Loom commits + 3 Forge + 1 Sentinel-GUI + 13 crawler
+  enhancements + **4 E2E suites** (collector/tail/stats/
+  revisions) + property + mutation + drift test suites +
+  meta-runner + design+ops manual.
+
+### Action items
+- [ ] Cycle 82: localStorage draft persistence — save form
+      state every 5s; restore on page load if a draft exists.
+- [ ] Cycle 83: drag-drop section reorder.
+- [ ] Cycle 84: section-level "open in new tab" preview.
+- [ ] Cycle 85: pre-push git hook for `npm run test:meta`
+      (still pending from cycle 78).
+- [ ] Cycle 86: extend `loom revisions` with `--all-slugs`
+      flag to show a system-wide change feed.
+
+---
+
 ## 2026-05-14 (eightieth entry) — CMS revision history — auto-backup on every save
 
 ### What's new since last cycle (seventy-ninth entry)
