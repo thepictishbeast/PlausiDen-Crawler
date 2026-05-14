@@ -72,6 +72,7 @@ import {
   renderScoreRegression,
 } from './scoreHistory.js';
 import { renderHtmlReport } from './htmlReport.js';
+import { readWhitelist, applyWhitelist, renderWhitelistSummary } from './scoreWhitelist.js';
 
 interface Budget {
   newConsoleErrors: number;
@@ -2480,7 +2481,34 @@ async function main(args: string[]): Promise<number> {
   // across 11 categories, dumped both as JSON for machine
   // consumers and rendered into the console summary for the
   // operator's quick scan.
-  const supersocietyScore = calculateSupersocietyScore(report.events);
+  //
+  // T76 cycle 35: filter the event stream through the
+  // journey's whitelist (accepted risks) BEFORE computing the
+  // score. Whitelisted findings remain in report.events for
+  // full transparency; only the score calculation skips them.
+  // The whitelist summary is dumped + rendered alongside the
+  // score so operators see what was suppressed.
+  const journeyArg = process.argv.find(
+    (a, i, all) => i > 0 && all[i - 1] === '--journey',
+  ) ?? 'journeys/plausiden-smoke.json';
+  const whitelist = readWhitelist(journeyArg, (msg) =>
+    log({ kind: 'console', text: msg, level: 'warning' }),
+  );
+  const whitelistResult = applyWhitelist(report.events, whitelist);
+  writeFileSync(
+    join(outDir, 'whitelist.json'),
+    JSON.stringify(
+      {
+        kept: whitelistResult.kept.length,
+        whitelisted: whitelistResult.whitelisted,
+        unused: whitelistResult.unused,
+        expired: whitelistResult.expired,
+      },
+      null,
+      2,
+    ),
+  );
+  const supersocietyScore = calculateSupersocietyScore(whitelistResult.kept);
   writeFileSync(
     join(outDir, 'supersociety-score.json'),
     JSON.stringify(supersocietyScore, null, 2),
@@ -2623,6 +2651,7 @@ async function main(args: string[]): Promise<number> {
   console.log(`  csp violations:    ${report.counts.cspViolations}`);
   console.log(`  steps ok/failed:   ${report.counts.stepsOk}/${report.counts.stepsFailed}`);
   console.log(renderSupersocietyScore(supersocietyScore));
+  console.log(renderWhitelistSummary(whitelistResult));
   console.log(renderScoreRegression(scoreRegression));
   if (prior) {
     console.log(`  diff vs prior run (${prior.journey}):`);

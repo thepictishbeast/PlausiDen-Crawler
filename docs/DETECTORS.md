@@ -28,6 +28,25 @@ Every audit also writes a single self-contained HTML file at `runs/<run-dir>/sup
 
 **Supersociety frontend stack**: zero external CSS, zero external JS, zero external images — every byte is emitted by `src/htmlReport.ts`. No CDN, no npm chart library, no React. Works offline, works in any browser, works in 2030. All input strings are HTML-escaped so the report can be rendered on untrusted journey names without XSS.
 
+### Score whitelist (cycle 35)
+
+The operator can declare accepted-risk findings in a per-journey whitelist file `journeys/<journey-base>.whitelist.json`. Whitelisted findings are FILTERED OUT of the score calculation but remain in `report.events` for full transparency. File shape (array of entries):
+
+```json
+[
+  {
+    "kind": "tap-targets",
+    "ruleId": "tap.below-recommended",
+    "reason": "SkillShots PoC layout has 7 baseline-frozen small targets; redesign queued.",
+    "until": "2026-12-31"
+  }
+]
+```
+
+Match semantics: `kind` must match (exact, case-sensitive). `ruleId` if present must match; if absent, all ruleIds of that kind match (wildcard). `until` if present must be in the future (ISO 8601 date or datetime); expired entries DON'T match and surface in an "EXPIRED" section for renewal. The console summary additionally surfaces entries that didn't match any finding so the operator knows to remove stale entries.
+
+The crawler writes `whitelist.json` alongside the report (kept count, suppressed list, expired list, unused list) for the audit trail. The HTML report's "Accepted risks" section (queued) will surface this visually.
+
 
 
 

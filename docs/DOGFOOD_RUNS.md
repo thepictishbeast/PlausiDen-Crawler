@@ -1033,6 +1033,130 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (thirty-fifth entry) — whitelist for baseline-frozen findings → SkillShots A=100
+
+### What's new since last cycle (thirty-fourth entry)
+- 1 new MODULE: **`scoreWhitelist`** — accepted-risk filter
+  for the Supersociety Score. Three cycles in arrears
+  (queued since cycle 32) — landed.
+- New file format: `journeys/<journey-base>.whitelist.json`.
+  Array of `{kind, ruleId?, reason?, until?}` entries.
+- New per-audit dump: `runs/<run-dir>/whitelist.json` —
+  what was suppressed, what was unused, what's expired.
+- New console summary section: `=== Whitelist (accepted
+  risks) ===` between the score table and the regression
+  block.
+- 33 unit tests in `scoreWhitelist.test.ts`, all passing.
+- **SkillShots score went 97 → 100** after wiring up the
+  whitelist for the 7 baseline-frozen tap-targets findings.
+  Cycle 33's regression detector correctly emitted "Score
+  improved: 97→100 (+3). No category regressions."
+- Active named-detector axis count UNCHANGED at 43. Fourth
+  consecutive UX-meta cycle (32 score + 33 trend + 34 HTML
+  + 35 whitelist).
+
+### Why whitelist now
+The cycle-32 score was overly pessimistic in a real-world way:
+SkillShots' 7 baseline-frozen tap-targets findings dragged the
+accessibility category to D=65, even though the operator had
+already accepted-the-risk on them. The score effectively said
+"you can never get above 97 until you redesign the layout",
+which is the WRONG thing for a continuous-monitoring tool to
+say. The whitelist lets the operator suppress
+known-and-accepted findings without hiding them from the
+audit trail.
+
+### Design choices
+
+**File location**: sibling to the journey, e.g.
+`journeys/skillshots-poc.whitelist.json`. Discoverable by
+co-location; one whitelist per journey (different journeys
+likely have different accepted risks).
+
+**Filtering, not hiding**: whitelisted findings are FILTERED
+OUT of the score calculation but REMAIN in `report.events`.
+Operators inspecting the raw JSON see everything; only the
+score and HTML dashboard treat them as accepted.
+
+**Wildcard ruleId**: omitting `ruleId` matches all of that
+kind. Useful for "suppress all info-leak warns on the legacy
+admin panel" while keeping the detector active for forward
+visibility.
+
+**Time-bound entries via `until`**: ISO 8601 date or
+datetime. Expired entries don't match — the score deduction
+RESUMES automatically. Expired entries surface in the
+console (and HTML, when wired) so the operator knows to
+renew or remove them. Forces the accepted-risk decision to
+have a review cadence.
+
+**Tolerant reader**: missing file → empty list; malformed
+JSON → empty list with logged warning; non-array → empty
+with warning; entries missing `kind` → skipped with warning.
+
+**Unused-entry surfacing**: entries that didn't match
+anything in the current run are flagged in the console
+summary. Helps the operator remove stale whitelist entries
+that reference findings that no longer exist.
+
+### Real-world result on SkillShots
+Created `journeys/skillshots-poc.whitelist.json` with one
+entry:
+
+```json
+[
+  {
+    "kind": "tap-targets",
+    "ruleId": "tap.below-recommended",
+    "reason": "SkillShots PoC layout has 7 baseline-frozen small targets per the project's pre-cycle-32 freeze policy. Tracked but accepted-risk until the layout redesign queued for the broader SkillShots concept review.",
+    "until": "2026-12-31"
+  }
+]
+```
+
+SkillShots score went from **97 (Grade A, 7 warns)** to
+**100 (Grade A, supersociety baseline met)**. The 7 findings
+remain in `report.events` for the audit trail.
+
+The cycle-33 regression detector emitted "Score improved:
+97→100 (+3). No category regressions." which is the correct
+characterisation — the operator made a configuration change
+(adding the whitelist), not a code change that affected the
+underlying findings.
+
+### Worth-the-paranoia detail
+The whitelist file is operator-authored text that can be
+checked into git and reviewed. The `reason` field forces the
+operator to articulate WHY they're accepting the risk. The
+`until` field forces a review cadence. The `unused` surfacing
+prevents the file from rotting silently. Three small forcing
+functions that turn "we ignored this" into "we explicitly
+accepted this for a reason and revisit it on a schedule".
+
+### Verified
+- HTTP gate: 47/47 routes pass.
+- HTTPS gate: 60/60 routes pass.
+- SkillShots audit: Grade A 100/100, regression detector
+  emitted "Score improved 97→100".
+- 33 scoreWhitelist unit tests pass.
+
+### Action items
+- [ ] HTML report "Accepted risks" section: list whitelisted
+      findings + their reasons in a dedicated card so
+      reviewers can see what's been suppressed.
+- [ ] CI integration sample `.github/workflows/audit.yml`
+      that posts the HTML report as a PR artefact.
+- [ ] Email/Slack notifier on grade drop (still queued
+      from cycle 32, four cycles in arrears).
+- [ ] Trim policy for old score-history.jsonl entries
+      (still queued from cycle 33).
+- [ ] Optional dark/light toggle in HTML report (still
+      queued from cycle 34).
+- [ ] Multi-journey aggregate dashboard (still queued from
+      cycle 34).
+
+---
+
 ## 2026-05-14 (thirty-fourth entry) — single-file HTML dashboard
 
 ### What's new since last cycle (thirty-third entry)

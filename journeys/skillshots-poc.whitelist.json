@@ -1,0 +1,8 @@
+[
+  {
+    "kind": "tap-targets",
+    "ruleId": "tap.below-recommended",
+    "reason": "SkillShots PoC layout has 7 baseline-frozen small targets per the project's pre-cycle-32 freeze policy. Tracked but accepted-risk until the layout redesign queued for the broader SkillShots concept review (see project_skillshots_concept_concerns memory). The detector still surfaces these in report.events for the audit trail.",
+    "until": "2026-12-31"
+  }
+]
