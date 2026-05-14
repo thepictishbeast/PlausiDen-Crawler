@@ -129,6 +129,12 @@ const KIND_TO_CATEGORY: Record<string, string> = {
   // Information disclosure.
   'info-leak': 'infoDisclosure',
   'referrer-policy': 'infoDisclosure',
+  // T76 cycle 92: Speculation Rules. Cross-origin prerender
+  // without anonymous-client-ip-when-cross-origin leaks the
+  // user's IP + browser fingerprint to a third-party origin
+  // BEFORE any user interaction — same threat-model bucket as
+  // info-leak headers + over-permissive referrer policy.
+  'speculation-rules': 'infoDisclosure',
 
   // Observability — reporting + telemetry.
   'reporting-endpoints': 'observability',

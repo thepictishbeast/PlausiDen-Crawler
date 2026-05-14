@@ -64,6 +64,7 @@ import { buildCoopSnapshot, detectCoopIssues, type CoopFinding } from './coop.js
 import { buildCoepSnapshot, detectCoepIssues, type CoepFinding } from './coep.js';
 import { makeResponseHeaderCheck, type PerStepRecord } from './responseHeaderDetector.js';
 import { detectSriIssues, SRI_DOM_CAPTURE_JS, type SriFinding, type SriSnapshot } from './sri.js';
+import { detectSpeculationRulesIssues, SPECULATION_RULES_DOM_CAPTURE_JS, type SpeculationRulesFinding, type SpeculationRulesSnapshot } from './speculationRules.js';
 import { buildInfoLeakSnapshot, detectInfoLeakIssues, type InfoLeakFinding } from './infoLeakHeaders.js';
 import { buildCorpSnapshot, detectCorpIssues, type CorpFinding } from './corp.js';
 import { buildCacheControlSnapshot, detectCacheControlIssues, type CacheControlFinding } from './cacheControl.js';
@@ -1214,6 +1215,38 @@ async function main(args: string[]): Promise<number> {
   };
 
   /**
+   * T76 cycle 92: Speculation Rules API audit. PRIVACY-flavoured;
+   * <script type="speculationrules"> blocks that prerender cross-
+   * origin URLs without anonymous-client-ip-when-cross-origin
+   * leak the user's IP + fingerprint to third-party servers
+   * BEFORE the user opts in to navigation. Per-page DOM walk via
+   * page.evaluate, same shape as the SRI detector.
+   */
+  const speculationRulesFindingsByStep: Array<{ stepLabel: string; pageUrl: string; findings: SpeculationRulesFinding[] }> = [];
+  const checkSpeculationRules = async (afterLabel: string) => {
+    try {
+      const snap = (await page.evaluate(SPECULATION_RULES_DOM_CAPTURE_JS)) as SpeculationRulesSnapshot;
+      const findings = detectSpeculationRulesIssues(snap);
+      speculationRulesFindingsByStep.push({ stepLabel: afterLabel, pageUrl: snap.pageUrl, findings });
+      for (const f of findings) {
+        log({
+          kind: 'speculation-rules',
+          text: `[${f.kind}] ${f.detail}`,
+          url: snap.pageUrl,
+          severity: f.severity,
+          ruleId: f.kind,
+          impact: f.severity === 'strict' ? 'serious' : 'minor',
+        });
+      }
+    } catch (e) {
+      log({
+        kind: 'pageerror',
+        text: `[speculation-rules] detector threw on step ${afterLabel}: ${(e as Error).message}`,
+      });
+    }
+  };
+
+  /**
    * T76: link-underline detector. WCAG 1.4.1 (Use of Color, A).
    * Flags inline links inside running text that distinguish
    * themselves from surrounding text ONLY by colour — fails
@@ -2213,6 +2246,7 @@ async function main(args: string[]): Promise<number> {
       await checkCoop(step.label || `goto-${i}`);
       await checkCoep(step.label || `goto-${i}`);
       await checkSri(step.label || `goto-${i}`);
+      await checkSpeculationRules(step.label || `goto-${i}`);
       await checkInlineScript(step.label || `goto-${i}`);
       await checkTrustedTypes(step.label || `goto-${i}`);
       await checkInfoLeak(step.label || `goto-${i}`);

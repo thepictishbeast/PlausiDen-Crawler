@@ -70,7 +70,11 @@ export interface CapturedEvent {
     | 'blank-main'
     | 'error-boundary-visible'
     | 'stuck-loading'
-    | 'ui-error-text';
+    | 'ui-error-text'
+    // T76 cycle 92: Speculation Rules API audit. Privacy + perf
+    // (cross-origin prerender leaks IP + fingerprint; eager
+    // eagerness burns mobile data).
+    | 'speculation-rules';
   level?: string;
   text: string;
   url?: string;
