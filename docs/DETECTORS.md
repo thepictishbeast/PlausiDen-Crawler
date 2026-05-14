@@ -149,6 +149,21 @@ Source: `src/formLabels.ts` · Rust: `form_labels.rs`
 | `form.placeholder-only-label` | warn | Placeholder is the ONLY label. WCAG 3.3.2. |
 | `form.required-no-indicator` | warn | `required` / `aria-required="true"` set but no `*` or "required" in the visible label. |
 
+### `crossPageTitle` — duplicate page titles across a journey *(T76 aggregates-layer — added 2026-05-14)*
+Source: `src/crossPageTitle.ts`
+
+| Finding | Sev | Catches |
+|---|---|---|
+| `title.cross-page-dup` | warn | Two or more pages in the journey share the same trimmed `<title>`. SEO suffers (Google filters duplicate-title results) and users can't tell open tabs / bookmarks / history entries apart. |
+
+**First aggregates-layer detector.** Unlike per-page detectors (which run on each goto with a single page's snapshot), this one accumulates per-page titles during the journey and emits findings ONCE at the end. The pattern:
+
+1. `newCrossPageTitleAccumulator()` — empty accumulator, created in main.ts before the goto loop.
+2. `recordPageTitle(acc, url, title)` — called per-goto, piggybacked off the docTitle capture so no extra `page.evaluate` cost.
+3. `detectCrossPageTitleDuplicates(acc)` — called once after the loop completes. Returns findings.
+
+No Rust mirror yet — the aggregates layer is conceptually different from the per-page-snapshot shape the `crawler-detectors` Rust crate is built around. A future `crawler-aggregates` crate would be the right home if Rust parity becomes load-bearing for the chromiumoxide port (T75).
+
 ### `linkUnderline` — link distinguishability *(T76 — added 2026-05-14)*
 Source: `src/linkUnderline.ts` · Rust: `link_underline.rs`
 
@@ -419,9 +434,6 @@ zero-overlap with existing axes:
 
 - **`fontLoading`** — `font-display: swap` missing → invisible-text
   flash (FOIT).
-- **`crossPageTitleDup`** — same `<title>` on every page of a
-  multi-step journey. (Aggregates-layer detector — operates on
-  the run report, not per-page snapshot.)
 - **`hstsHeader`** — `Strict-Transport-Security` header missing /
   `max-age` too short (< 6 months). Server-response header check;
   needs response-header capture path. SECURITY.

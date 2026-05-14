@@ -726,14 +726,94 @@ when adding similar ancestor-walking detectors in future.
 
 ### Action items
 
-- [ ] Add a `_dbg-link-in-chrome` route to t76-fixtures (e.g.
-      `<aside><ul><li><a>` with color-only style) and assert
-      it produces NO linkUnderline finding. This locks the
-      fix.
+- [x] **DONE 2026-05-14 (eleventh cycle)**: Add a chrome-link
+      regression-guard route. Now `/link-in-chrome/` is in the
+      fixture with `expectedFindingsByLabel: []`.
 - [ ] HTTPS fixture variant for mixedContent live integration.
 - [ ] login-flow fixture (still queued).
+- [x] **DONE 2026-05-14 (twelfth cycle)**: `crossPageTitleDup`
+      (now named `crossPageTitle`) — see twelfth entry below.
+      First aggregates-layer detector.
 - [ ] Remaining roadmap: `fontLoading`, `hstsHeader`,
-      `xFrameOptions`, `crossPageTitleDup`.
+      `xFrameOptions`.
+
+---
+
+## 2026-05-14 (twelfth entry) — first aggregates-layer detector
+
+### What's new since last cycle (eleventh entry)
+- `crossPageTitle` detector landed (warn-only).
+- Total active detector axes: 22 (was 21).
+- main.ts gained a new "aggregates pass" after the goto loop.
+
+### Design
+
+Unlike per-page detectors (which produce findings from one
+page's snapshot), aggregates detectors accumulate cross-page
+state during the journey and emit a single set of findings
+at the end. The pattern:
+
+```ts
+const acc = newCrossPageTitleAccumulator();
+for (step in journey.steps) {
+  if (step.kind === 'goto') {
+    await checkDocTitle(...);
+    // piggyback off docTitle capture — no extra page.evaluate cost
+    recordPageTitle(acc, pageUrl, title);
+  }
+}
+// After loop completes:
+for (const f of detectCrossPageTitleDuplicates(acc)) {
+  log({ kind: 'cross-page-title', ... });
+}
+```
+
+The finding kind is `cross-page-title` (per-event tag) and
+`title.cross-page-dup` (rule id). One finding per duplicate
+group — multiple groups produce multiple findings.
+
+### What it catches
+
+Two or more pages in a single journey sharing the same trimmed
+`<title>`. Real defect: SEO suffers (Google filters duplicate-
+title results), users can't distinguish open tabs / bookmarks /
+history entries / search snippets.
+
+### SkillShots dogfood
+
+**0 findings** on the SkillShots journey — every page has a
+unique title. The site's typed CMS does this correctly:
+each `cms/*.json` has its own `title` field.
+
+### Fixture verification
+
+The t76-detector-fixtures journey uses `<title>T76 Fixture</title>`
+as the default for most routes (one-signal-per-route doctrine —
+each route isolates ONE detector). Re-audit of the fixture
+journey produced **1 cross-page-title warn** flagging 28 distinct
+URLs sharing 'T76 Fixture'. The detector is alive end-to-end.
+
+### Limitations / known gaps
+
+- No Rust mirror. The aggregates layer is shaped differently
+  from the per-page-snapshot pattern in `crawler-detectors`.
+  Future `crawler-aggregates` crate when the chromiumoxide
+  port (T75) needs Rust parity.
+- The `check-t76-detectors.sh` script matches per-URL events,
+  which can't catch cross-page findings (no URL field). The
+  script's contract is still useful — it's specifically the
+  per-page detector liveness gate. A future
+  `check-t76-aggregates.sh` would assert the aggregates layer.
+
+### Action items
+
+- [ ] Build at least one more aggregates detector to validate
+      the pattern (candidates: `crossPageMetaDescriptionDup`,
+      `crossPageH1Dup`).
+- [ ] HTTPS fixture variant for mixedContent live integration.
+- [ ] login-flow fixture.
+- [ ] Remaining roadmap: `fontLoading`, `hstsHeader`,
+      `xFrameOptions`.
 
 ---
 

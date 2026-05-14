@@ -38,7 +38,8 @@ export interface CapturedEvent {
     | 'meta-description'
     | 'favicon'
     | 'mixed-content'
-    | 'link-underline';
+    | 'link-underline'
+    | 'cross-page-title';
   level?: string;
   text: string;
   url?: string;
@@ -97,6 +98,8 @@ export interface Report {
     mixedContentFindingsStrict: number;
     linkUnderlineFindings: number;
     linkUnderlineFindingsStrict: number;
+    crossPageTitleFindings: number;
+    crossPageTitleFindingsStrict: number;
     cspViolations: number;
     total: number;
     stepsOk: number;
@@ -264,6 +267,11 @@ export interface Diff {
    * WCAG 1.4.1 Level A. T76.
    */
   newLinkUnderlineFindings: CapturedEvent[];
+  /**
+   * cross-page-title aggregates findings new in this run vs
+   * prior. Warn: two or more pages share the same <title>. T76.
+   */
+  newCrossPageTitleFindings: CapturedEvent[];
   newlyBrokenSteps: StepResult[];
   fixedSteps: StepResult[];
 }
@@ -304,6 +312,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     newFaviconFindings: [],
     newMixedContentFindings: [],
     newLinkUnderlineFindings: [],
+    newCrossPageTitleFindings: [],
     newlyBrokenSteps: [],
     fixedSteps: [],
   };
@@ -335,6 +344,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     out.newFaviconFindings = current.events.filter(e => e.kind === 'favicon');
     out.newMixedContentFindings = current.events.filter(e => e.kind === 'mixed-content');
     out.newLinkUnderlineFindings = current.events.filter(e => e.kind === 'link-underline');
+    out.newCrossPageTitleFindings = current.events.filter(e => e.kind === 'cross-page-title');
     return out;
   }
   const priorKeys = new Set(prior.events.map(key));
@@ -367,6 +377,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     else if (e.kind === 'favicon') out.newFaviconFindings.push(e);
     else if (e.kind === 'mixed-content') out.newMixedContentFindings.push(e);
     else if (e.kind === 'link-underline') out.newLinkUnderlineFindings.push(e);
+    else if (e.kind === 'cross-page-title') out.newCrossPageTitleFindings.push(e);
   }
   const priorStepLabels = new Map(
     prior.steps.map((s, i) => [s.step.label || `${s.step.kind}-${i}`, s])
@@ -567,6 +578,15 @@ export function renderPositiveSignal(report: Report, diff: Diff): string {
       total: report.events.filter((e) => e.kind === 'link-underline').length,
       news: diff.newLinkUnderlineFindings.length,
       strictNews: strict(diff.newLinkUnderlineFindings),
+    },
+    {
+      // T76 (Crawler): cross-page-title — first aggregates-layer
+      // detector. Pages sharing a <title> in a journey is a real
+      // SEO + UX defect (warn).
+      name: 'crossPageTitle',
+      total: report.events.filter((e) => e.kind === 'cross-page-title').length,
+      news: diff.newCrossPageTitleFindings.length,
+      strictNews: strict(diff.newCrossPageTitleFindings),
     },
   ];
   const lines: string[] = [];
