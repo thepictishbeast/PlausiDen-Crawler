@@ -1,5 +1,5 @@
 {
-  "composite": 99,
+  "composite": 100,
   "grade": "A",
   "journeyCount": 15,
   "perJourney": [
@@ -15,7 +15,7 @@
     },
     {
       "name": "loom-state-matrix",
-      "composite": 99,
+      "composite": 100,
       "grade": "A"
     },
     {
