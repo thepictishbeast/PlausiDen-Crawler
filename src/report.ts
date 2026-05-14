@@ -39,6 +39,7 @@ export interface CapturedEvent {
     | 'favicon'
     | 'mixed-content'
     | 'hsts'
+    | 'x-frame-options'
     | 'link-underline'
     | 'cross-page-title'
     | 'cross-page-meta-description';
@@ -100,6 +101,8 @@ export interface Report {
     mixedContentFindingsStrict: number;
     hstsFindings: number;
     hstsFindingsStrict: number;
+    xFrameOptionsFindings: number;
+    xFrameOptionsFindingsStrict: number;
     linkUnderlineFindings: number;
     linkUnderlineFindingsStrict: number;
     crossPageTitleFindings: number;
@@ -275,6 +278,12 @@ export interface Diff {
    */
   newHstsFindings: CapturedEvent[];
   /**
+   * x-frame-options response-header findings new in this run vs
+   * prior. Strict = no XFO + no CSP frame-ancestors. Warn =
+   * frame-ancestors '*' or invalid XFO value. T76.
+   */
+  newXFrameOptionsFindings: CapturedEvent[];
+  /**
    * link-underline findings new in this run vs prior. Warn-only:
    * inline link inside running text distinguished only by colour.
    * WCAG 1.4.1 Level A. T76.
@@ -331,6 +340,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     newFaviconFindings: [],
     newMixedContentFindings: [],
     newHstsFindings: [],
+    newXFrameOptionsFindings: [],
     newLinkUnderlineFindings: [],
     newCrossPageTitleFindings: [],
     newCrossPageMetaDescriptionFindings: [],
@@ -365,6 +375,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     out.newFaviconFindings = current.events.filter(e => e.kind === 'favicon');
     out.newMixedContentFindings = current.events.filter(e => e.kind === 'mixed-content');
     out.newHstsFindings = current.events.filter(e => e.kind === 'hsts');
+    out.newXFrameOptionsFindings = current.events.filter(e => e.kind === 'x-frame-options');
     out.newLinkUnderlineFindings = current.events.filter(e => e.kind === 'link-underline');
     out.newCrossPageTitleFindings = current.events.filter(e => e.kind === 'cross-page-title');
     out.newCrossPageMetaDescriptionFindings = current.events.filter(e => e.kind === 'cross-page-meta-description');
@@ -400,6 +411,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     else if (e.kind === 'favicon') out.newFaviconFindings.push(e);
     else if (e.kind === 'mixed-content') out.newMixedContentFindings.push(e);
     else if (e.kind === 'hsts') out.newHstsFindings.push(e);
+    else if (e.kind === 'x-frame-options') out.newXFrameOptionsFindings.push(e);
     else if (e.kind === 'link-underline') out.newLinkUnderlineFindings.push(e);
     else if (e.kind === 'cross-page-title') out.newCrossPageTitleFindings.push(e);
     else if (e.kind === 'cross-page-meta-description') out.newCrossPageMetaDescriptionFindings.push(e);
@@ -604,6 +616,16 @@ export function renderPositiveSignal(report: Report, diff: Diff): string {
       total: report.events.filter((e) => e.kind === 'hsts').length,
       news: diff.newHstsFindings.length,
       strictNews: strict(diff.newHstsFindings),
+    },
+    {
+      // T76 (Crawler): x-frame-options — clickjacking defence.
+      // Strict on no XFO + no CSP frame-ancestors. Warn on
+      // explicit allowall or invalid XFO value. Localhost +
+      // http exempt.
+      name: 'xFrameOptions',
+      total: report.events.filter((e) => e.kind === 'x-frame-options').length,
+      news: diff.newXFrameOptionsFindings.length,
+      strictNews: strict(diff.newXFrameOptionsFindings),
     },
     {
       // T76 (Crawler): link-underline — WCAG 1.4.1 (Use of Color, A).

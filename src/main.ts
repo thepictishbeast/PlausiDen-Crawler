@@ -47,6 +47,7 @@ import { captureLinkUnderlineSnapshot, detectLinkUnderlineIssues, type LinkUnder
 import { newCrossPageTitleAccumulator, recordPageTitle, detectCrossPageTitleDuplicates } from './crossPageTitle.js';
 import { newCrossPageMetaDescriptionAccumulator, recordPageMetaDescription, detectCrossPageMetaDescriptionDuplicates } from './crossPageMetaDescription.js';
 import { buildHstsSnapshot, detectHstsIssues, type HstsFinding } from './hstsHeader.js';
+import { buildXFrameOptionsSnapshot, detectXFrameOptionsIssues, type XFrameOptionsFinding } from './xFrameOptions.js';
 
 interface Budget {
   newConsoleErrors: number;
@@ -980,6 +981,38 @@ async function main(args: string[]): Promise<number> {
   };
 
   /**
+   * T76: clickjacking-defence detector. Second consumer of
+   * `topLevelResponseHeaders`. Reads X-Frame-Options +
+   * Content-Security-Policy frame-ancestors and reports
+   * pages with neither.
+   */
+  const xFrameOptionsFindingsByStep: Array<{ stepLabel: string; pageUrl: string; findings: XFrameOptionsFinding[] }> = [];
+  const checkXFrameOptions = async (afterLabel: string) => {
+    try {
+      const pageUrl = page.url();
+      const headers = topLevelResponseHeaders.get(pageUrl);
+      const snap = buildXFrameOptionsSnapshot(pageUrl, headers);
+      const findings = detectXFrameOptionsIssues(snap);
+      xFrameOptionsFindingsByStep.push({ stepLabel: afterLabel, pageUrl, findings });
+      for (const f of findings) {
+        log({
+          kind: 'x-frame-options',
+          text: `[${f.kind}] ${f.detail}`,
+          url: pageUrl,
+          severity: f.severity,
+          ruleId: f.kind,
+          impact: f.severity === 'strict' ? 'serious' : 'minor',
+        });
+      }
+    } catch (e) {
+      log({
+        kind: 'pageerror',
+        text: `[xFrameOptions] detector threw on step ${afterLabel}: ${(e as Error).message}`,
+      });
+    }
+  };
+
+  /**
    * T76: HSTS response-header detector. SECURITY-flavoured.
    * Reads the Strict-Transport-Security header from the top-
    * level navigation response captured in
@@ -1646,6 +1679,7 @@ async function main(args: string[]): Promise<number> {
       await checkFavicon(step.label || `goto-${i}`);
       await checkMixedContent(step.label || `goto-${i}`);
       await checkHsts(step.label || `goto-${i}`);
+      await checkXFrameOptions(step.label || `goto-${i}`);
       await checkWebVitals(step.label || `goto-${i}`);
     }
     // Memory snapshot at end of each step so the report shows heap growth
@@ -1776,6 +1810,8 @@ async function main(args: string[]): Promise<number> {
       mixedContentFindingsStrict: events.filter(e => e.kind === 'mixed-content' && e.severity === 'strict').length,
       hstsFindings: events.filter(e => e.kind === 'hsts').length,
       hstsFindingsStrict: events.filter(e => e.kind === 'hsts' && e.severity === 'strict').length,
+      xFrameOptionsFindings: events.filter(e => e.kind === 'x-frame-options').length,
+      xFrameOptionsFindingsStrict: events.filter(e => e.kind === 'x-frame-options' && e.severity === 'strict').length,
       linkUnderlineFindings: events.filter(e => e.kind === 'link-underline').length,
       linkUnderlineFindingsStrict: events.filter(e => e.kind === 'link-underline' && e.severity === 'strict').length,
       crossPageTitleFindings: events.filter(e => e.kind === 'cross-page-title').length,
@@ -1903,6 +1939,12 @@ async function main(args: string[]): Promise<number> {
       JSON.stringify(hstsFindingsByStep, null, 2),
     );
   }
+  if (xFrameOptionsFindingsByStep.length > 0) {
+    writeFileSync(
+      join(outDir, 'x-frame-options.json'),
+      JSON.stringify(xFrameOptionsFindingsByStep, null, 2),
+    );
+  }
   if (linkUnderlineFindingsByStep.length > 0) {
     writeFileSync(
       join(outDir, 'link-underline.json'),
@@ -1999,6 +2041,7 @@ async function main(args: string[]): Promise<number> {
   console.log(`  favicon:           ${report.counts.faviconFindings} (strict ${report.counts.faviconFindingsStrict})`);
   console.log(`  mixed content:     ${report.counts.mixedContentFindings} (strict ${report.counts.mixedContentFindingsStrict})`);
   console.log(`  hsts:              ${report.counts.hstsFindings} (strict ${report.counts.hstsFindingsStrict})`);
+  console.log(`  x-frame-options:   ${report.counts.xFrameOptionsFindings} (strict ${report.counts.xFrameOptionsFindingsStrict})`);
   console.log(`  link underline:    ${report.counts.linkUnderlineFindings} (strict ${report.counts.linkUnderlineFindingsStrict})`);
   console.log(`  cross-page title:  ${report.counts.crossPageTitleFindings} (strict ${report.counts.crossPageTitleFindingsStrict})`);
   console.log(`  cross-page meta:   ${report.counts.crossPageMetaDescriptionFindings} (strict ${report.counts.crossPageMetaDescriptionFindingsStrict})`);
@@ -2065,6 +2108,9 @@ async function main(args: string[]): Promise<number> {
     const newHstsStrict = diff.newHstsFindings.filter(e => e.severity === 'strict').length;
     const newHstsWarn = diff.newHstsFindings.length - newHstsStrict;
     console.log(`    NEW hsts:             ${diff.newHstsFindings.length} (strict ${newHstsStrict}, warn ${newHstsWarn})`);
+    const newXfoStrict = diff.newXFrameOptionsFindings.filter(e => e.severity === 'strict').length;
+    const newXfoWarn = diff.newXFrameOptionsFindings.length - newXfoStrict;
+    console.log(`    NEW x-frame-options:  ${diff.newXFrameOptionsFindings.length} (strict ${newXfoStrict}, warn ${newXfoWarn})`);
     const newLinkUnderlineStrict = diff.newLinkUnderlineFindings.filter(e => e.severity === 'strict').length;
     const newLinkUnderlineWarn = diff.newLinkUnderlineFindings.length - newLinkUnderlineStrict;
     console.log(`    NEW link underline:   ${diff.newLinkUnderlineFindings.length} (strict ${newLinkUnderlineStrict}, warn ${newLinkUnderlineWarn})`);

@@ -872,13 +872,90 @@ Liveness gate (33/33) still PASS.
 
 ### Action items
 
-- [ ] HTTPS fixture variant for full mixedContent + hsts live
-      integration. Self-signed cert + Playwright
-      `ignoreHTTPSErrors: true` would let the gate verify these
-      detectors fire end-to-end.
-- [ ] Add `xFrameOptions` and `referrerPolicy` detectors —
-      same response-header capture path, smallest possible
-      additional code (one detector module each).
+- [ ] HTTPS fixture variant for full mixedContent + hsts +
+      xFrameOptions live integration.
+- [x] **DONE 2026-05-14 (fifteenth cycle)**: `xFrameOptions`
+      landed. Pattern validated.
+- [ ] Add `referrerPolicy` detector — same response-header
+      capture path, third consumer.
+- [ ] login-flow fixture (still queued).
+- [ ] Remaining roadmap: `fontLoading`.
+
+---
+
+## 2026-05-14 (fifteenth entry) — second response-header detector
+
+### What's new since last cycle (fourteenth entry)
+- `xFrameOptions` detector landed. Same shape as `hsts`.
+- Total active detector axes: 25 (was 24).
+- main.ts: second consumer of `topLevelResponseHeaders` Map.
+
+### Why a second response-header detector
+
+The first one (hsts, last cycle) added the capture path —
+extending the existing `page.on('response')` listener to stash
+full headers for navigation responses. The second one validates
+the path is consumable: a future contributor can ship a third
+header-flavoured detector by writing ~100 lines of detector code
+without touching main.ts's listener, capture, or storage shape.
+
+`xFrameOptions` is a near-clone of `hsts` shape:
+- `build<Name>Snapshot(url, headers)` — pure function
+- Localhost / http exemption (same)
+- `detect<Name>Issues(snapshot)` — pure function
+- 3 finding kinds (one strict, two warn) instead of hsts's 3
+- Reads from same `topLevelResponseHeaders` Map
+
+### Detector design
+
+Real-world: clickjacking is a top web vuln. The page's framing
+policy decides whether other origins can iframe it. Two headers
+control this:
+
+  - X-Frame-Options (legacy): DENY / SAMEORIGIN / ALLOW-FROM <uri>
+  - Content-Security-Policy: frame-ancestors ... (modern,
+    supersedes XFO when present)
+
+Either one with a non-wildcard value protects the page. The
+detector requires at least one. Findings:
+
+  - frame-options.missing     strict   neither header (or
+                                       both empty)
+  - frame-options.allowall    warn     CSP frame-ancestors '*'
+                                       (or XFO ALLOW-FROM *) —
+                                       intentional but
+                                       worth-confirming open
+  - frame-options.invalid     warn     XFO value not in the
+                                       3-token vocabulary
+
+  14 unit tests cover all paths.
+
+### SkillShots dogfood
+
+**0 findings** — dev server runs on http://127.0.0.1; localhost
+exempt. Same scope as hsts.
+
+### Re-audit result
+
+**ALL 32 DETECTION AXES SILENT** on SkillShots (was 31; +1 axis).
+Liveness gate (33/33) still PASS.
+
+### Pattern note
+
+The two response-header detectors share a pattern:
+
+  build<Name>Snapshot(pageUrl, headers) → snapshot
+  detect<Name>Issues(snapshot) → findings
+
+If a third lands, ~70% structural overlap is candidate for a
+generic `headerDetector(headerName, parser, classifier)` helper.
+For two implementations, duplication is fine.
+
+### Action items
+
+- [ ] HTTPS fixture variant covers all three header-flavoured
+      detectors at once.
+- [ ] referrerPolicy detector (third consumer of capture path).
 - [ ] login-flow fixture (still queued).
 - [ ] Remaining roadmap: `fontLoading`.
 

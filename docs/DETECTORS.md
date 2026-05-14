@@ -200,6 +200,19 @@ Out of scope: http pages (HSTS doesn't apply), localhost / 127.0.0.1 / `*.localh
 
 **First response-header detector.** Reads from main.ts's `topLevelResponseHeaders: Map<url, headers>` accumulator, populated by the existing `page.on('response')` listener for any response where `request().isNavigationRequest()`. Future header-flavoured detectors (xFrameOptions, referrerPolicy, contentSecurityPolicy strict mode) read from the same Map — no new listener needed per detector.
 
+### `xFrameOptions` — clickjacking-defence response header *(T76 — added 2026-05-14)*
+Source: `src/xFrameOptions.ts`
+
+| Finding | Sev | Catches |
+|---|---|---|
+| `frame-options.missing` | strict | https page has neither `X-Frame-Options` header NOR a `Content-Security-Policy: frame-ancestors` directive. Any origin can iframe → clickjacking attacks. |
+| `frame-options.allowall` | warn | `Content-Security-Policy: frame-ancestors *` (or `X-Frame-Options: ALLOW-FROM *`). Effectively no protection — surface so the operator can confirm the open-embed is intentional. |
+| `frame-options.invalid` | warn | `X-Frame-Options` set to a value other than `DENY` / `SAMEORIGIN` / `ALLOW-FROM <uri>`. Browsers ignore unrecognised values. |
+
+CSP `frame-ancestors` supersedes `X-Frame-Options` when both are present. Either one with a non-wildcard value protects the page; the detector requires at least one. Localhost + http pages exempt (same exemptions as hsts).
+
+**Second response-header detector.** Reads from the same `topLevelResponseHeaders` Map as `hsts` — no new capture path needed. Validates that the response-header pattern generalises with the same single-listener-many-detectors design.
+
 ### `mixedContent` — HTTPS-page-loads-HTTP-resource *(T76 — added 2026-05-14)*
 Source: `src/mixedContent.ts` · Rust: `mixed_content.rs`
 
@@ -456,8 +469,6 @@ zero-overlap with existing axes:
 
 - **`fontLoading`** — `font-display: swap` missing → invisible-text
   flash (FOIT).
-- **`xFrameOptions`** — `X-Frame-Options` header missing (clickjacking
-  defence). SECURITY.
 - **`mixedFormSubmission`** — `<form action="http://...">` on
   https page. SECURITY.
 
