@@ -39,7 +39,8 @@ export interface CapturedEvent {
     | 'favicon'
     | 'mixed-content'
     | 'link-underline'
-    | 'cross-page-title';
+    | 'cross-page-title'
+    | 'cross-page-meta-description';
   level?: string;
   text: string;
   url?: string;
@@ -100,6 +101,8 @@ export interface Report {
     linkUnderlineFindingsStrict: number;
     crossPageTitleFindings: number;
     crossPageTitleFindingsStrict: number;
+    crossPageMetaDescriptionFindings: number;
+    crossPageMetaDescriptionFindingsStrict: number;
     cspViolations: number;
     total: number;
     stepsOk: number;
@@ -272,6 +275,12 @@ export interface Diff {
    * prior. Warn: two or more pages share the same <title>. T76.
    */
   newCrossPageTitleFindings: CapturedEvent[];
+  /**
+   * cross-page-meta-description aggregates findings new in this
+   * run vs prior. Warn: two or more pages share the same
+   * <meta name="description">. T76.
+   */
+  newCrossPageMetaDescriptionFindings: CapturedEvent[];
   newlyBrokenSteps: StepResult[];
   fixedSteps: StepResult[];
 }
@@ -313,6 +322,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     newMixedContentFindings: [],
     newLinkUnderlineFindings: [],
     newCrossPageTitleFindings: [],
+    newCrossPageMetaDescriptionFindings: [],
     newlyBrokenSteps: [],
     fixedSteps: [],
   };
@@ -345,6 +355,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     out.newMixedContentFindings = current.events.filter(e => e.kind === 'mixed-content');
     out.newLinkUnderlineFindings = current.events.filter(e => e.kind === 'link-underline');
     out.newCrossPageTitleFindings = current.events.filter(e => e.kind === 'cross-page-title');
+    out.newCrossPageMetaDescriptionFindings = current.events.filter(e => e.kind === 'cross-page-meta-description');
     return out;
   }
   const priorKeys = new Set(prior.events.map(key));
@@ -378,6 +389,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     else if (e.kind === 'mixed-content') out.newMixedContentFindings.push(e);
     else if (e.kind === 'link-underline') out.newLinkUnderlineFindings.push(e);
     else if (e.kind === 'cross-page-title') out.newCrossPageTitleFindings.push(e);
+    else if (e.kind === 'cross-page-meta-description') out.newCrossPageMetaDescriptionFindings.push(e);
   }
   const priorStepLabels = new Map(
     prior.steps.map((s, i) => [s.step.label || `${s.step.kind}-${i}`, s])
@@ -587,6 +599,16 @@ export function renderPositiveSignal(report: Report, diff: Diff): string {
       total: report.events.filter((e) => e.kind === 'cross-page-title').length,
       news: diff.newCrossPageTitleFindings.length,
       strictNews: strict(diff.newCrossPageTitleFindings),
+    },
+    {
+      // T76 (Crawler): cross-page-meta-description — second
+      // aggregates-layer detector. Pages sharing a <meta name=
+      // description> in a journey hurts SEO (Google filters
+      // duplicates) and social-share preview cards (warn).
+      name: 'crossPageMetaDescription',
+      total: report.events.filter((e) => e.kind === 'cross-page-meta-description').length,
+      news: diff.newCrossPageMetaDescriptionFindings.length,
+      strictNews: strict(diff.newCrossPageMetaDescriptionFindings),
     },
   ];
   const lines: string[] = [];

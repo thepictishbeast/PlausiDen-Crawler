@@ -45,6 +45,7 @@ import { captureFaviconSnapshot, detectFaviconIssues, type FaviconFinding } from
 import { captureMixedContentSnapshot, detectMixedContentIssues, type MixedContentFinding } from './mixedContent.js';
 import { captureLinkUnderlineSnapshot, detectLinkUnderlineIssues, type LinkUnderlineFinding } from './linkUnderline.js';
 import { newCrossPageTitleAccumulator, recordPageTitle, detectCrossPageTitleDuplicates } from './crossPageTitle.js';
+import { newCrossPageMetaDescriptionAccumulator, recordPageMetaDescription, detectCrossPageMetaDescriptionDuplicates } from './crossPageMetaDescription.js';
 
 interface Budget {
   newConsoleErrors: number;
@@ -1030,11 +1031,17 @@ async function main(args: string[]): Promise<number> {
    * doesn't break the page; it just suboptimizes discovery.
    */
   const metaDescriptionFindingsByStep: Array<{ stepLabel: string; pageUrl: string; findings: MetaDescriptionFinding[] }> = [];
+  // T76 (2026-05-14): aggregates-layer accumulator for the
+  // crossPageMetaDescription detector. Same pattern as
+  // crossPageTitleAcc — piggyback off the per-page capture so
+  // no extra page.evaluate cost.
+  const crossPageMetaDescriptionAcc = newCrossPageMetaDescriptionAccumulator();
   const checkMetaDescription = async (afterLabel: string) => {
     try {
       const snap = await captureMetaDescriptionSnapshot(page);
       const findings = detectMetaDescriptionIssues(snap);
       metaDescriptionFindingsByStep.push({ stepLabel: afterLabel, pageUrl: snap.pageUrl, findings });
+      recordPageMetaDescription(crossPageMetaDescriptionAcc, snap.pageUrl, snap.raw);
       for (const f of findings) {
         log({
           kind: 'meta-description',
@@ -1632,6 +1639,15 @@ async function main(args: string[]): Promise<number> {
       impact: f.severity === 'strict' ? 'serious' : 'minor',
     });
   }
+  for (const f of detectCrossPageMetaDescriptionDuplicates(crossPageMetaDescriptionAcc)) {
+    log({
+      kind: 'cross-page-meta-description',
+      text: `[${f.kind}] ${f.detail}`,
+      severity: f.severity,
+      ruleId: f.kind,
+      impact: f.severity === 'strict' ? 'serious' : 'minor',
+    });
+  }
 
   // Walk through events and bucket them by step — answers the user's
   // question "what was the crawler doing when this log happened?"
@@ -1713,6 +1729,8 @@ async function main(args: string[]): Promise<number> {
       linkUnderlineFindingsStrict: events.filter(e => e.kind === 'link-underline' && e.severity === 'strict').length,
       crossPageTitleFindings: events.filter(e => e.kind === 'cross-page-title').length,
       crossPageTitleFindingsStrict: events.filter(e => e.kind === 'cross-page-title' && e.severity === 'strict').length,
+      crossPageMetaDescriptionFindings: events.filter(e => e.kind === 'cross-page-meta-description').length,
+      crossPageMetaDescriptionFindingsStrict: events.filter(e => e.kind === 'cross-page-meta-description' && e.severity === 'strict').length,
       cspViolations: events.filter(e => e.kind === 'csp-violation').length,
       total: events.length,
       stepsOk: stepResults.filter(s => s.ok).length,
@@ -1925,6 +1943,7 @@ async function main(args: string[]): Promise<number> {
   console.log(`  mixed content:     ${report.counts.mixedContentFindings} (strict ${report.counts.mixedContentFindingsStrict})`);
   console.log(`  link underline:    ${report.counts.linkUnderlineFindings} (strict ${report.counts.linkUnderlineFindingsStrict})`);
   console.log(`  cross-page title:  ${report.counts.crossPageTitleFindings} (strict ${report.counts.crossPageTitleFindingsStrict})`);
+  console.log(`  cross-page meta:   ${report.counts.crossPageMetaDescriptionFindings} (strict ${report.counts.crossPageMetaDescriptionFindingsStrict})`);
   console.log(`  web vitals:        ${report.counts.webVitalsFindings} (strict ${report.counts.webVitalsFindingsStrict})`);
   console.log(`  csp violations:    ${report.counts.cspViolations}`);
   console.log(`  steps ok/failed:   ${report.counts.stepsOk}/${report.counts.stepsFailed}`);
@@ -1991,6 +2010,9 @@ async function main(args: string[]): Promise<number> {
     const newCrossPageTitleStrict = diff.newCrossPageTitleFindings.filter(e => e.severity === 'strict').length;
     const newCrossPageTitleWarn = diff.newCrossPageTitleFindings.length - newCrossPageTitleStrict;
     console.log(`    NEW cross-page title: ${diff.newCrossPageTitleFindings.length} (strict ${newCrossPageTitleStrict}, warn ${newCrossPageTitleWarn})`);
+    const newCpMdStrict = diff.newCrossPageMetaDescriptionFindings.filter(e => e.severity === 'strict').length;
+    const newCpMdWarn = diff.newCrossPageMetaDescriptionFindings.length - newCpMdStrict;
+    console.log(`    NEW cross-page meta:  ${diff.newCrossPageMetaDescriptionFindings.length} (strict ${newCpMdStrict}, warn ${newCpMdWarn})`);
     console.log(`    NEW csp violations:   ${diff.newCspViolations.length}`);
     console.log(`    newly broken steps:   ${diff.newlyBrokenSteps.length}`);
     console.log(`    fixed steps:          ${diff.fixedSteps.length}`);

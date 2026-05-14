@@ -807,9 +807,72 @@ URLs sharing 'T76 Fixture'. The detector is alive end-to-end.
 
 ### Action items
 
-- [ ] Build at least one more aggregates detector to validate
-      the pattern (candidates: `crossPageMetaDescriptionDup`,
-      `crossPageH1Dup`).
+- [x] **DONE 2026-05-14 (thirteenth cycle)**: second aggregates
+      detector — `crossPageMetaDescription`. Pattern validated.
+- [ ] HTTPS fixture variant for mixedContent live integration.
+- [ ] login-flow fixture.
+- [ ] Remaining roadmap: `fontLoading`, `hstsHeader`,
+      `xFrameOptions`.
+
+---
+
+## 2026-05-14 (thirteenth entry) — second aggregates detector
+
+### What's new since last cycle (twelfth entry)
+- `crossPageMetaDescription` detector landed — same shape as
+  `crossPageTitle`, validates the aggregates pattern.
+- Total active detector axes: 23 (was 22).
+- main.ts aggregates pass now runs TWO detectors.
+
+### Why a second aggregates detector
+
+The first one (crossPageTitle, last cycle) established the
+pattern. The second one tests whether the pattern generalises:
+can a future contributor follow the same template and ship
+correctly?
+
+`crossPageMetaDescription` is a near-clone of `crossPageTitle`:
+same accumulator type, same record function shape, same detect
+shape, same piggyback approach. The only differences:
+- Field name (title → description)
+- Truncation in the detail (descriptions are 50-160 chars,
+  truncated to 80 + ellipsis for readability)
+- Different SEO rationale in the detail text
+
+This validates that the pattern is teachable. If a third
+aggregates detector lands, the ~80% structural overlap is a
+candidate for a generic `dupGroupDetector(acc, kind, label)`
+helper — but for two implementations, duplication is fine.
+
+### SkillShots dogfood
+
+**0 findings** on the SkillShots journey — every page has both
+a unique title AND a unique description. The PlausiDen-Forge
+typed CMS does this correctly (inject_seo.py + cms/*.json).
+
+### Fixture verification
+
+The t76-detector-fixtures journey uses TWO different default
+description strings depending on which path through the
+fixture-page-builder a route takes:
+- `CLEAN_HEAD` constant ("...fits **in** the search-result...") on
+  routes using head_override = CLEAN_HEAD
+- `head()` function default ("...fits the search-result...") on
+  routes using the head() builder
+
+These are intended to be the same — a one-char drift, "in" vs
+no-"in", landed silently. The fixture's `crossPageMetaDescription`
+audit catches BOTH groups:
+- 20 URLs share the CLEAN_HEAD variant
+- 9 URLs share the head() variant
+
+So the fixture self-audits the inconsistency in its own
+defaults. The detector is alive end-to-end.
+
+### Action items
+
+- [ ] Fix the fixture's two-default-description drift (cosmetic;
+      either pick one or document the two intentional groups).
 - [ ] HTTPS fixture variant for mixedContent live integration.
 - [ ] login-flow fixture.
 - [ ] Remaining roadmap: `fontLoading`, `hstsHeader`,

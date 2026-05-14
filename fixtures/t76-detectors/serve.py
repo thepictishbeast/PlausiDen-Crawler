@@ -72,7 +72,7 @@ FAVICON_TAG = '<link rel="icon" href="data:image/svg+xml,&lt;svg xmlns=\'http://
 
 CLEAN_HEAD = f"""<meta charset=utf-8>
 <meta name=viewport content="width=device-width, initial-scale=1">
-<meta name=description content="A reasonable summary that fits in the search-result preview window.">
+<meta name=description content="A reasonable summary that fits the search-result preview window.">
 {FAVICON_TAG}
 <title>T76 Fixture</title>"""
 

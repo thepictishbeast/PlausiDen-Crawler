@@ -164,6 +164,15 @@ Source: `src/crossPageTitle.ts`
 
 No Rust mirror yet — the aggregates layer is conceptually different from the per-page-snapshot shape the `crawler-detectors` Rust crate is built around. A future `crawler-aggregates` crate would be the right home if Rust parity becomes load-bearing for the chromiumoxide port (T75).
 
+### `crossPageMetaDescription` — duplicate page descriptions across a journey *(T76 aggregates-layer — added 2026-05-14)*
+Source: `src/crossPageMetaDescription.ts`
+
+| Finding | Sev | Catches |
+|---|---|---|
+| `meta-description.cross-page-dup` | warn | Two or more pages share the same trimmed `<meta name="description">`. Google explicitly filters duplicate descriptions in search results; social-share preview cards collapse into a single tile. |
+
+Sister to `crossPageTitle` — same accumulator+record+detect pattern, piggybacked off the existing per-page `metaDescription` capture. Validates that the aggregates-layer pattern generalises cleanly. If a third aggregates detector lands, the current ~80% structural overlap is a candidate for a generic `dupGroupDetector(accumulator, kind, label)` helper.
+
 ### `linkUnderline` — link distinguishability *(T76 — added 2026-05-14)*
 Source: `src/linkUnderline.ts` · Rust: `link_underline.rs`
 
