@@ -1033,6 +1033,79 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (sixtieth entry) — Document-Policy detector: axis 49
+
+### What's new since last cycle (fifty-ninth entry)
+- **New detector — `documentPolicy`** (this commit). The 49th
+  axis. CSP-Level-3 companion. Audits the W3C Document-Policy
+  response header (2024-shipped) — controls runtime features
+  WITHIN the document: disable `document.write`, require sized
+  media (CLS hit), force-load-at-top (predictable UX), opt
+  into JS profiling.
+- Localhost-exempt (consistent with the response-header
+  detector family).
+- 14th consumer of the shared `responseHeaderDetector` helper
+  (cycle 24 architecture).
+- 11 unit tests pass in `documentPolicy.test.ts`.
+- **Score holds at A 100/100** across all 13 audited journeys.
+  Localhost-only audits don't see the new axis fire; production
+  surfaces (when added to the dogfood matrix) will get the
+  full benefit.
+
+### The detection logic
+Header form: `Document-Policy: document-write=?0, force-load-at-top, unsized-media=?0`
+
+Parsing: best-effort Structured Fields Dictionary (RFC 8941).
+Bare keys imply `?1`. Value tokens are kept as raw strings;
+we don't validate ranges. Output is a directives map keyed by
+lowercase directive name.
+
+Findings:
+- `document-policy.missing` — no header set.
+- `document-policy.permits-document-write` — header is set but
+  doesn't include `document-write=?0`, OR explicitly sets
+  `document-write=?1`. document.write is a parser-blocking
+  DOM-XSS sink; modern apps should disable it.
+- `document-policy.invalid` — header value doesn't parse as
+  a Structured Fields dictionary.
+
+### Why this matters
+The supersociety security stack now layers:
+- **Origin isolation** (cycles 22, 23, 26, 45): COOP, COEP, CORP,
+  Origin-Agent-Cluster.
+- **Content security** (cycles 22, 28, 30, 54): CSP with hash-
+  pinned script-src + style-src.
+- **Runtime DOM-XSS defense** (cycle 57): Trusted Types proxies
+  + `require-trusted-types-for 'script'`.
+- **Document feature control** (cycle 60, NEW): Document-Policy
+  disables document.write, requires sized media, etc.
+
+Each layer covers a different threat class. Cycle 60 closes the
+runtime feature-control surface — even with strict CSP and
+Trusted Types, a hash-pinned inline script could still call
+`document.write` to inject content; Document-Policy turns that
+off at the document level.
+
+### Score arc (cycles 41-60)
+  C58: SkillShots 100/100 base journey.
+  C59: 13 of 13 audited journeys at 100/100 with --no-baseline.
+  C60: **13/13 still 100/100 + new axis added** (axis 49).
+
+### Cumulative cross-repo dogfood scoreboard (cycles 38-60)
+  22 Loom commits + 3 Forge commits + **5 crawler enhancements**.
+
+### Action items
+- [ ] Cycle 61: CSP `report-uri` collector endpoint in loom-cli.
+- [ ] Cycle 62: supersociety badge SVG auto-published on every
+      push, embeddable in README.
+- [ ] Cycle 63: roll Document-Policy directive onto Loom's
+      admin pages (header is currently absent → axis 49 will
+      fire ONCE we add a production journey).
+- [ ] Cycle 64+: extend dogfood loop to other PlausiDen
+      surfaces (Atrium, Sentinel-GUI).
+
+---
+
 ## 2026-05-14 (fifty-ninth entry) — Variant-journey sweep: dark-mode contrast + cross-page dedupe
 
 ### What's new since last cycle (fifty-eighth entry)

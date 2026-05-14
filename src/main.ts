@@ -71,6 +71,7 @@ import { buildVarySnapshot, detectVaryIssues, type VaryFinding } from './varyHea
 import { detectInlineScriptIssues, INLINE_SCRIPT_DOM_CAPTURE_JS, type InlineScriptFinding, type InlineScriptSnapshot } from './inlineScript.js';
 import { buildReportingEndpointsSnapshot, detectReportingEndpointsIssues, type ReportingEndpointsFinding } from './reportingEndpoints.js';
 import { buildOriginAgentClusterSnapshot, detectOriginAgentClusterIssues, type OriginAgentClusterFinding } from './originAgentCluster.js';
+import { buildDocumentPolicySnapshot, detectDocumentPolicyIssues, type DocumentPolicyFinding } from './documentPolicy.js';
 import { calculateSupersocietyScore, renderSupersocietyScore } from './supersocietyScore.js';
 import {
   buildScoreHistoryEntry,
@@ -1321,6 +1322,24 @@ async function main(args: string[]): Promise<number> {
   });
 
   /**
+   * T76 cycle 60: Document-Policy header audit. CSP-Level-3
+   * companion. Controls runtime features within a document:
+   * disable document.write (DOM-XSS sink), require sized
+   * media (CLS), force-load-at-top, opt into JS profiling.
+   * 14th consumer of the shared response-header capture path.
+   */
+  const documentPolicyFindingsByStep: Array<PerStepRecord<DocumentPolicyFinding>> = [];
+  const checkDocumentPolicy = makeResponseHeaderCheck({
+    detectorName: 'documentPolicy',
+    eventKind: 'document-policy',
+    page, topLevelResponseHeaders, disableLocalhostExemption,
+    findingsByStep: documentPolicyFindingsByStep,
+    log,
+    buildSnapshot: buildDocumentPolicySnapshot,
+    detectIssues: detectDocumentPolicyIssues,
+  });
+
+  /**
    * T76 cycle 31: Reporting API endpoint configuration audit.
    * Without endpoints configured, ALL browser-emitted security
    * reports (CSP violations, COEP violations, crash reports,
@@ -2181,6 +2200,7 @@ async function main(args: string[]): Promise<number> {
       await checkVary(step.label || `goto-${i}`);
       await checkReportingEndpoints(step.label || `goto-${i}`);
       await checkOriginAgentCluster(step.label || `goto-${i}`);
+      await checkDocumentPolicy(step.label || `goto-${i}`);
       await checkWebVitals(step.label || `goto-${i}`);
     }
     // Memory snapshot at end of each step so the report shows heap growth
@@ -2341,6 +2361,8 @@ async function main(args: string[]): Promise<number> {
       inlineScriptFindingsStrict: events.filter(e => e.kind === 'inline-script' && e.severity === 'strict').length,
       trustedTypesFindings: events.filter(e => e.kind === 'trusted-types').length,
       trustedTypesFindingsStrict: events.filter(e => e.kind === 'trusted-types' && e.severity === 'strict').length,
+      documentPolicyFindings: events.filter(e => e.kind === 'document-policy').length,
+      documentPolicyFindingsStrict: events.filter(e => e.kind === 'document-policy' && e.severity === 'strict').length,
       reportingEndpointsFindings: events.filter(e => e.kind === 'reporting-endpoints').length,
       reportingEndpointsFindingsStrict: events.filter(e => e.kind === 'reporting-endpoints' && e.severity === 'strict').length,
       originAgentClusterFindings: events.filter(e => e.kind === 'origin-agent-cluster').length,

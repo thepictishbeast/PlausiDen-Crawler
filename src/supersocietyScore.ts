@@ -106,11 +106,13 @@ const KIND_TO_CATEGORY: Record<string, string> = {
   'x-frame-options': 'originIsolation',
   'permissions-policy': 'originIsolation',
 
-  // Content security — CSP, SRI, DOM XSS surface, Trusted Types.
+  // Content security — CSP, SRI, DOM XSS surface, Trusted Types,
+  // Document-Policy (CSP-Level-3 feature-control companion).
   'csp-policy': 'contentSecurity',
   'sri': 'contentSecurity',
   'inline-script': 'contentSecurity',
   'trusted-types': 'contentSecurity',
+  'document-policy': 'contentSecurity',
 
   // Cookie hygiene.
   'cookie-security': 'cookieHygiene',

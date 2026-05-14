@@ -54,6 +54,7 @@ export interface CapturedEvent {
     | 'vary'
     | 'inline-script'
     | 'trusted-types'
+    | 'document-policy'
     | 'reporting-endpoints'
     | 'origin-agent-cluster'
     | 'link-underline'
@@ -147,6 +148,8 @@ export interface Report {
     inlineScriptFindingsStrict: number;
     trustedTypesFindings: number;
     trustedTypesFindingsStrict: number;
+    documentPolicyFindings: number;
+    documentPolicyFindingsStrict: number;
     reportingEndpointsFindings: number;
     reportingEndpointsFindingsStrict: number;
     originAgentClusterFindings: number;
@@ -435,6 +438,12 @@ export interface Diff {
    */
   newTrustedTypesFindings: CapturedEvent[];
   /**
+   * document-policy findings new in this run vs prior. T76
+   * cycle 60. All warn — header missing / document.write
+   * permitted / unparseable.
+   */
+  newDocumentPolicyFindings: CapturedEvent[];
+  /**
    * reporting-endpoints findings new in this run vs prior.
    * All warn — Reporting API endpoint configuration. Missing
    * endpoints / Report-To-only legacy / CSP-report-uri
@@ -519,6 +528,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     newVaryFindings: [],
     newInlineScriptFindings: [],
     newTrustedTypesFindings: [],
+    newDocumentPolicyFindings: [],
     newReportingEndpointsFindings: [],
     newOriginAgentClusterFindings: [],
     newLinkUnderlineFindings: [],
@@ -570,6 +580,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     out.newVaryFindings = current.events.filter(e => e.kind === 'vary');
     out.newInlineScriptFindings = current.events.filter(e => e.kind === 'inline-script');
     out.newTrustedTypesFindings = current.events.filter(e => e.kind === 'trusted-types');
+    out.newDocumentPolicyFindings = current.events.filter(e => e.kind === 'document-policy');
     out.newReportingEndpointsFindings = current.events.filter(e => e.kind === 'reporting-endpoints');
     out.newOriginAgentClusterFindings = current.events.filter(e => e.kind === 'origin-agent-cluster');
     out.newLinkUnderlineFindings = current.events.filter(e => e.kind === 'link-underline');
@@ -622,6 +633,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     else if (e.kind === 'vary') out.newVaryFindings.push(e);
     else if (e.kind === 'inline-script') out.newInlineScriptFindings.push(e);
     else if (e.kind === 'trusted-types') out.newTrustedTypesFindings.push(e);
+    else if (e.kind === 'document-policy') out.newDocumentPolicyFindings.push(e);
     else if (e.kind === 'reporting-endpoints') out.newReportingEndpointsFindings.push(e);
     else if (e.kind === 'origin-agent-cluster') out.newOriginAgentClusterFindings.push(e);
     else if (e.kind === 'link-underline') out.newLinkUnderlineFindings.push(e);
@@ -990,6 +1002,17 @@ export function renderPositiveSignal(report: Report, diff: Diff): string {
       total: report.events.filter((e) => e.kind === 'trusted-types').length,
       news: diff.newTrustedTypesFindings.length,
       strictNews: strict(diff.newTrustedTypesFindings),
+    },
+    {
+      // T76 cycle 60 (Crawler): document-policy — CSP-Level-3
+      // companion. Audits the Document-Policy response header
+      // (2024-shipped W3C). Catches missing header, permitted
+      // document.write (DOM-XSS sink + parser blocker),
+      // unparseable Structured-Fields value.
+      name: 'documentPolicy',
+      total: report.events.filter((e) => e.kind === 'document-policy').length,
+      news: diff.newDocumentPolicyFindings.length,
+      strictNews: strict(diff.newDocumentPolicyFindings),
     },
     {
       // T76 cycle 31 (Crawler): reporting-endpoints —
