@@ -1033,6 +1033,95 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (forty-sixth entry) — F-CLAMP BREAKS: Loom edit-serve form labels → B 85
+
+### What's new since last cycle (forty-fifth entry)
+- **Cross-repo fix in PlausiDen-Loom** (commit 3bdb756):
+  fieldset inputs in the per-page edit form now wrap inside
+  their `<label>` for implicit association. Form-no-label
+  cluster (14 inputs aggregated) cleared.
+- **THE F-CLAMP BROKE** — accessibility category score went
+  F=0 → F=20 for the first time since cycle 41. Composite
+  finally crossed past B 83 to **B 85**.
+- Eighth consecutive cross-repo dogfood win.
+- Active named-detector axis count UNCHANGED at 44.
+
+### Score arc on Loom edit-serve (cycles 41-46)
+  C41 pre:  B 82/100, 19 strict.
+  C41 post: B 83/100, 11 strict (viewport + lang).
+  C42 post: B 83/100,  7 strict (landmarks).
+  C43 post: B 83/100,  5 strict (contrast colours).
+  C44 post: B 83/100,  4 strict (toolbar buttons 24×24).
+  C46 post: **B 85/100,  3 strict** (form labels — F-clamp breaks!).
+
+### What was fixed
+The /about per-page edit form had 14 inputs inside `<fieldset>`
+sections with sibling `<label>` elements that had no
+association — no `for=`/`id=` pair and no wrapping. Screen
+readers heard "edit text" with no hint.
+
+**Fix**: wrap each input/textarea/select INSIDE its `<label>`
+element. HTML5 implicit-association — the labeled-control
+relationship is established by nesting.
+
+Sites updated in serve_edit_form:
+  - hero:      Eyebrow / Title / Lede (3 fields)
+  - paragraph: Text (1)
+  - heading:   Level select + Text (2)
+  - banner:    Tone select + Text (2)
+  - group:     Title + N numbered body-paragraph labels
+
+The "Body paragraphs" was a dangling `<label>` with no
+labeled control (illegal — label must have either one
+labeled-control descendant or a `for=` attribute). Converted
+to a styled `<p>` with the same visual weight. Each body
+textarea now gets its own numbered "Paragraph N" label.
+
+### Why F broke (the math)
+  Cycle 44 accessibility:
+    score = 100 - 2 × 25 - 11 × 5 = 100 - 50 - 55 = -5 → 0 (F).
+  Cycle 46 accessibility:
+    score = 100 -  1 × 25 - 11 × 5 = 100 - 25 - 55 = 20 (F=20).
+
+Still F (need ≥60 to break out of F), but the numeric
+deduction is now visible because the clamp doesn't bite. The
+composite reflects the real per-category deltas.
+
+### Cross-repo dogfood scoreboard (cycles 38-46)
+  C38 Loom:  state-matrix missing CSS        C 75 → A 99.
+  C39 Loom:  nav-link 44px                   A 95 → A 100.
+  C40 Forge: CMS title disambiguate          A 100 → A 100 (0).
+  C41 Loom:  viewport + lang                 B 82 → B 83 (-8).
+  C42 Loom:  <main> landmark                 B 83 → B 83 (-4).
+  C43 Loom:  contrast colours                B 83 → B 83 (-2).
+  C44 Loom:  toolbar buttons 24×24           B 83 → B 83 (-1).
+  C45 (detector cycle: originAgentCluster, no Loom edit-serve change.)
+  C46 Loom:  fieldset input labels           B 83 → **B 85** (-1, F-clamp BREAKS).
+
+Total: 8 cross-repo commits across PlausiDen-Loom (×7) +
+PlausiDen-Forge (×1). 16 strict findings cleared on the
+admin UI across cycles 41-46.
+
+### Verified
+- 297/297 loom unit tests pass.
+- HTTP gate: 47/47.
+- HTTPS gate: 64/64.
+- Loom edit-serve: B (85/100), 3 strict.
+
+### Action items
+- [ ] Cycle 47: clear the 1 residual contrast on /about
+      (only remaining accessibility strict). Would put
+      accessibility at 45 (still F under the deduction
+      formula because 11 warns × 5 = 55).
+- [ ] Cycle 48+: reduce accessibility warns from 11 to ≤7
+      to lift accessibility out of F entirely.
+- [ ] Cycle 49+ detector: pick from CSP-Report-Only /
+      Trusted-Types-runtime / Document-Policy.
+- [ ] Cycle 50+: dogfood another PlausiDen surface (Atrium
+      backend if it has one, Tidy, Purge admin if any).
+
+---
+
 ## 2026-05-14 (forty-fifth entry) — originAgentCluster detector, axis 44
 
 ### What's new since last cycle (forty-fourth entry)
