@@ -1033,6 +1033,80 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (sixty-fourth entry) — reportingEndpoints detector tightening
+
+### What's new since last cycle (sixty-third entry)
+- **reportingEndpoints detector** gains 3 new findings:
+  - `reporting.csp-group-undeclared` — CSP `report-to <name>`
+    references a group not declared in Reporting-Endpoints.
+    Silent-failure mode: policy is set up but reports go
+    nowhere because of a typo'd group name. This is the
+    audit-side closure of cycle 63's collector loop.
+  - `reporting.endpoint-orphan` — Reporting-Endpoints declares
+    a group that NO CSP `report-to` directive references.
+    Wasted config; reports for that group never fire.
+  - `reporting.endpoint-not-https` — endpoint URL uses
+    plaintext http:// — reports leak in transit and can be
+    tampered with. Same-origin paths (`/reports`) are exempt
+    because they inherit the page origin scheme.
+- **5 new unit tests** in `reportingEndpoints.test.ts` (23 total).
+- **Score holds at A 100/100 (15)**. Loom's collector config
+  is detected as sound: same-origin path `/reports`, group
+  name `default` matches between Reporting-Endpoints and the
+  CSP `report-to` directive.
+
+### Why these matter
+Cycle 63 built the collector + emitted the headers. But the
+operator who follows the same pattern in their own project
+might:
+- Typo the group name: `Reporting-Endpoints: defualt="/r"` +
+  CSP `report-to default` → reports vanish.
+- Declare a group nobody references: wasted bytes, latent
+  config drift.
+- Use a `http://...` endpoint URL: violations transmitted in
+  plaintext, easily MITM'd.
+
+The detector now catches all three at audit time, before the
+operator ships and wonders why their collector log is empty.
+
+### The audit side of the loop now closes
+```
+detect (CSP/TT/DocPol directives present)
+  ↓
+configure observability (Reporting-Endpoints / Report-To)
+  ↓
+AUDIT (this commit: consistency between CSP report-to +
+        Reporting-Endpoints group names + endpoint URL
+        scheme)
+  ↓
+collect (cycle 63 endpoint)
+  ↓
+review
+```
+
+The collector is no longer trust-without-verify; the crawler
+checks that the configuration would actually route reports
+through to it.
+
+### Score arc (cycles 41-64)
+  C63: aggregate A 100/100 (15) — collector loop closed.
+  C64: **aggregate A 100/100 (15)** — audit loop closed too.
+
+### Cumulative cross-repo dogfood scoreboard (cycles 38-64)
+  25 Loom commits + 3 Forge commits + **7 crawler enhancements**.
+
+### Action items
+- [ ] Cycle 65: extend dogfood to PlausiDen-Atrium /
+      Sentinel-GUI (new surfaces).
+- [ ] Cycle 66: cargo-mutants pass on supersocietyScore
+      module (Tier 6).
+- [ ] Cycle 67: TUI viewer for violations.jsonl.
+- [ ] Cycle 68: Network-Error-Logging (NEL) detector — pairs
+      with Reporting-Endpoints, gives ops a per-error
+      breakdown of network-level fails.
+
+---
+
 ## 2026-05-14 (sixty-third entry) — CSP / Reporting-API collector closes the loop
 
 ### What's new since last cycle (sixty-second entry)

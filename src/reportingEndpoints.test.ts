@@ -180,6 +180,75 @@ const PAGE = 'https://example.com/';
   );
 }
 
+// 16. T76 cycle 64: CSP `report-to <name>` references a group
+// not declared in Reporting-Endpoints → undeclared warn.
+{
+  const f = detectReportingEndpointsIssues(buildReportingEndpointsSnapshot(PAGE, {
+    'reporting-endpoints': 'csp-violations="/csp"',
+    'content-security-policy': "default-src 'self'; report-to default",
+  }));
+  assert(
+    f.some((x) => x.kind === 'reporting.csp-group-undeclared'),
+    'CSP report-to references undeclared group → warn',
+    JSON.stringify(f),
+  );
+}
+
+// 17. T76 cycle 64: CSP `report-to` matches declared group → no
+// undeclared warn (but may fire orphan if other groups exist).
+{
+  const f = detectReportingEndpointsIssues(buildReportingEndpointsSnapshot(PAGE, {
+    'reporting-endpoints': 'default="/reports"',
+    'content-security-policy': "default-src 'self'; report-to default",
+  }));
+  assert(
+    !f.some((x) => x.kind === 'reporting.csp-group-undeclared'),
+    'matching CSP group + endpoint → no undeclared warn',
+    JSON.stringify(f),
+  );
+}
+
+// 18. T76 cycle 64: orphan endpoint declaration → warn.
+// Reporting-Endpoints declares 2 groups but CSP only references 1.
+{
+  const f = detectReportingEndpointsIssues(buildReportingEndpointsSnapshot(PAGE, {
+    'reporting-endpoints': 'default="/reports", crashes="/crash"',
+    'content-security-policy': "default-src 'self'; report-to default",
+  }));
+  assert(
+    f.some((x) => x.kind === 'reporting.endpoint-orphan'),
+    'orphan endpoint declaration → warn',
+    JSON.stringify(f),
+  );
+}
+
+// 19. T76 cycle 64: non-HTTPS endpoint → warn.
+{
+  const f = detectReportingEndpointsIssues(buildReportingEndpointsSnapshot(PAGE, {
+    'reporting-endpoints': 'default="http://example.com/reports"',
+    'content-security-policy': "default-src 'self'; report-to default",
+  }));
+  assert(
+    f.some((x) => x.kind === 'reporting.endpoint-not-https'),
+    'http:// endpoint URL → not-https warn',
+    JSON.stringify(f),
+  );
+}
+
+// 20. T76 cycle 64: same-origin path endpoint → no not-https
+// warn (path inherits the page origin's scheme).
+{
+  const f = detectReportingEndpointsIssues(buildReportingEndpointsSnapshot(PAGE, {
+    'reporting-endpoints': 'default="/reports"',
+    'content-security-policy': "default-src 'self'; report-to default",
+  }));
+  assert(
+    !f.some((x) => x.kind === 'reporting.endpoint-not-https'),
+    'same-origin path endpoint → no not-https warn',
+    JSON.stringify(f),
+  );
+}
+
 console.log('\n=== reportingEndpoints.test.ts ===');
 console.log(`PASSED ${PASSED.length}:`);
 PASSED.forEach((p) => console.log(`  ✓ ${p}`));

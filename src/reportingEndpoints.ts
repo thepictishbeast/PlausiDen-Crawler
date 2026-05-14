@@ -154,6 +154,35 @@ function cspMentionsReporting(rawCsp: string | null): boolean {
   return /\b(?:report-uri|report-to)\b/i.test(rawCsp);
 }
 
+/**
+ * Extract the group-name referenced by CSP `report-to <name>`.
+ * Returns null if the directive is absent. Spec allows
+ * multiple `report-to` directives but only the FIRST is
+ * honoured by browsers — match the first occurrence.
+ */
+function cspReportToGroup(rawCsp: string | null): string | null {
+  if (rawCsp === null) return null;
+  for (const seg of rawCsp.split(';')) {
+    const trimmed = seg.trim();
+    if (/^report-to\s/i.test(trimmed)) {
+      const value = trimmed.slice('report-to'.length).trim();
+      // value is one or more group-name tokens; first wins.
+      const firstToken = value.split(/\s+/)[0];
+      if (firstToken) return firstToken;
+    }
+  }
+  return null;
+}
+
+/**
+ * True if the URL is an absolute http(s) URL (vs same-origin
+ * path like `/reports`). Used to gate the http-only check —
+ * same-origin paths inherit the page origin's scheme.
+ */
+function isAbsoluteUrl(u: string): boolean {
+  return /^https?:\/\//i.test(u);
+}
+
 export function buildReportingEndpointsSnapshot(
   pageUrl: string,
   headers: Record<string, string> | undefined,
@@ -212,6 +241,65 @@ export function detectReportingEndpointsIssues(
       kind: 'reporting.csp-report-uri-no-endpoints',
       detail: `Content-Security-Policy includes 'report-uri' or 'report-to' directive but no Reporting-Endpoints / Report-To header is set up to receive the reports. They go nowhere. Pair the CSP directive with a Reporting-Endpoints header.`,
       evidence: { rawCsp: (snap.rawCsp ?? '').slice(0, 200) },
+    });
+  }
+
+  // T76 cycle 64: cross-consistency check — CSP `report-to
+  // <name>` references a group name that doesn't exist in the
+  // Reporting-Endpoints header. Silent-failure mode: the
+  // policy is set up but reports go nowhere because the
+  // group name is a typo.
+  const cspGroup = cspReportToGroup(snap.rawCsp);
+  if (cspGroup !== null && hasModern) {
+    const declaredNames = new Set(snap.endpoints.map((e) => e.name));
+    if (!declaredNames.has(cspGroup)) {
+      out.push({
+        severity: 'warn',
+        kind: 'reporting.csp-group-undeclared',
+        detail: `Content-Security-Policy includes 'report-to ${cspGroup}' but the Reporting-Endpoints header declares no group named '${cspGroup}'. Browsers silently drop the violation reports. Declared groups: ${Array.from(declaredNames).map((n) => `'${n}'`).join(', ') || '(none)'}. Fix: rename the CSP group OR add 'Reporting-Endpoints: ${cspGroup}="<url>"'.`,
+        evidence: {
+          cspGroup,
+          declaredGroups: Array.from(declaredNames),
+        },
+      });
+    }
+  }
+
+  // T76 cycle 64: orphan endpoint declarations. Reporting-
+  // Endpoints declares a group that NO CSP directive references.
+  // Less severe than the undeclared case — reports for that
+  // group are unreachable, but a CSP-less group might be used
+  // by other directives (Document-Policy, COOP, COEP) which
+  // we can't yet inspect from the same snapshot. Warn but not
+  // strict; future cycle wires in cross-directive analysis.
+  if (hasModern && cspGroup !== null) {
+    const orphans = snap.endpoints
+      .map((e) => e.name)
+      .filter((n) => n !== cspGroup);
+    if (orphans.length > 0) {
+      out.push({
+        severity: 'warn',
+        kind: 'reporting.endpoint-orphan',
+        detail: `Reporting-Endpoints declares group(s) ${orphans.map((n) => `'${n}'`).join(', ')} that no CSP 'report-to' directive references. Reports for these groups will never fire unless another policy (Document-Policy, COOP, COEP, NEL) names them. Either reference the group or remove the orphan declaration.`,
+        evidence: { orphans, cspGroup },
+      });
+    }
+  }
+
+  // T76 cycle 64: non-HTTPS endpoint URL in production. Same-
+  // origin paths (`/reports`) are scheme-inherited, so OK —
+  // only flag explicit http:// URLs.
+  const insecureEndpoints = snap.endpoints.filter(
+    (e) => isAbsoluteUrl(e.url) && e.url.toLowerCase().startsWith('http://'),
+  );
+  if (insecureEndpoints.length > 0) {
+    out.push({
+      severity: 'warn',
+      kind: 'reporting.endpoint-not-https',
+      detail: `${insecureEndpoints.length} Reporting-Endpoints URL(s) use plaintext http:// — reports leak in transit and can be tampered with by network-position attackers. Use https://, or a same-origin path that inherits the page origin scheme. Affected: ${insecureEndpoints.map((e) => `'${e.name}'`).join(', ')}.`,
+      evidence: {
+        endpoints: insecureEndpoints.map((e) => ({ name: e.name, url: e.url })),
+      },
     });
   }
 
