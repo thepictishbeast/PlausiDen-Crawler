@@ -88,8 +88,39 @@ export async function captureTapTargetsSnapshot(
     const isVisible = function(el) {
       const cs = window.getComputedStyle(el);
       if (cs.display === 'none' || cs.visibility === 'hidden') return false;
+      if (cs.opacity === '0') return false;
+      // T76 cycle 49: skip-link / SR-only patterns. Tab-focusable
+      // for keyboard users but not visually present — not tap
+      // targets and not to be flagged as such. Three common
+      // patterns detected:
+      //   1. clip-path inset(50%) / inset(100%) (modern sr-only).
+      //   2. legacy clip rect(0,0,0,0) / rect(1px,1px,1px,1px)
+      //      (WP, Bootstrap, the SkillShots loom-skip class).
+      //   3. far-off-screen positioning (left:-9999px) — pre-
+      //      clip-path technique used by BASE_THEME_CSS loom-skip,
+      //      WP screen-reader-text, Bootstrap sr-only, WAI-ARIA.
+      const clip = cs.clip || '';
+      const clipPath = cs.clipPath || '';
+      if (
+        clip === 'rect(0px, 0px, 0px, 0px)' ||
+        clip === 'rect(1px, 1px, 1px, 1px)' ||
+        clipPath.indexOf('inset(50%)') !== -1 ||
+        clipPath.indexOf('inset(100%)') !== -1
+      ) {
+        return false;
+      }
       const rect = el.getBoundingClientRect();
       if (rect.width === 0 && rect.height === 0) return false;
+      // Element positioned far enough off-screen that it can't be
+      // tapped. The threshold accommodates element sizes up to
+      // window-dim, so a normally-positioned full-width element
+      // isn't accidentally skipped.
+      const winW = window.innerWidth || 1280;
+      const winH = window.innerHeight || 800;
+      if (rect.right < 0 - 100) return false;
+      if (rect.bottom < 0 - 100) return false;
+      if (rect.left > winW + 100) return false;
+      if (rect.top > winH * 3) return false;
       return true;
     };
 

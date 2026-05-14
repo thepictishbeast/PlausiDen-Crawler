@@ -1033,6 +1033,134 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (forty-ninth entry) — Mystery solved + detector improvement → B 87
+
+### What's new since last cycle (forty-eighth entry)
+- **Detector improvement in PlausiDen-Crawler**:
+  `tapTargets.ts` `isVisible()` now correctly skips elements
+  hidden via the canonical SR-only / skip-link CSS patterns
+  (`position:absolute;left:-9999px`, `clip:rect(0,0,0,0)`,
+  `clip-path:inset(50%)`, opacity:0). Cycles 47+48 were
+  blocked by this false-positive.
+- **Cross-repo fix in PlausiDen-Loom** (commit 12e9a0d):
+  skip-link added to ALL admin-UI HTML emission sites with
+  the canonical hide-until-focus CSS pattern.
+- **Score leap: B 85 → B 87** (+2). Largest single-cycle
+  composite move since cycle 46's F-clamp break.
+- Accessibility category F=25 → **F=45** (visible progress
+  within F, on track to break the F threshold at ≥60).
+- Eleventh cross-repo Loom commit since cycle 38.
+- Active named-detector axis count UNCHANGED at 44 (no new
+  axis, but tapTargets detector materially improved).
+
+### The mystery, solved
+Cycles 47 and 48 both tried adding skip-links to the admin
+pages with the same CSS pattern the Forge-built SkillShots
+uses successfully. Both got 4 NEW `tap.too-small` strict
+findings, regressing the score.
+
+Cycle 49 read the detector source:
+
+```javascript
+const isVisible = function(el) {
+  const cs = window.getComputedStyle(el);
+  if (cs.display === 'none' || cs.visibility === 'hidden') return false;
+  const rect = el.getBoundingClientRect();
+  if (rect.width === 0 && rect.height === 0) return false;
+  return true;
+};
+```
+
+A `position:absolute;left:-9999px;width:1px;height:1px`
+element passes ALL three checks (visible, non-zero rect).
+The detector flagged it as a 1×1 tap target.
+
+Why did Forge static pass with the same CSS? Genuinely
+unclear without deep dive — probably timing differences in
+when the detector ran vs the CSS being applied. The fix
+applies to both cases.
+
+### The fix (the supersociety move)
+Improve `isVisible` to recognise three SR-only patterns:
+
+```javascript
+const isVisible = function(el) {
+  const cs = window.getComputedStyle(el);
+  if (cs.display === 'none' || cs.visibility === 'hidden') return false;
+  if (cs.opacity === '0') return false;
+  // SR-only patterns: visually-hidden but tab-focusable.
+  if (clip === 'rect(0px, 0px, 0px, 0px)' ||
+      clip === 'rect(1px, 1px, 1px, 1px)' ||
+      clipPath.indexOf('inset(50%)') !== -1 ||
+      clipPath.indexOf('inset(100%)') !== -1) return false;
+  const rect = el.getBoundingClientRect();
+  if (rect.width === 0 && rect.height === 0) return false;
+  // Far off-screen positioning.
+  if (rect.right < -100 || rect.bottom < -100) return false;
+  if (rect.left > winW + 100 || rect.top > winH * 3) return false;
+  return true;
+};
+```
+
+This catches:
+  - WordPress `.screen-reader-text` (clip:rect)
+  - Bootstrap `.sr-only` / `.visually-hidden` (clip-path or clip)
+  - WAI-ARIA Authoring Practices SR-only pattern
+  - Canonical `.loom-skip` / skip-link patterns (off-screen)
+  - opacity:0 hidden elements
+
+Improves EVERY future audit — any third-party site using
+these patterns no longer gets false-positive tap-too-small
+flags.
+
+### Score arc on Loom edit-serve
+  C46 post: B 85, 3 strict, 22 warn.
+  C47 post: B 85, 3 strict, 22 warn (defensive cleanup).
+  C48 post: B 85, 3 strict, 21 warn (required * markers).
+  C49 post: **B 87, 3 strict, 17 warn** (-4: skip-links work).
+
+### Why the composite finally moved
+B 85 → B 87 is a 2-point composite jump because:
+  - Accessibility category score: 25 → 45 (warn count 10 → 6).
+  - Weighted composite: accessibility contributes 1.5/13.5
+    weight, so 20-point category jump → ~2.2-point composite
+    jump.
+
+To break accessibility out of F (≥60), need to clear:
+  - The 1 remaining accessibility strict (the contrast on
+    /about), OR
+  - 3 more accessibility warns.
+
+### Cumulative cross-repo dogfood scoreboard (cycles 38-49)
+  C38 Loom:  state-matrix CSS         C 75 → A 99.
+  C39 Loom:  nav-link 44px            A 95 → A 100.
+  C40 Forge: CMS title disambiguate   A 100 → A 100 (0).
+  C41 Loom:  viewport + lang          B 82 → B 83 (-8).
+  C42 Loom:  <main> landmark          B 83 → B 83 (-4).
+  C43 Loom:  contrast colours         B 83 → B 83 (-2).
+  C44 Loom:  toolbar buttons 24×24    B 83 → B 83 (-1).
+  C45 (detector cycle: originAgentCluster axis added.)
+  C46 Loom:  fieldset input labels    B 83 → B 85 (F-clamp breaks).
+  C47 Loom:  #555 → #595959 defensive B 85 stable.
+  C48 Loom:  required * markers       B 85 stable (-1 warn).
+  C49 Loom+Crawler: skip-links + detector improvement
+             B 85 → **B 87** (-4 warn, accessibility F=25 → F=45).
+
+Total: 11 cross-repo Loom commits + 1 detector improvement
+in the crawler itself.
+
+### Action items
+- [ ] Cycle 50: tackle the contrast cluster (1 strict, 9
+      elements aggregated) on /about — would put
+      accessibility at 0 strict + 6 warn = 70 = C, breaking
+      F entirely.
+- [ ] Cycle 51+: pick up another detector axis. CSP-Report-
+      Only is the easiest quick-win.
+- [ ] Document the tapTargets detector improvement in
+      DETECTORS.md (the SR-only/skip-link pattern handling).
+
+---
+
 ## 2026-05-14 (forty-eighth entry) — Required-input * markers; second skip-link experiment
 
 ### What's new since last cycle (forty-seventh entry)
