@@ -1033,6 +1033,112 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (fifty-third entry) — Loom edit-serve A 95: ZERO strict, first clean audit
+
+### What's new since last cycle (fifty-second entry)
+- **Cross-repo fix in PlausiDen-Loom** (commit 61e48df):
+  Moved page-specific `<style>` blocks from inside `<main>` to
+  the head context (before `<body>`). Touched all four admin
+  page handlers: serve_uploads_gallery, serve_edit_form,
+  tutorial, and the edit-index.
+- **Score: A 93 → A 95** (+2). **Total strict: 0** (first time
+  the dashboard reads strict-free).
+- 16th cross-repo Loom commit since cycle 38.
+- Active named-detector axis count UNCHANGED at 44.
+
+### The defect
+The pattern in every emission was:
+
+```rust
+body.push_str("...<body><main id=main>");   // (1)
+body.push_str("<style>body{...}</style>");  // (2) — INSIDE main
+body.push_str("<h1>uploads</h1>...");
+```
+
+The crawler's `uiOverflow.text-clipped` strict was flagging the
+raw CSS text inside the second `<style>` as content overflowing
+its container, because:
+- the page-shell rule from BASE_THEME_CSS sets `max-width:48rem`
+  on `body` (and thus `<main>`),
+- raw `<style>` source can be a few KB of CSS text wider than 48rem
+  when not wrapped, and
+- the HTML5 parser keeps `<style>` content as text inside the
+  surrounding flow context (here, `<main>`).
+
+### The fix
+Restructured the prefix in four handlers so `<body>` opens AFTER
+both `<style>` blocks (skip-link + page-specific) are emitted:
+
+```rust
+body.push_str("...<title>uploads</title>\
+               <style>.loom-skip-edit{...}</style>");
+body.push_str("<style>body{...}</style>");
+body.push_str("<body><a class=loom-skip-edit href=#main>\
+               Skip to main content</a><main id=main>");
+```
+
+HTML5 implicit-close means `</head>` is elided, but the parser
+treats content after `<title>` as head context until the first
+non-metadata element. `<style>` IS metadata; `<body>` is the
+transition. So pushing both styles before `<body>` keeps them
+in head where they belong.
+
+Also added `box-sizing:border-box` to the file input (defense
+vs. 100%-width + padding overflow — same fix that landed for
+the slug field in cycle 51).
+
+### Score arc (cycles 41-53)
+  C41 pre:  B 82, 19 strict, accessibility F=0.
+  C46:      B 85, 3 strict (F-clamp accessibility BREAKS).
+  C49:      B 87, 3 strict (skip-link works after detector fix).
+  C50:      B 89, 2 strict (accessibility F → C=70).
+  C51:      A 91, 1 strict (uxHygiene F=10 → F=35).
+  C52a:     A 90, 2 strict (uxHygiene → C=70, reliability bugs unmasked).
+  C52b:     A 93, 1 strict (reliability bugs fixed, A=100).
+  C53:      **A 95, 0 strict.** First strict-free audit!
+
+### What's left (0 strict + 10 warn)
+- 3× inline-script warns on contentSecurity (would need CSP
+  nonces or hashes for the `<style>` and `<script>` tags —
+  Trusted Types / CSP-Report-Only as a next-level pivot).
+- 6× accessibility warns (form-labels + tap-targets).
+- 1× cross-page-meta-description warn (acknowledged — all admin
+  pages share one description string by design).
+
+### Cumulative cross-repo dogfood scoreboard (cycles 38-53)
+  C38 Loom:  state-matrix CSS         C 75 → A 99.
+  C39 Loom:  nav-link 44px            A 95 → A 100.
+  C40 Forge: CMS title disambiguate   A 100 → A 100 (0).
+  C41-44 Loom (4 cycles):              B 82 → B 83 (-15 strict).
+  C45 (originAgentCluster axis added.)
+  C46 Loom:  fieldset labels          B 83 → B 85 (F-clamp BREAKS).
+  C47 Loom:  defensive cleanup        B 85 stable.
+  C48 Loom:  required * markers       B 85 (-1 warn).
+  C49 Loom+Crawler: skip-link + DETECTOR FIX → B 87.
+  C50 Loom:  fieldset button colour   B 87 → B 89 (F-clamp BREAKS again).
+  C51 Loom:  box-sizing + slug cleanup B 89 → A 91 (GRADE A reached!).
+  C52a Loom: favicon + meta-desc      A 91 → A 90 (bugs unmasked).
+  C52b Loom: subtitle alias + skin fallback A 90 → A 93.
+  C53 Loom:  style-out-of-main        A 93 → **A 95 (ZERO STRICT)**.
+
+Total: 16 cross-repo Loom commits + 1 Forge + 1 crawler
+detector improvement.
+
+### Action items
+- [ ] Cycle 54: contentSecurity B=85 — emit CSP `style-src
+      'self' 'sha256-...'` with per-page style block hashes.
+      Eliminates the 3 inline-script warns; pushes
+      contentSecurity to A.
+- [ ] Cycle 55: tap-targets accessibility — bump admin button
+      heights to ≥44px to clear the WCAG 2.1 AAA warns.
+- [ ] Cycle 56: open a Trusted-Types runtime monitor detector
+      to surface DOM-XSS sinks for future hardening.
+- [ ] Cycle 57: deeper bug-finder mode — `--no-baseline`
+      flag for the crawler that reports the full extant
+      finding set, not just deltas.
+
+---
+
 ## 2026-05-14 (fifty-second entry) — Loom edit-serve A 93: favicon + meta-desc + 2 unmasked bug fixes
 
 ### What's new since last cycle (fifty-first entry)
