@@ -191,6 +191,17 @@ Source: `src/skipLink.ts` · Rust: `skip_link.rs`
 
 Heuristic for "what counts as a skip link": text matches `/skip/i` or `/jump.{0,4}content/i`, OR class contains `skip`, OR is one of the first 3 anchors with href targeting a `<main>` / `id="main"` / `id="content"` element.
 
+### `autocomplete` — form autocomplete attribute hints *(T76 — added 2026-05-14)*
+Source: `src/autocomplete.ts` · Rust: `autocomplete.rs`
+
+| Finding | Sev | Catches |
+|---|---|---|
+| `autocomplete.missing-credentials` | strict | Credential field (email / password / username / login) without `autocomplete=` attribute. Password managers can't save/fill. WCAG 1.3.5 AA. |
+| `autocomplete.missing-pii` | warn | PII field (name / phone / address / postal-code / DOB / credit-card) without `autocomplete=`. Slower form-fill, higher abandonment. |
+| `autocomplete.invalid-token` | warn | Attribute value isn't `on`/`off`/a WHATWG token. Browser ignores it. |
+
+Multi-token (`shipping street-address`) and section-prefixed (`section-billing cc-number`) values are accepted. Field type takes precedence over name/id heuristics: `type=email` is always credential; `type=tel` is always PII.
+
 ### `outboundLinks` — outbound-link safety *(T76 — added 2026-05-14)*
 Source: `src/outboundLinks.ts` · Rust: `outbound_links.rs`
 
@@ -313,8 +324,6 @@ zero-overlap with existing axes:
   text (no underline + colour-only differentiation, fails WCAG 1.4.1).
 - **`fontLoading`** — `font-display: swap` missing → invisible-text
   flash (FOIT).
-- **`autocomplete`** — login/email/address forms missing
-  `autocomplete` attribute hints.
 - **`crossPageTitleDup`** — same `<title>` on every page of a
   multi-step journey. (Aggregates-layer detector — operates on
   the run report, not per-page snapshot.)

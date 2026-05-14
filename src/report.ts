@@ -33,7 +33,8 @@ export interface CapturedEvent {
     | 'doc-title'
     | 'html-lang'
     | 'skip-link'
-    | 'outbound-links';
+    | 'outbound-links'
+    | 'autocomplete';
   level?: string;
   text: string;
   url?: string;
@@ -82,6 +83,8 @@ export interface Report {
     skipLinkFindingsStrict: number;
     outboundLinksFindings: number;
     outboundLinksFindingsStrict: number;
+    autocompleteFindings: number;
+    autocompleteFindingsStrict: number;
     cspViolations: number;
     total: number;
     stepsOk: number;
@@ -221,6 +224,12 @@ export interface Diff {
    * Security defence-in-depth. T76.
    */
   newOutboundLinksFindings: CapturedEvent[];
+  /**
+   * autocomplete findings new in this run vs prior. Strict =
+   * missing on credential field. Warn = missing on PII or invalid
+   * token. WCAG 1.3.5 AA. T76.
+   */
+  newAutocompleteFindings: CapturedEvent[];
   newlyBrokenSteps: StepResult[];
   fixedSteps: StepResult[];
 }
@@ -256,6 +265,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     newHtmlLangFindings: [],
     newSkipLinkFindings: [],
     newOutboundLinksFindings: [],
+    newAutocompleteFindings: [],
     newlyBrokenSteps: [],
     fixedSteps: [],
   };
@@ -282,6 +292,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     out.newHtmlLangFindings = current.events.filter(e => e.kind === 'html-lang');
     out.newSkipLinkFindings = current.events.filter(e => e.kind === 'skip-link');
     out.newOutboundLinksFindings = current.events.filter(e => e.kind === 'outbound-links');
+    out.newAutocompleteFindings = current.events.filter(e => e.kind === 'autocomplete');
     return out;
   }
   const priorKeys = new Set(prior.events.map(key));
@@ -309,6 +320,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     else if (e.kind === 'html-lang') out.newHtmlLangFindings.push(e);
     else if (e.kind === 'skip-link') out.newSkipLinkFindings.push(e);
     else if (e.kind === 'outbound-links') out.newOutboundLinksFindings.push(e);
+    else if (e.kind === 'autocomplete') out.newAutocompleteFindings.push(e);
   }
   const priorStepLabels = new Map(
     prior.steps.map((s, i) => [s.step.label || `${s.step.kind}-${i}`, s])
@@ -470,6 +482,14 @@ export function renderPositiveSignal(report: Report, diff: Diff): string {
       total: report.events.filter((e) => e.kind === 'outbound-links').length,
       news: diff.newOutboundLinksFindings.length,
       strictNews: strict(diff.newOutboundLinksFindings),
+    },
+    {
+      // T76 (Crawler): autocomplete — WCAG 1.3.5 AA. Strict on
+      // missing for credential fields; warn on PII / invalid token.
+      name: 'autocomplete',
+      total: report.events.filter((e) => e.kind === 'autocomplete').length,
+      news: diff.newAutocompleteFindings.length,
+      strictNews: strict(diff.newAutocompleteFindings),
     },
   ];
   const lines: string[] = [];

@@ -39,6 +39,7 @@
 
 use serde::{Deserialize, Serialize};
 
+pub mod autocomplete;
 pub mod css_health;
 pub mod doc_title;
 pub mod form_labels;

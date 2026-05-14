@@ -39,6 +39,7 @@ import { captureDocTitleSnapshot, detectDocTitleIssues, type DocTitleFinding } f
 import { captureHtmlLangSnapshot, detectHtmlLangIssues, type HtmlLangFinding } from './htmlLang.js';
 import { captureSkipLinkSnapshot, detectSkipLinkIssues, type SkipLinkFinding } from './skipLink.js';
 import { captureOutboundLinksSnapshot, detectOutboundLinkIssues, type OutboundLinkFinding } from './outboundLinks.js';
+import { captureAutocompleteSnapshot, detectAutocompleteIssues, type AutocompleteFinding } from './autocomplete.js';
 
 interface Budget {
   newConsoleErrors: number;
@@ -920,8 +921,38 @@ async function main(args: string[]): Promise<number> {
   };
 
   /**
+   * T76: form autocomplete-attribute detector. WCAG 1.3.5
+   * (Identify Input Purpose, AA). Strict on missing autocomplete
+   * for credential fields (email/password/username); warn on
+   * missing for PII (name/phone/address/etc.) or invalid tokens.
+   */
+  const autocompleteFindingsByStep: Array<{ stepLabel: string; pageUrl: string; findings: AutocompleteFinding[] }> = [];
+  const checkAutocomplete = async (afterLabel: string) => {
+    try {
+      const snap = await captureAutocompleteSnapshot(page);
+      const findings = detectAutocompleteIssues(snap);
+      autocompleteFindingsByStep.push({ stepLabel: afterLabel, pageUrl: snap.pageUrl, findings });
+      for (const f of findings) {
+        log({
+          kind: 'autocomplete',
+          text: `[${f.kind}] ${f.detail}`,
+          url: snap.pageUrl,
+          severity: f.severity,
+          ruleId: f.kind,
+          impact: f.severity === 'strict' ? 'serious' : 'minor',
+        });
+      }
+    } catch (e) {
+      log({
+        kind: 'pageerror',
+        text: `[autocomplete] detector threw on step ${afterLabel}: ${(e as Error).message}`,
+      });
+    }
+  };
+
+  /**
    * T76: outbound-link safety detector. SECURITY-flavoured: catches
-   * tabnabbing-vulnerable target=_blank links (no rel=noopener),
+   * tabbing-vulnerable target=_blank links (no rel=noopener),
    * explicit rel=opener (the worst), and outbound links missing
    * rel=noreferrer (Referer-leak through analytics).
    */
@@ -1402,6 +1433,7 @@ async function main(args: string[]): Promise<number> {
       await checkHtmlLang(step.label || `goto-${i}`);
       await checkSkipLink(step.label || `goto-${i}`);
       await checkOutboundLinks(step.label || `goto-${i}`);
+      await checkAutocomplete(step.label || `goto-${i}`);
       await checkWebVitals(step.label || `goto-${i}`);
     }
     // Memory snapshot at end of each step so the report shows heap growth
@@ -1486,6 +1518,8 @@ async function main(args: string[]): Promise<number> {
       skipLinkFindingsStrict: events.filter(e => e.kind === 'skip-link' && e.severity === 'strict').length,
       outboundLinksFindings: events.filter(e => e.kind === 'outbound-links').length,
       outboundLinksFindingsStrict: events.filter(e => e.kind === 'outbound-links' && e.severity === 'strict').length,
+      autocompleteFindings: events.filter(e => e.kind === 'autocomplete').length,
+      autocompleteFindingsStrict: events.filter(e => e.kind === 'autocomplete' && e.severity === 'strict').length,
       cspViolations: events.filter(e => e.kind === 'csp-violation').length,
       total: events.length,
       stepsOk: stepResults.filter(s => s.ok).length,
@@ -1577,6 +1611,12 @@ async function main(args: string[]): Promise<number> {
       JSON.stringify(outboundLinksFindingsByStep, null, 2),
     );
   }
+  if (autocompleteFindingsByStep.length > 0) {
+    writeFileSync(
+      join(outDir, 'autocomplete.json'),
+      JSON.stringify(autocompleteFindingsByStep, null, 2),
+    );
+  }
   writeFileSync(join(outDir, 'report.json'), JSON.stringify(report, null, 2));
   // Write a terminal-friendly summary too so CI output is useful at a glance.
   writeFileSync(join(outDir, 'summary.txt'), renderSummary(agg));
@@ -1662,6 +1702,7 @@ async function main(args: string[]): Promise<number> {
   console.log(`  html lang:         ${report.counts.htmlLangFindings} (strict ${report.counts.htmlLangFindingsStrict})`);
   console.log(`  skip link:         ${report.counts.skipLinkFindings} (strict ${report.counts.skipLinkFindingsStrict})`);
   console.log(`  outbound links:    ${report.counts.outboundLinksFindings} (strict ${report.counts.outboundLinksFindingsStrict})`);
+  console.log(`  autocomplete:      ${report.counts.autocompleteFindings} (strict ${report.counts.autocompleteFindingsStrict})`);
   console.log(`  web vitals:        ${report.counts.webVitalsFindings} (strict ${report.counts.webVitalsFindingsStrict})`);
   console.log(`  csp violations:    ${report.counts.cspViolations}`);
   console.log(`  steps ok/failed:   ${report.counts.stepsOk}/${report.counts.stepsFailed}`);
@@ -1710,6 +1751,9 @@ async function main(args: string[]): Promise<number> {
     const newOutboundLinksStrict = diff.newOutboundLinksFindings.filter(e => e.severity === 'strict').length;
     const newOutboundLinksWarn = diff.newOutboundLinksFindings.length - newOutboundLinksStrict;
     console.log(`    NEW outbound links:   ${diff.newOutboundLinksFindings.length} (strict ${newOutboundLinksStrict}, warn ${newOutboundLinksWarn})`);
+    const newAutocompleteStrict = diff.newAutocompleteFindings.filter(e => e.severity === 'strict').length;
+    const newAutocompleteWarn = diff.newAutocompleteFindings.length - newAutocompleteStrict;
+    console.log(`    NEW autocomplete:     ${diff.newAutocompleteFindings.length} (strict ${newAutocompleteStrict}, warn ${newAutocompleteWarn})`);
     console.log(`    NEW csp violations:   ${diff.newCspViolations.length}`);
     console.log(`    newly broken steps:   ${diff.newlyBrokenSteps.length}`);
     console.log(`    fixed steps:          ${diff.fixedSteps.length}`);
