@@ -1033,6 +1033,97 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (eighty-third entry) — SUPERSOCIETY_DATALOSS.md — companion doc to cycle 77
+
+### What's new since last cycle (eighty-second entry)
+- **`docs/SUPERSOCIETY_DATALOSS.md`** (447 lines): companion
+  to cycle 77's SUPERSOCIETY_OBSERVABILITY.md. Documents the
+  4-layer operator-data-loss prevention ladder built across
+  cycles 79-82.
+- Aggregate badge holds at **A 100/100 (16)**.
+- All Tier-6 layers (property + mutation + drift) still pass.
+
+### What the doc covers
+- TL;DR diagram of the 4-layer prevention ladder + the 3
+  data-loss vectors each layer defends.
+- **The doctrine**: data loss = security regression. Same
+  defense-in-depth structure as the cycle 77 observability
+  stack, applied to a different threat axis.
+- Layer-by-layer breakdown:
+  - **Layer 1 (cycle 79)**: browser-level — Cmd-S +
+    dirty indicator + beforeunload guard.
+  - **Layer 2 (cycle 82)**: mid-edit — localStorage draft
+    autosave + restore banner.
+  - **Layer 3 (cycle 80)**: file-level — auto-backup
+    .bak.<unix>.<nanos>.json + LRU retention.
+  - **Layer 4 (cycle 81)**: operator UX — `loom revisions`
+    list / show / diff / restore.
+- "Operating the system" runbook for 5 common scenarios
+  (accidentally closed tab, browser crash, regretted save,
+  backup count, disk filling).
+- **"What this still isn't"**: explicit named gaps — no
+  cross-device sync, no concurrent-edit conflict detection,
+  line-set diff not Myers, no timestamp-based picking, drafts
+  unencrypted. AVP-2 doctrine: ship explicit risk acceptance,
+  not silent omission.
+- File index mapping every cited file to purpose + cycle.
+
+### The companion-doc pattern is now established
+Two full design+ops manuals on supersociety doctrine, one
+per major threat axis:
+- `SUPERSOCIETY_OBSERVABILITY.md` (cycle 77, 513 lines):
+  security-telemetry pipeline (6-layer
+  detect→enforce→report→COLLECT→audit→REVIEW).
+- `SUPERSOCIETY_DATALOSS.md` (cycle 83, 447 lines):
+  operator-data-loss prevention (4-layer
+  browser→mid-edit→file→UX).
+
+Both are written for a new reader, both have a "what this
+still isn't" section that names gaps without pretending
+otherwise, both reference DOGFOOD_RUNS.md as the historical
+playback companion.
+
+### Why the doc matters
+The data-loss work spans 4 cycles + 1 doc. A new contributor
+adding a new mutation path needs to know:
+- Where to call `save_cms_revision()` (BEFORE
+  `cap.write_atomic`).
+- That the CSP hash auto-regenerates on JS changes (so
+  EDIT_PAGE_JS extensions are safe).
+- That Trusted-Types is enforced (so DOM construction must
+  avoid `innerHTML`).
+- Why the localStorage TTL is 7 days, why retention is 10,
+  why restore creates a NEW backup before overwriting.
+
+All those design decisions live in the doc; the source code
+references them. Future maintenance is guided, not
+spelunked.
+
+### Score arc (cycles 41-83)
+  C82: aggregate A 100/100 (16) — 3rd data-loss vector closed.
+  C83: aggregate A 100/100 (16) — knowledge transfer for the
+       data-loss ladder.
+
+### Cumulative cross-repo dogfood scoreboard (cycles 38-83)
+  36 Loom commits + 3 Forge + 1 Sentinel-GUI + **14 crawler
+  enhancements** + 4 E2E suites + property + mutation + drift
+  test suites + meta-runner + 2 design+ops manuals.
+
+### Action items
+- [ ] Cycle 84: drag-drop section reorder (HTML5 drag events,
+      no library; respect Trusted-Types — build the visual
+      affordance via createElement, never innerHTML).
+- [ ] Cycle 85: section-level "open in new tab" preview
+      (`/preview-edit/<slug>.html#sec-<i>`).
+- [ ] Cycle 86: pre-push git hook for `npm run test:meta`
+      (still pending from cycle 78).
+- [ ] Cycle 87: `loom revisions --all-slugs` system-wide
+      change feed.
+- [ ] Cycle 88: hand-rolled diff in cycle 81 → JSON-aware
+      semantic diff for CMS JSON files.
+
+---
+
 ## 2026-05-14 (eighty-second entry) — localStorage drafts close the 3rd data-loss vector
 
 ### What's new since last cycle (eighty-first entry)
