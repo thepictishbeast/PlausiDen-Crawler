@@ -1033,6 +1033,79 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (eightieth entry) — CMS revision history — auto-backup on every save
+
+### What's new since last cycle (seventy-ninth entry)
+- **Cross-repo Loom fix** (commit f267e52): every save of
+  `cms/<slug>.json` now snapshots the prior content to a
+  sibling `cms/<slug>.bak.<unix_secs>.<nanos>.json` before
+  overwriting.
+- Per-slug retention: default 10 revisions, LRU prune older.
+  `LOOM_CMS_REVISIONS_KEEP` env override.
+- Wired into 4 mutation paths: whole-page save, add-section,
+  inline-edit single-field, section ops (up/down/delete/
+  append-paragraph).
+- Smoke-test confirmed: 14 saves → exactly 10 .bak files
+  retained, oldest pruned chronologically.
+- Aggregate badge holds at **A 100/100 (16)**.
+
+### Why this matters
+Cycle 79 prevented operator data loss at the BROWSER level
+(Cmd-S + unsaved-changes warning). Cycle 80 prevents it at
+the FILE level — a botched edit / accidental paste-over /
+unintended delete is now reversible without git.
+
+The supersociety doctrine treats operator data loss as a
+security-class concern. The cycle 80 backup is the file-
+level analog of:
+- Cycle 63's `/csp-report` endpoint (capture-everything-
+  important before it vanishes).
+- Cycle 71's collector-log rotation (size-bounded backup).
+- Cycle 70's `loom report-tail` (operator-readable view).
+
+### Format
+```
+cms/
+  about.json                              ← live, mutable
+  about.bak.1736380800.123456789.json     ← rev N
+  about.bak.1736381900.456789123.json     ← rev N-1
+  ...
+```
+
+Sortable lexically = chronologically per the fixed-width
+unix-secs.nanos suffix (matches cycle 71's collector
+rotation pattern). Restore is `cp` away:
+```
+cp cms/about.bak.1736380800.123.json cms/about.json
+```
+
+### Failure modes
+Backup write failure logs to stderr but NEVER blocks the
+save. Lost revisions are a backup problem; a lost SAVE
+is intolerable. Same doctrine as cycle 69's rate-limited
+collector (still return 204; never retry-storm).
+
+### Score arc (cycles 41-80)
+  C79: aggregate A 100/100 (16) — Cmd-S + dirty indicator.
+  C80: aggregate A 100/100 (16) — file-level data-loss prevention.
+
+### Cumulative cross-repo dogfood scoreboard (cycles 38-80)
+  34 Loom commits + 3 Forge + 1 Sentinel-GUI + 13 crawler
+  enhancements + 3 E2E suites + property + mutation + drift
+  test suites + meta-runner + design+ops manual.
+
+### Action items
+- [ ] Cycle 81: `loom revisions <slug>` CLI to list /
+      diff / restore without manual `cp`.
+- [ ] Cycle 82: localStorage draft persistence — save form
+      state every 5s; restore on page load if a draft exists.
+- [ ] Cycle 83: drag-drop section reorder.
+- [ ] Cycle 84: section-level "open in new tab" preview.
+- [ ] Cycle 85: pre-push git hook for `npm run test:meta`
+      (still pending from cycle 78).
+
+---
+
 ## 2026-05-14 (seventy-ninth entry) — Editor UX: Cmd-S + unsaved-changes warning
 
 ### What's new since last cycle (seventy-eighth entry)
