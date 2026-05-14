@@ -1033,6 +1033,89 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (seventy-eighth entry) — Drift detector v2 finds 4 more silent bugs
+
+### What's new since last cycle (seventy-seventh entry)
+- **Drift detector extended** with 2 new cross-checks
+  against `report.ts`'s `CapturedEvent` type union:
+  - Check #5: every `KIND_TO_CATEGORY` entry must be in
+    the type union.
+  - Check #6: every type-union kind must be in
+    `KIND_TO_CATEGORY`.
+- **4 silent bugs FIXED** on first run of the new check:
+  `blank-main`, `error-boundary-visible`, `stuck-loading`,
+  `ui-error-text` — kinds mapped to score categories in
+  cycle 73 but missing from the `CapturedEvent` type union.
+  Production callers used `as CapturedEvent` casts to
+  bypass the type check, hiding the drift.
+- 7 drift checks pass total. Aggregate badge holds at
+  **A 100/100 (16)**.
+
+### The discovery
+Cycle 73 added the 5 missing kinds to `KIND_TO_CATEGORY`.
+But cycle 73 didn't update `CapturedEvent.kind` — the type
+union in report.ts. Production code that called
+`log({ kind: 'blank-main', ... })` had to use `as
+CapturedEvent` casts (or a wider parameter type on `log()`)
+to bypass the typecheck.
+
+The cycle 74 drift detector caught the kind→category gap
+but couldn't see the type-union gap (it didn't read
+report.ts). The cycle 78 extension reads report.ts, extracts
+the type union, and runs both directions:
+
+```
+mapped ⊆ typed   (every map entry must be a typed kind)
+typed ⊆ mapped   (every typed kind must be mapped)
+```
+
+The first direction failed on first run with 4 entries —
+exactly the 4 cycle-73 additions. Fix: add them to the
+union too. After fix, all 7 drift checks pass.
+
+### The Tier-6 stack now catches THREE silent-drift classes
+```
+1. Emitted-but-unmapped  (cycle 74)
+   kind logged in source but no category — events fall
+   into `unbucketed` and silently never penalize.
+
+2. Mapped-but-untyped    (cycle 78, NEW)
+   kind has score weight but isn't in the type union —
+   `as` cast papers over the gap; future strict-type
+   refactors lose silently.
+
+3. Typed-but-unmapped    (cycle 78, NEW)
+   kind in the type union with no mapping — silent score
+   inflation in disguise; the type promises the kind
+   exists, but events with it never penalize.
+```
+
+All three classes now machine-checked. `npm run test:meta`
+runs all three + the property suite + the mutation suite
+in one shot.
+
+### Score arc (cycles 41-78)
+  C77: aggregate A 100/100 (16) — knowledge transfer doc.
+  C78: aggregate A 100/100 (16) — drift detector v2;
+       4 more silent bugs surfaced + fixed.
+
+### Cumulative cross-repo dogfood scoreboard (cycles 38-78)
+  32 Loom commits + 3 Forge + 1 Sentinel-GUI + **13 crawler
+  enhancements** + 3 E2E suites + property + mutation +
+  drift suites + meta-runner + design+ops manual.
+
+### Action items
+- [ ] Cycle 79: pre-push git hook for `npm run test:meta`
+      (operator opt-in via `loom hooks-install`).
+- [ ] Cycle 80: extend dogfood loop to a new HTTP surface
+      (orchestrator, BleachBit-bridge, or similar).
+- [ ] Cycle 81: tighten `extractKinds` in drift detector
+      to ALSO capture kinds passed via variables (e.g.
+      `log({ kind: this.detectorName, ... })` — currently
+      only literals are walked).
+
+---
+
 ## 2026-05-14 (seventy-seventh entry) — SUPERSOCIETY_OBSERVABILITY.md — design + ops manual
 
 ### What's new since last cycle (seventy-sixth entry)
