@@ -42,6 +42,7 @@ export interface CapturedEvent {
     | 'x-frame-options'
     | 'referrer-policy'
     | 'font-loading'
+    | 'cookie-security'
     | 'link-underline'
     | 'cross-page-title'
     | 'cross-page-meta-description';
@@ -109,6 +110,8 @@ export interface Report {
     referrerPolicyFindingsStrict: number;
     fontLoadingFindings: number;
     fontLoadingFindingsStrict: number;
+    cookieSecurityFindings: number;
+    cookieSecurityFindingsStrict: number;
     linkUnderlineFindings: number;
     linkUnderlineFindingsStrict: number;
     crossPageTitleFindings: number;
@@ -303,6 +306,13 @@ export interface Diff {
    */
   newFontLoadingFindings: CapturedEvent[];
   /**
+   * cookie-security findings new in this run vs prior. Strict =
+   * Set-Cookie missing Secure on https / SameSite=None without
+   * Secure. Warn = no SameSite / session-named cookie without
+   * HttpOnly. T76.
+   */
+  newCookieSecurityFindings: CapturedEvent[];
+  /**
    * link-underline findings new in this run vs prior. Warn-only:
    * inline link inside running text distinguished only by colour.
    * WCAG 1.4.1 Level A. T76.
@@ -362,6 +372,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     newXFrameOptionsFindings: [],
     newReferrerPolicyFindings: [],
     newFontLoadingFindings: [],
+    newCookieSecurityFindings: [],
     newLinkUnderlineFindings: [],
     newCrossPageTitleFindings: [],
     newCrossPageMetaDescriptionFindings: [],
@@ -399,6 +410,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     out.newXFrameOptionsFindings = current.events.filter(e => e.kind === 'x-frame-options');
     out.newReferrerPolicyFindings = current.events.filter(e => e.kind === 'referrer-policy');
     out.newFontLoadingFindings = current.events.filter(e => e.kind === 'font-loading');
+    out.newCookieSecurityFindings = current.events.filter(e => e.kind === 'cookie-security');
     out.newLinkUnderlineFindings = current.events.filter(e => e.kind === 'link-underline');
     out.newCrossPageTitleFindings = current.events.filter(e => e.kind === 'cross-page-title');
     out.newCrossPageMetaDescriptionFindings = current.events.filter(e => e.kind === 'cross-page-meta-description');
@@ -437,6 +449,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     else if (e.kind === 'x-frame-options') out.newXFrameOptionsFindings.push(e);
     else if (e.kind === 'referrer-policy') out.newReferrerPolicyFindings.push(e);
     else if (e.kind === 'font-loading') out.newFontLoadingFindings.push(e);
+    else if (e.kind === 'cookie-security') out.newCookieSecurityFindings.push(e);
     else if (e.kind === 'link-underline') out.newLinkUnderlineFindings.push(e);
     else if (e.kind === 'cross-page-title') out.newCrossPageTitleFindings.push(e);
     else if (e.kind === 'cross-page-meta-description') out.newCrossPageMetaDescriptionFindings.push(e);
@@ -668,6 +681,18 @@ export function renderPositiveSignal(report: Report, diff: Diff): string {
       total: report.events.filter((e) => e.kind === 'font-loading').length,
       news: diff.newFontLoadingFindings.length,
       strictNews: strict(diff.newFontLoadingFindings),
+    },
+    {
+      // T76 (Crawler): cookie-security — Set-Cookie missing
+      // Secure (strict on https), SameSite=None without Secure
+      // (strict, browsers reject), missing SameSite (warn —
+      // CSRF on old clients), session-named cookie without
+      // HttpOnly (warn — XSS theft). Localhost exempt; http
+      // skips Secure-attribute check.
+      name: 'cookieSecurity',
+      total: report.events.filter((e) => e.kind === 'cookie-security').length,
+      news: diff.newCookieSecurityFindings.length,
+      strictNews: strict(diff.newCookieSecurityFindings),
     },
     {
       // T76 (Crawler): link-underline — WCAG 1.4.1 (Use of Color, A).

@@ -214,6 +214,53 @@ def invalid_referrer():
     )
 
 
+# ----- Cookie security (Set-Cookie attribute audit) -----
+@route('/cookie-no-secure/')
+def cookie_no_secure():
+    # https + Secure missing → strict cookie.no-secure.
+    # SameSite present so the warn doesn't pile on.
+    return (
+        page('<h1>Cookie set without Secure on https.</h1>'),
+        {'Set-Cookie': 'foo=bar; SameSite=Lax'},
+    )
+
+
+@route('/cookie-no-samesite/')
+def cookie_no_samesite():
+    # No SameSite → warn cookie.no-samesite. Secure present.
+    return (
+        page('<h1>Cookie set without SameSite.</h1>'),
+        {'Set-Cookie': 'foo=bar; Secure'},
+    )
+
+
+@route('/cookie-samesite-none-no-secure/')
+def cookie_samesite_none_no_secure():
+    # SameSite=None without Secure → strict (browsers reject).
+    return (
+        page('<h1>SameSite=None without Secure.</h1>'),
+        {'Set-Cookie': 'cross=ok; SameSite=None'},
+    )
+
+
+@route('/cookie-session-no-httponly/')
+def cookie_session_no_httponly():
+    # Session-named cookie without HttpOnly → warn.
+    return (
+        page('<h1>Session cookie without HttpOnly.</h1>'),
+        {'Set-Cookie': 'sessid=abc; Secure; SameSite=Lax'},
+    )
+
+
+@route('/cookie-clean/')
+def cookie_clean():
+    # Control: every attribute set correctly.
+    return (
+        page('<h1>Cookie clean — Secure + HttpOnly + SameSite=Strict.</h1>'),
+        {'Set-Cookie': 'sid=abc; Secure; HttpOnly; SameSite=Strict; Path=/'},
+    )
+
+
 # ----- mixedContent -----
 @route('/mixed-active/')
 def mixed_active():

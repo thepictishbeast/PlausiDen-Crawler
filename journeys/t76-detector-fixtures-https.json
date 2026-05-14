@@ -15,7 +15,12 @@
     { "kind": "goto", "url": "https://127.0.0.1:8773/mixed-passive/", "label": "mixed-passive" },
     { "kind": "goto", "url": "https://127.0.0.1:8773/no-referrer-policy/", "label": "no-referrer-policy" },
     { "kind": "goto", "url": "https://127.0.0.1:8773/permissive-referrer/", "label": "permissive-referrer" },
-    { "kind": "goto", "url": "https://127.0.0.1:8773/invalid-referrer/", "label": "invalid-referrer" }
+    { "kind": "goto", "url": "https://127.0.0.1:8773/invalid-referrer/", "label": "invalid-referrer" },
+    { "kind": "goto", "url": "https://127.0.0.1:8773/cookie-no-secure/", "label": "cookie-no-secure" },
+    { "kind": "goto", "url": "https://127.0.0.1:8773/cookie-no-samesite/", "label": "cookie-no-samesite" },
+    { "kind": "goto", "url": "https://127.0.0.1:8773/cookie-samesite-none-no-secure/", "label": "cookie-samesite-none-no-secure" },
+    { "kind": "goto", "url": "https://127.0.0.1:8773/cookie-session-no-httponly/", "label": "cookie-session-no-httponly" },
+    { "kind": "goto", "url": "https://127.0.0.1:8773/cookie-clean/", "label": "cookie-clean" }
   ],
   "expectedFindingsByLabel": {
     "control": [],
@@ -29,6 +34,11 @@
     "mixed-passive": ["mixed-content.passive"],
     "no-referrer-policy": ["referrer-policy.missing"],
     "permissive-referrer": ["referrer-policy.permissive"],
-    "invalid-referrer": ["referrer-policy.invalid"]
+    "invalid-referrer": ["referrer-policy.invalid"],
+    "cookie-no-secure": ["cookie.no-secure"],
+    "cookie-no-samesite": ["cookie.no-samesite"],
+    "cookie-samesite-none-no-secure": ["cookie.samesite-none-no-secure"],
+    "cookie-session-no-httponly": ["cookie.session-no-httponly"],
+    "cookie-clean": []
   }
 }

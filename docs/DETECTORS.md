@@ -225,6 +225,24 @@ Multi-token policies are honored per the W3C spec — the LAST recognised token 
 
 **Third response-header detector.** Reads from the same `topLevelResponseHeaders` Map as hsts + xFrameOptions. With three concrete examples now in hand, the ~70% structural overlap is a candidate for a generic `headerDetector(headerName, parser, classifier)` helper — extract on the next addition.
 
+### `cookieSecurity` — Set-Cookie attribute audit *(T76 — added 2026-05-14)*
+Source: `src/cookieSecurity.ts`
+
+| Finding | Sev | Catches |
+|---|---|---|
+| `cookie.no-secure` | strict | https-page response sets a cookie without `Secure`. The cookie can leak over an http downgrade (MITM, mixed content, network rewrite). Add `; Secure`. |
+| `cookie.samesite-none-no-secure` | strict | Cookie carries `SameSite=None` without `Secure`. Browsers REJECT this combination — the cookie is silently discarded. Add `Secure` or change to `Lax`. |
+| `cookie.no-samesite` | warn | Cookie omits `SameSite`. Modern browsers default to `Lax` (safe); older clients leave the cookie unrestricted, exposing the site to CSRF. Set `SameSite=Strict` or `Lax`. |
+| `cookie.session-no-httponly` | warn | Cookie name matches `/sess|sid|auth|token|jwt|bearer/i` AND lacks `HttpOnly`. JS — including injected XSS — can read it via `document.cookie`. Add `HttpOnly`. |
+
+Out of scope: localhost / 127.0.0.1 / `*.localhost` (same exemption family as hsts/xFrameOptions). On http pages the `cookie.no-secure` check is suppressed because Secure can't apply, but `cookie.no-samesite` and `cookie.session-no-httponly` still fire.
+
+Multiple `Set-Cookie` headers per response are supported — Playwright's `allHeaders()` joins them with `\n`, the parser splits on that boundary. Header names and attribute names are matched case-insensitively (`set-cookie` / `Set-Cookie` / `SECURE` / `SameSite=Lax` all work).
+
+**Fourth response-header detector — and the trigger for a deferred refactor.** Reads from the same `topLevelResponseHeaders` Map as hsts + xFrameOptions + referrerPolicy, BUT the per-cookie shape (one response can carry many `Set-Cookie` lines, each with its own attribute set) is genuinely different from the per-header shape the previous three share. A naive `headerDetector(headerName, parser, classifier)` helper would shoe-horn the mismatch — pattern-extraction stays deferred, with a sibling-cycle action item to design a `multiValueHeaderDetector` variant that handles repeat-header semantics first-class.
+
+**Capture-layer fix landed alongside this detector.** Playwright's synchronous `response.headers()` strips `Set-Cookie` (verified empirically against the HTTPS fixture 2026-05-14). The accumulator was switched to `await response.allHeaders()`, which returns the full set including `set-cookie` (lowercase-keyed). Backward-compat for hsts/xframe/referrer is preserved because both forms return lowercase keys for the headers they care about.
+
 ### `xFrameOptions` — clickjacking-defence response header *(T76 — added 2026-05-14)*
 Source: `src/xFrameOptions.ts`
 

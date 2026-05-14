@@ -1033,6 +1033,118 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (twentieth entry) — cookieSecurity detector + Set-Cookie capture fix
+
+### What's new since last cycle (nineteenth entry)
+- 1 new detector axis: **`cookieSecurity`** — Set-Cookie attribute audit. Brings the active-axis count to **32**.
+- 5 new HTTPS fixture routes: `/cookie-no-secure/`,
+  `/cookie-no-samesite/`, `/cookie-samesite-none-no-secure/`,
+  `/cookie-session-no-httponly/`, `/cookie-clean/` (control).
+  HTTPS gate now validates **17/17** routes (was 12/12).
+- 1 capture-layer fix: switched `topLevelResponseHeaders`
+  population from sync `response.headers()` (which strips
+  `Set-Cookie`) to `await response.allHeaders()`. Existing
+  hsts / xframe / referrer detectors keep working — both forms
+  return lowercase keys for the headers they consume.
+
+### Why cookieSecurity now
+The supersociety stack philosophy requires multiple layers of
+cookie-stealing defence: Secure, SameSite, HttpOnly,
+SameSite=None+Secure. None of these are runtime-enforceable
+from JS — they're attribute hygiene the server has to get right
+at the Set-Cookie boundary. The crawler is the only point in
+the stack where we can audit them passively across a journey.
+
+cookieSecurity is also the FOURTH response-header detector,
+which under the cycle-17 doctrine should trigger the
+`headerDetector(headerName, parser, classifier)` helper
+extraction. After implementing the detector and observing the
+shape of the per-cookie evidence aggregation, that extraction
+is **deferred again**: a single response can carry many
+`Set-Cookie` lines, each with its own attribute set, which
+the previous three header detectors do not. A naive helper
+would shoe-horn the per-cookie loop into a per-header
+classifier signature. Action item below: design a
+`multiValueHeaderDetector` variant that handles repeat-header
+semantics first-class before extracting either form.
+
+### Detector design
+4 finding kinds, two severities:
+- `cookie.no-secure` (strict, https only) — Cookie set
+  without `Secure` on https. Leaks over downgrade.
+- `cookie.samesite-none-no-secure` (strict) — `SameSite=None`
+  without `Secure` is silently dropped by browsers — set the
+  attribute combo correctly or the cookie isn't stored.
+- `cookie.no-samesite` (warn) — Missing SameSite. Modern
+  browsers default `Lax`; old clients leave it unrestricted
+  and CSRF-vulnerable.
+- `cookie.session-no-httponly` (warn) — Session-named cookie
+  (`/sess|sid|auth|token|jwt|bearer/i`) without `HttpOnly`.
+  Stealable by injected XSS.
+
+Out of scope: localhost / 127.0.0.1 / `*.localhost` (same
+exemption family as hsts/xframe/referrer). On http pages the
+no-secure check is suppressed because Secure can't apply, but
+no-samesite and session-no-httponly still fire.
+
+### Capture-layer fix lesson
+First detector iteration came back zero-positive against the
+HTTPS gate. Spike-debugging via a tiny standalone Playwright
+script (`cookie-probe.mjs`) confirmed: Playwright's sync
+`response.headers()` returns lowercase-keyed headers but
+**omits** `Set-Cookie` entirely. `response.allHeaders()`
+(async) returns the full set including `set-cookie`. Switched
+the capture site to `await allHeaders()` with a fallback to
+the sync form on rejection. Single-line change, fixed all
+four cookie checks, hsts/xframe/referrer continue to pass.
+
+This is the kind of tool-trust failure AVP-2 Axiom 0
+predicts: "the tools are broken." `headers()` is documented
+to return all response headers and quietly omits one of the
+most security-critical ones. **REGRESSION-GUARD** annotation
+added to the capture site so a future "let's avoid the async"
+refactor can't silently re-break Set-Cookie.
+
+### Tests
+- 16 unit scenarios in `cookieSecurity.test.ts`, all passing —
+  no-cookies, localhost-exempt, fully-secured, https-no-Secure,
+  http-no-Secure-suppressed, no-SameSite, SameSite=None+no-Secure,
+  session-name-no-HttpOnly, non-session-no-HttpOnly,
+  multiple-Set-Cookie-newline-split, aggregation-count,
+  header-name-case-insensitive, attribute-case-insensitive,
+  examples-capped-at-5, count-still-reflects-all,
+  malformed-skipped.
+
+### Verified
+- HTTP gate: 36/36 routes pass.
+- HTTPS gate: 17/17 routes pass (12 prior + 5 new cookie routes).
+- SkillShots audit: 32 axes, all silent vs prior. cookieSecurity
+  appears in the positive-signal table; site sets no cookies, so
+  zero findings — correct behaviour confirms the detector is
+  wired and active without firing on a clean baseline.
+
+### Action items
+- [ ] Design `multiValueHeaderDetector` (or a sister to
+      `headerDetector`) that handles repeat-header semantics
+      first-class — Set-Cookie is the canonical case but
+      `Link`, `Vary`, `Warning` and CSP report-uri all share
+      the shape. Extract on the next multi-value-header
+      detector landing.
+- [ ] HSTS-preload-list cross-check: a cookie's `Secure`
+      attribute can be implied if the parent domain is on the
+      preload list — currently the detector still fires on
+      missing Secure. Low priority (defence-in-depth wants the
+      attribute explicit anyway), but worth noting in the
+      finding's detail text.
+- [ ] Session-name regex evolution: the current heuristic is
+      `/sess|sid|auth|token|jwt|bearer/i`. Real apps use
+      framework-specific names (`csrftoken`, `XSRF-TOKEN`,
+      `_app_session`, `connect.sid`, `PHPSESSID`). Compile a
+      richer dictionary from real-world traffic over the next
+      few dogfood cycles.
+
+---
+
 ## 2026-05-14 (nineteenth entry) — login-flow fixture closes the autocomplete gap
 
 ### What's new since last cycle (eighteenth entry)

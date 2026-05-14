@@ -50,6 +50,7 @@ import { buildHstsSnapshot, detectHstsIssues, type HstsFinding } from './hstsHea
 import { buildXFrameOptionsSnapshot, detectXFrameOptionsIssues, type XFrameOptionsFinding } from './xFrameOptions.js';
 import { buildReferrerPolicySnapshot, detectReferrerPolicyIssues, type ReferrerPolicyFinding } from './referrerPolicy.js';
 import { captureFontLoadingSnapshot, detectFontLoadingIssues, type FontLoadingFinding } from './fontLoading.js';
+import { buildCookieSecuritySnapshot, detectCookieSecurityIssues, type CookieSecurityFinding } from './cookieSecurity.js';
 
 interface Budget {
   newConsoleErrors: number;
@@ -649,8 +650,26 @@ async function main(args: string[]): Promise<number> {
       // so the hstsHeader detector can read Strict-Transport-Security
       // (and any future header-flavoured detectors don't need their
       // own listener).
+      //
+      // REGRESSION-GUARD: Playwright's sync `response.headers()`
+      // SILENTLY STRIPS Set-Cookie (verified empirically against our
+      // HTTPS fixture 2026-05-14, before the cookieSecurity detector
+      // was wired). We therefore await `allHeaders()` for the
+      // canonical full set, falling back to the sync map only if
+      // allHeaders rejects. DO NOT swap back to sync `headers()` to
+      // avoid the await — the cookieSecurity audit will silently
+      // become a no-op and four classes of cookie defect (no-Secure,
+      // SameSite=None+no-Secure, no-SameSite, session-no-HttpOnly)
+      // will stop being reported. The hsts / xframe / referrer
+      // detectors keep working — both forms return lowercase keys
+      // for the headers they consume.
       if (res.request().isNavigationRequest()) {
-        topLevelResponseHeaders.set(res.url(), headers);
+        try {
+          const full = await res.allHeaders();
+          topLevelResponseHeaders.set(res.url(), full);
+        } catch {
+          topLevelResponseHeaders.set(res.url(), headers);
+        }
       }
     } catch {
       /* response handler is best-effort */
@@ -1019,6 +1038,40 @@ async function main(args: string[]): Promise<number> {
       log({
         kind: 'pageerror',
         text: `[linkUnderline] detector threw on step ${afterLabel}: ${(e as Error).message}`,
+      });
+    }
+  };
+
+  /**
+   * T76: Set-Cookie attribute audit. Fourth consumer of the
+   * shared `topLevelResponseHeaders` capture path. Reads any
+   * Set-Cookie header(s) on the navigation response and audits
+   * Secure / SameSite / HttpOnly / SameSite=None+Secure
+   * combinations.
+   */
+  const cookieSecurityFindingsByStep: Array<{ stepLabel: string; pageUrl: string; findings: CookieSecurityFinding[] }> = [];
+  const checkCookieSecurity = async (afterLabel: string) => {
+    try {
+      const pageUrl = page.url();
+      const headers = topLevelResponseHeaders.get(pageUrl);
+      const snap = buildCookieSecuritySnapshot(pageUrl, headers);
+      if (disableLocalhostExemption) snap.pageIsLocalhost = false;
+      const findings = detectCookieSecurityIssues(snap);
+      cookieSecurityFindingsByStep.push({ stepLabel: afterLabel, pageUrl, findings });
+      for (const f of findings) {
+        log({
+          kind: 'cookie-security',
+          text: `[${f.kind}] ${f.detail}`,
+          url: pageUrl,
+          severity: f.severity,
+          ruleId: f.kind,
+          impact: f.severity === 'strict' ? 'serious' : 'minor',
+        });
+      }
+    } catch (e) {
+      log({
+        kind: 'pageerror',
+        text: `[cookieSecurity] detector threw on step ${afterLabel}: ${(e as Error).message}`,
       });
     }
   };
@@ -1764,6 +1817,7 @@ async function main(args: string[]): Promise<number> {
       await checkXFrameOptions(step.label || `goto-${i}`);
       await checkReferrerPolicy(step.label || `goto-${i}`);
       await checkFontLoading(step.label || `goto-${i}`);
+      await checkCookieSecurity(step.label || `goto-${i}`);
       await checkWebVitals(step.label || `goto-${i}`);
     }
     // Memory snapshot at end of each step so the report shows heap growth
@@ -1900,6 +1954,8 @@ async function main(args: string[]): Promise<number> {
       referrerPolicyFindingsStrict: events.filter(e => e.kind === 'referrer-policy' && e.severity === 'strict').length,
       fontLoadingFindings: events.filter(e => e.kind === 'font-loading').length,
       fontLoadingFindingsStrict: events.filter(e => e.kind === 'font-loading' && e.severity === 'strict').length,
+      cookieSecurityFindings: events.filter(e => e.kind === 'cookie-security').length,
+      cookieSecurityFindingsStrict: events.filter(e => e.kind === 'cookie-security' && e.severity === 'strict').length,
       linkUnderlineFindings: events.filter(e => e.kind === 'link-underline').length,
       linkUnderlineFindingsStrict: events.filter(e => e.kind === 'link-underline' && e.severity === 'strict').length,
       crossPageTitleFindings: events.filter(e => e.kind === 'cross-page-title').length,
@@ -2045,6 +2101,12 @@ async function main(args: string[]): Promise<number> {
       JSON.stringify(fontLoadingFindingsByStep, null, 2),
     );
   }
+  if (cookieSecurityFindingsByStep.length > 0) {
+    writeFileSync(
+      join(outDir, 'cookie-security.json'),
+      JSON.stringify(cookieSecurityFindingsByStep, null, 2),
+    );
+  }
   if (linkUnderlineFindingsByStep.length > 0) {
     writeFileSync(
       join(outDir, 'link-underline.json'),
@@ -2144,6 +2206,7 @@ async function main(args: string[]): Promise<number> {
   console.log(`  x-frame-options:   ${report.counts.xFrameOptionsFindings} (strict ${report.counts.xFrameOptionsFindingsStrict})`);
   console.log(`  referrer-policy:   ${report.counts.referrerPolicyFindings} (strict ${report.counts.referrerPolicyFindingsStrict})`);
   console.log(`  font loading:      ${report.counts.fontLoadingFindings} (strict ${report.counts.fontLoadingFindingsStrict})`);
+  console.log(`  cookie security:   ${report.counts.cookieSecurityFindings} (strict ${report.counts.cookieSecurityFindingsStrict})`);
   console.log(`  link underline:    ${report.counts.linkUnderlineFindings} (strict ${report.counts.linkUnderlineFindingsStrict})`);
   console.log(`  cross-page title:  ${report.counts.crossPageTitleFindings} (strict ${report.counts.crossPageTitleFindingsStrict})`);
   console.log(`  cross-page meta:   ${report.counts.crossPageMetaDescriptionFindings} (strict ${report.counts.crossPageMetaDescriptionFindingsStrict})`);
@@ -2219,6 +2282,9 @@ async function main(args: string[]): Promise<number> {
     const newFlStrict = diff.newFontLoadingFindings.filter(e => e.severity === 'strict').length;
     const newFlWarn = diff.newFontLoadingFindings.length - newFlStrict;
     console.log(`    NEW font loading:     ${diff.newFontLoadingFindings.length} (strict ${newFlStrict}, warn ${newFlWarn})`);
+    const newCsStrict = diff.newCookieSecurityFindings.filter(e => e.severity === 'strict').length;
+    const newCsWarn = diff.newCookieSecurityFindings.length - newCsStrict;
+    console.log(`    NEW cookie security:  ${diff.newCookieSecurityFindings.length} (strict ${newCsStrict}, warn ${newCsWarn})`);
     const newLinkUnderlineStrict = diff.newLinkUnderlineFindings.filter(e => e.severity === 'strict').length;
     const newLinkUnderlineWarn = diff.newLinkUnderlineFindings.length - newLinkUnderlineStrict;
     console.log(`    NEW link underline:   ${diff.newLinkUnderlineFindings.length} (strict ${newLinkUnderlineStrict}, warn ${newLinkUnderlineWarn})`);
