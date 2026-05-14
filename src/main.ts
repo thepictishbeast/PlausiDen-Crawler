@@ -52,6 +52,7 @@ import { buildReferrerPolicySnapshot, detectReferrerPolicyIssues, type ReferrerP
 import { captureFontLoadingSnapshot, detectFontLoadingIssues, type FontLoadingFinding } from './fontLoading.js';
 import { buildCookieSecuritySnapshot, detectCookieSecurityIssues, type CookieSecurityFinding } from './cookieSecurity.js';
 import { buildPermissionsPolicySnapshot, detectPermissionsPolicyIssues, type PermissionsPolicyFinding } from './permissionsPolicy.js';
+import { buildCspSnapshot, detectCspIssues, type CspFinding } from './contentSecurityPolicy.js';
 
 interface Budget {
   newConsoleErrors: number;
@@ -1051,6 +1052,42 @@ async function main(args: string[]): Promise<number> {
    * combinations.
    */
   /**
+   * T76: full Content-Security-Policy audit. SIXTH consumer
+   * of the shared `topLevelResponseHeaders` capture path.
+   * Surfaces missing CSP, script-src unsafe-inline /
+   * unsafe-eval / wildcard (all strict), and missing
+   * structural-baseline directives (object-src, base-uri,
+   * form-action, frame-ancestors, require-trusted-types-for).
+   * Localhost exempt.
+   */
+  const cspFindingsByStep: Array<{ stepLabel: string; pageUrl: string; findings: CspFinding[] }> = [];
+  const checkCsp = async (afterLabel: string) => {
+    try {
+      const pageUrl = page.url();
+      const headers = topLevelResponseHeaders.get(pageUrl);
+      const snap = buildCspSnapshot(pageUrl, headers);
+      if (disableLocalhostExemption) snap.pageIsLocalhost = false;
+      const findings = detectCspIssues(snap);
+      cspFindingsByStep.push({ stepLabel: afterLabel, pageUrl, findings });
+      for (const f of findings) {
+        log({
+          kind: 'csp-policy',
+          text: `[${f.kind}] ${f.detail}`,
+          url: pageUrl,
+          severity: f.severity,
+          ruleId: f.kind,
+          impact: f.severity === 'strict' ? 'serious' : 'minor',
+        });
+      }
+    } catch (e) {
+      log({
+        kind: 'pageerror',
+        text: `[csp] detector threw on step ${afterLabel}: ${(e as Error).message}`,
+      });
+    }
+  };
+
+  /**
    * T76: Permissions-Policy header audit. FIFTH consumer of the
    * shared `topLevelResponseHeaders` capture path. Reports
    * missing header (warn), unparseable (warn), high-risk
@@ -1855,6 +1892,7 @@ async function main(args: string[]): Promise<number> {
       await checkFontLoading(step.label || `goto-${i}`);
       await checkCookieSecurity(step.label || `goto-${i}`);
       await checkPermissionsPolicy(step.label || `goto-${i}`);
+      await checkCsp(step.label || `goto-${i}`);
       await checkWebVitals(step.label || `goto-${i}`);
     }
     // Memory snapshot at end of each step so the report shows heap growth
@@ -1995,6 +2033,8 @@ async function main(args: string[]): Promise<number> {
       cookieSecurityFindingsStrict: events.filter(e => e.kind === 'cookie-security' && e.severity === 'strict').length,
       permissionsPolicyFindings: events.filter(e => e.kind === 'permissions-policy').length,
       permissionsPolicyFindingsStrict: events.filter(e => e.kind === 'permissions-policy' && e.severity === 'strict').length,
+      cspFindings: events.filter(e => e.kind === 'csp-policy').length,
+      cspFindingsStrict: events.filter(e => e.kind === 'csp-policy' && e.severity === 'strict').length,
       linkUnderlineFindings: events.filter(e => e.kind === 'link-underline').length,
       linkUnderlineFindingsStrict: events.filter(e => e.kind === 'link-underline' && e.severity === 'strict').length,
       crossPageTitleFindings: events.filter(e => e.kind === 'cross-page-title').length,
@@ -2152,6 +2192,12 @@ async function main(args: string[]): Promise<number> {
       JSON.stringify(permissionsPolicyFindingsByStep, null, 2),
     );
   }
+  if (cspFindingsByStep.length > 0) {
+    writeFileSync(
+      join(outDir, 'csp-policy.json'),
+      JSON.stringify(cspFindingsByStep, null, 2),
+    );
+  }
   if (linkUnderlineFindingsByStep.length > 0) {
     writeFileSync(
       join(outDir, 'link-underline.json'),
@@ -2253,6 +2299,7 @@ async function main(args: string[]): Promise<number> {
   console.log(`  font loading:      ${report.counts.fontLoadingFindings} (strict ${report.counts.fontLoadingFindingsStrict})`);
   console.log(`  cookie security:   ${report.counts.cookieSecurityFindings} (strict ${report.counts.cookieSecurityFindingsStrict})`);
   console.log(`  permissions policy:${report.counts.permissionsPolicyFindings} (strict ${report.counts.permissionsPolicyFindingsStrict})`);
+  console.log(`  csp policy:        ${report.counts.cspFindings} (strict ${report.counts.cspFindingsStrict})`);
   console.log(`  link underline:    ${report.counts.linkUnderlineFindings} (strict ${report.counts.linkUnderlineFindingsStrict})`);
   console.log(`  cross-page title:  ${report.counts.crossPageTitleFindings} (strict ${report.counts.crossPageTitleFindingsStrict})`);
   console.log(`  cross-page meta:   ${report.counts.crossPageMetaDescriptionFindings} (strict ${report.counts.crossPageMetaDescriptionFindingsStrict})`);
@@ -2334,6 +2381,9 @@ async function main(args: string[]): Promise<number> {
     const newPpStrict = diff.newPermissionsPolicyFindings.filter(e => e.severity === 'strict').length;
     const newPpWarn = diff.newPermissionsPolicyFindings.length - newPpStrict;
     console.log(`    NEW permissions policy: ${diff.newPermissionsPolicyFindings.length} (strict ${newPpStrict}, warn ${newPpWarn})`);
+    const newCspStrict = diff.newCspFindings.filter(e => e.severity === 'strict').length;
+    const newCspWarn = diff.newCspFindings.length - newCspStrict;
+    console.log(`    NEW csp policy:       ${diff.newCspFindings.length} (strict ${newCspStrict}, warn ${newCspWarn})`);
     const newLinkUnderlineStrict = diff.newLinkUnderlineFindings.filter(e => e.severity === 'strict').length;
     const newLinkUnderlineWarn = diff.newLinkUnderlineFindings.length - newLinkUnderlineStrict;
     console.log(`    NEW link underline:   ${diff.newLinkUnderlineFindings.length} (strict ${newLinkUnderlineStrict}, warn ${newLinkUnderlineWarn})`);

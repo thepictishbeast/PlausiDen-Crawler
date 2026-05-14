@@ -225,6 +225,32 @@ Multi-token policies are honored per the W3C spec — the LAST recognised token 
 
 **Third response-header detector.** Reads from the same `topLevelResponseHeaders` Map as hsts + xFrameOptions. With three concrete examples now in hand, the ~70% structural overlap is a candidate for a generic `headerDetector(headerName, parser, classifier)` helper — extract on the next addition.
 
+### `cspPolicy` — full Content-Security-Policy response header *(T76 — added 2026-05-14)*
+Source: `src/contentSecurityPolicy.ts`
+
+| Finding | Sev | Catches |
+|---|---|---|
+| `csp.missing` | warn | No `Content-Security-Policy` header on this page. Every script source, every image origin, every connect endpoint is allowed by default. |
+| `csp.script-unsafe-inline` | strict | `script-src 'unsafe-inline'` (or `default-src` fallback). Once set, ANY HTML-injection sink becomes XSS — negates roughly 80% of CSP's protective value. |
+| `csp.script-unsafe-eval` | strict | `script-src 'unsafe-eval'` — allows `eval()`, `Function()`, `setTimeout(string)`, `setInterval(string)`. Required only for legacy frameworks. |
+| `csp.script-wildcard` | strict | `script-src` contains `*` or `https:` or `http:` — every origin can serve script. |
+| `csp.no-default-src` | warn | Neither `default-src` nor `script-src` declared — script origin unconstrained. |
+| `csp.no-object-src` | warn | No `object-src` directive. Browsers still honour `<object>`/`<embed>`/`<applet>`. Modern baseline: `object-src 'none'`. |
+| `csp.no-base-uri` | warn | No `base-uri`. An attacker who controls one `<base href>` element hijacks every relative URL on the page. |
+| `csp.no-form-action` | warn | No `form-action`. Attacker-controlled `<form action="//attacker">` exfiltrates input. |
+| `csp.no-frame-ancestors` | warn | No `frame-ancestors`. Clickjacking surface (also caught by `xFrameOptions` from the legacy-header angle). |
+| `csp.no-trusted-types` | warn | No `require-trusted-types-for 'script'`. **SUPERSOCIETY**: Trusted Types is the W3C-blessed modern DOM-XSS-prevention layer — all writes to dangerous DOM sinks (`innerHTML`/`outerHTML`/`document.write`/eval'd `setTimeout`) MUST go through a typed policy, eliminating an entire class of DOM-based XSS at the platform level. Chrome ships; Firefox shipping; Safari implementation in flight. |
+| `csp.invalid` | warn | Header present but no directive parsed. Browsers ignore it. |
+
+Out of scope: localhost (same family); `Content-Security-Policy-Report-Only` (a future cycle); nonce/hash validity (would require correlating with rendered DOM `<script nonce>`).
+
+**Sixth response-header detector — and the third multi-value one.** With three concrete multi-value detectors now in hand (cookieSecurity per-cookie aggregation, permissionsPolicy per-feature classification + cross-cutting omitted-features check, cspPolicy per-directive classification + script-src fallback resolution + structural-baseline absence checks), the helper-extract decision can finally be made with evidence:
+
+  - The three single-value detectors (hsts, xframe, referrer) share ~70% structure: extract `responseHeaderDetector(headerName, snapshotBuilder, classifier)` cleanly.
+  - The three multi-value detectors share the SHAPE of "list-of-(directive, tokens) parsing" but their classification logic is genuinely heterogeneous — per-cookie aggregation, per-feature high-risk-set membership + cross-cutting omitted-set, per-directive script-src-with-fallback + structural-baseline absence. Wrapping them in a common `multiValueHeaderDetector(headerName, parser, classifier)` is a leaky abstraction — the classifier signature has to be polymorphic over snapshot shape, defeating the helper's purpose.
+  - **Decision**: extract `responseHeaderDetector` for the three single-value detectors only. Leave the multi-value detectors as bespoke modules (their parser + classifier are already small and tested).
+  - Action item: extract `responseHeaderDetector` in a follow-up cycle when a SEVENTH single-value detector lands (probable: COOP / COEP / CORP — all single-value). Until then the three concrete detectors are fine standalone.
+
 ### `permissionsPolicy` — Permissions-Policy response header *(T76 — added 2026-05-14)*
 Source: `src/permissionsPolicy.ts`
 

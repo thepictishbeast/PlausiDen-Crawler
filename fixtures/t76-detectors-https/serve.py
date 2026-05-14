@@ -130,11 +130,18 @@ _DEFAULT_PERMISSIONS_POLICY = ', '.join(
     ]
 )
 
+_DEFAULT_CSP = (
+    "default-src 'self'; object-src 'none'; base-uri 'self'; "
+    "form-action 'self'; frame-ancestors 'none'; "
+    "require-trusted-types-for 'script'; script-src 'self'"
+)
+
 DEFAULT_HEADERS = {
     'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
     'X-Frame-Options': 'SAMEORIGIN',
     'Referrer-Policy': 'strict-origin-when-cross-origin',
     'Permissions-Policy': _DEFAULT_PERMISSIONS_POLICY,
+    'Content-Security-Policy': _DEFAULT_CSP,
     'Content-Type': 'text/html; charset=utf-8',
     'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
 }
@@ -172,11 +179,15 @@ def no_subdomains():
 
 
 # ----- X-Frame-Options -----
+# These routes must override Content-Security-Policy to None too —
+# the default CSP carries frame-ancestors 'none', which supersedes
+# X-Frame-Options. Stripping CSP isolates the XFO detector
+# behaviour we want to verify.
 @route('/no-xfo/')
 def no_xfo():
     return (
         page('<h1>No X-Frame-Options + no CSP frame-ancestors.</h1>'),
-        {'X-Frame-Options': None},
+        {'X-Frame-Options': None, 'Content-Security-Policy': None},
     )
 
 
@@ -194,7 +205,7 @@ def allowall_frame():
 def invalid_xfo():
     return (
         page('<h1>Invalid X-Frame-Options value.</h1>'),
-        {'X-Frame-Options': 'GARBAGE'},
+        {'X-Frame-Options': 'GARBAGE', 'Content-Security-Policy': None},
     )
 
 
@@ -220,6 +231,67 @@ def invalid_referrer():
     return (
         page('<h1>Invalid Referrer-Policy value.</h1>'),
         {'Referrer-Policy': 'GIBBERISH'},
+    )
+
+
+# ----- Content-Security-Policy -----
+# Reuse _DEFAULT_CSP (already wired into DEFAULT_HEADERS) so the
+# focused-finding routes mutate one directive at a time without
+# drifting from the shared baseline.
+_CSP_HARDENED = _DEFAULT_CSP
+
+
+@route('/no-csp/')
+def no_csp():
+    # No CSP at all → warn csp.missing.
+    return (
+        page('<h1>No Content-Security-Policy header.</h1>'),
+        {'Content-Security-Policy': None},
+    )
+
+
+@route('/csp-unsafe-inline/')
+def csp_unsafe_inline():
+    return (
+        page('<h1>CSP allows script-src unsafe-inline.</h1>'),
+        {'Content-Security-Policy':
+            _CSP_HARDENED.replace("script-src 'self'", "script-src 'self' 'unsafe-inline'")},
+    )
+
+
+@route('/csp-unsafe-eval/')
+def csp_unsafe_eval():
+    return (
+        page('<h1>CSP allows script-src unsafe-eval.</h1>'),
+        {'Content-Security-Policy':
+            _CSP_HARDENED.replace("script-src 'self'", "script-src 'self' 'unsafe-eval'")},
+    )
+
+
+@route('/csp-wildcard-script/')
+def csp_wildcard_script():
+    return (
+        page('<h1>CSP script-src wildcard.</h1>'),
+        {'Content-Security-Policy':
+            _CSP_HARDENED.replace("script-src 'self'", 'script-src *')},
+    )
+
+
+@route('/csp-no-trusted-types/')
+def csp_no_trusted_types():
+    # Otherwise hardened, no require-trusted-types-for.
+    return (
+        page('<h1>CSP missing trusted-types directive.</h1>'),
+        {'Content-Security-Policy':
+            _CSP_HARDENED.replace("require-trusted-types-for 'script'; ", '')},
+    )
+
+
+@route('/csp-clean/')
+def csp_clean():
+    return (
+        page('<h1>CSP hardened — clean baseline.</h1>'),
+        {'Content-Security-Policy': _CSP_HARDENED},
     )
 
 

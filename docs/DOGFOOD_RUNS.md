@@ -1033,6 +1033,143 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (twenty-second entry) — full CSP detector + helper-extract verdict
+
+### What's new since last cycle (twenty-first entry)
+- 1 new detector axis: **`cspPolicy`** — full
+  Content-Security-Policy audit. Brings the active-axis count
+  to **34** (37 with the three legacy event kinds counted
+  separately). Eleven finding kinds across two severities.
+- 6 new HTTPS fixture routes:
+  `/no-csp/`, `/csp-unsafe-inline/`, `/csp-unsafe-eval/`,
+  `/csp-wildcard-script/`, `/csp-no-trusted-types/`, `/csp-clean/`.
+  HTTPS gate now validates **28/28** routes (was 22/22).
+- Fixture hygiene: added `_DEFAULT_CSP` (a hardened baseline)
+  to the HTTPS fixture's `DEFAULT_HEADERS` so unrelated routes
+  don't leak `csp.missing` into their audit notes — paired with
+  an opt-OUT on the xFrameOptions routes that need to test
+  XFO-only behaviour without CSP frame-ancestors superseding.
+- **Helper-extract verdict landed.** See below.
+
+### Why full CSP now
+CSP is the foundational web-security header. It's the single
+largest XSS-mitigation control the web has, AND it's the one
+real-world apps most often misconfigure. The detector surfaces
+the defects with the clearest CVE-record blast radius:
+
+  - `script-src 'unsafe-inline'` (strict) — once set, ANY
+    HTML-injection sink becomes XSS. The single most common
+    CSP bypass mechanism in the public CVE record.
+  - `script-src 'unsafe-eval'` (strict) — allows the entire
+    string-eval API surface.
+  - `script-src '*' / 'https:' / 'http:'` (strict) — script
+    origin is unconstrained.
+  - Missing `default-src` AND `script-src` (warn) — fallback
+    chain has no terminus.
+  - Missing structural baseline (object-src, base-uri,
+    form-action, frame-ancestors) — each is a known
+    one-element-injection-becomes-RCE pivot.
+  - Missing `require-trusted-types-for 'script'` (warn) —
+    Trusted Types is the modern DOM-XSS-prevention layer
+    that the supersociety stack should mandate.
+
+The `csp.no-trusted-types` finding is the deepest supersociety
+move in this cycle. Trusted Types eliminates an entire class
+of DOM-based XSS at the platform level by requiring all writes
+to dangerous DOM sinks (`innerHTML`/`outerHTML`/`document.write`/
+eval'd `setTimeout`) to go through a typed policy. Chrome ships,
+Firefox is shipping, Safari has implementation in flight. Every
+page the crawler audits should adopt it.
+
+### Detector design
+- `buildCspSnapshot(pageUrl, headers)` parses the enforcing
+  `Content-Security-Policy` header into a list of
+  `(name, tokens)` directives in declaration order, lowercasing
+  directive names per the W3C spec but preserving case in
+  source-list tokens.
+- `detectCspIssues(snap)` runs the script-src checks (with a
+  default-src fallback resolution per the spec) plus the
+  structural-baseline-absence checks.
+- The `script-src` fallback to `default-src` is honored:
+  `default-src 'self' 'unsafe-inline'` (no script-src) fires
+  `csp.script-unsafe-inline`. Test 11 proves this.
+
+### Helper-extract verdict (FOURTH consideration, decision landed)
+Per the cycle-17 / cycle-19 / cycle-21 doctrine, the FOURTH /
+FIFTH / SIXTH response-header detector should each have
+re-examined the case for a `headerDetector(headerName, parser,
+classifier)` extraction. Three deferrals were correct — the
+multi-value detectors' classifier shapes were too heterogeneous
+to share. With CSP in hand the picture is finally clear:
+
+  **Single-value detectors** (hsts, xframeOptions,
+  referrerPolicy) share ~70% structure: get-header → parse one
+  value → classify into one of N severities. **Extract
+  `responseHeaderDetector(headerName, snapshotBuilder,
+  classifier)` cleanly.**
+
+  **Multi-value detectors** (cookieSecurity, permissionsPolicy,
+  cspPolicy) share the SHAPE of "list-of-(directive, tokens)
+  parsing" but their classification is genuinely heterogeneous:
+
+    - cookieSecurity:    per-cookie aggregation across N cookies.
+    - permissionsPolicy: per-feature high-risk-set membership +
+                        cross-cutting omitted-set check.
+    - cspPolicy:         per-directive classification + script-src
+                        fallback resolution + structural-baseline
+                        absence checks.
+
+  Wrapping them in `multiValueHeaderDetector(headerName, parser,
+  classifier)` is a leaky abstraction — the classifier signature
+  has to be polymorphic over snapshot shape, defeating the
+  helper's whole purpose. **DECISION: leave the multi-value
+  detectors as bespoke modules.** Their parser + classifier are
+  already small and tested; the abstraction would obscure more
+  than it shares.
+
+  **Action item**: extract `responseHeaderDetector` in a
+  follow-up cycle when a SEVENTH single-value detector lands
+  (probable: Cross-Origin-Opener-Policy / Cross-Origin-Embedder-
+  Policy / Cross-Origin-Resource-Policy — all single-value).
+  Until then three concrete detectors are fine standalone.
+
+### Tests
+- 20 unit scenarios in `contentSecurityPolicy.test.ts`, all
+  passing — including the script-src fallback to default-src
+  (test 11), the case-insensitive header name (test 17), and
+  the pile-on policy that fires every relevant finding
+  simultaneously (test 20).
+
+### Verified
+- HTTP gate: 36/36 routes pass.
+- HTTPS gate: 28/28 routes pass (22 prior + 6 new CSP routes).
+- SkillShots audit: 37 axes total, all silent vs prior — the
+  SkillShots dev server runs on localhost so the exemption
+  short-circuits, correct quiet-baseline confirmation that the
+  detector is wired and active.
+
+### Action items
+- [ ] **Extract `responseHeaderDetector(headerName,
+      snapshotBuilder, classifier)` once the seventh single-value
+      detector lands.** First candidate: COOP (Cross-Origin-Opener-
+      Policy) — single-value, classifies into same-origin /
+      same-origin-allow-popups / unsafe-none / etc. Second:
+      COEP. Third: CORP.
+- [ ] Cross-Origin-Opener-Policy detector — Spectre /
+      SharedArrayBuffer cross-origin isolation. Single-value;
+      this is the trigger for the helper extraction above.
+- [ ] Cross-Origin-Embedder-Policy detector — sister to COOP.
+- [ ] Cross-Origin-Resource-Policy detector — third sister.
+- [ ] Subresource Integrity (SRI) detector — per-element DOM
+      check; different module shape from response-header
+      detectors. CDN-compromise mitigation.
+- [ ] CSP-Report-Only header parser (cycle 23+).
+- [ ] CSP nonce / hash validity check by correlating with
+      rendered DOM `<script nonce>` (would need a per-element
+      walker; biggest scope expansion in this family).
+
+---
+
 ## 2026-05-14 (twenty-first entry) — permissionsPolicy detector
 
 ### What's new since last cycle (twentieth entry)

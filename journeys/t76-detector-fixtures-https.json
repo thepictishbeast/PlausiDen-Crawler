@@ -25,7 +25,13 @@
     { "kind": "goto", "url": "https://127.0.0.1:8773/permissions-policy-camera-allowall/", "label": "permissions-policy-camera-allowall" },
     { "kind": "goto", "url": "https://127.0.0.1:8773/permissions-policy-invalid/", "label": "permissions-policy-invalid" },
     { "kind": "goto", "url": "https://127.0.0.1:8773/permissions-policy-partial/", "label": "permissions-policy-partial" },
-    { "kind": "goto", "url": "https://127.0.0.1:8773/permissions-policy-clean/", "label": "permissions-policy-clean" }
+    { "kind": "goto", "url": "https://127.0.0.1:8773/permissions-policy-clean/", "label": "permissions-policy-clean" },
+    { "kind": "goto", "url": "https://127.0.0.1:8773/no-csp/", "label": "no-csp" },
+    { "kind": "goto", "url": "https://127.0.0.1:8773/csp-unsafe-inline/", "label": "csp-unsafe-inline" },
+    { "kind": "goto", "url": "https://127.0.0.1:8773/csp-unsafe-eval/", "label": "csp-unsafe-eval" },
+    { "kind": "goto", "url": "https://127.0.0.1:8773/csp-wildcard-script/", "label": "csp-wildcard-script" },
+    { "kind": "goto", "url": "https://127.0.0.1:8773/csp-no-trusted-types/", "label": "csp-no-trusted-types" },
+    { "kind": "goto", "url": "https://127.0.0.1:8773/csp-clean/", "label": "csp-clean" }
   ],
   "expectedFindingsByLabel": {
     "control": [],
@@ -49,6 +55,12 @@
     "permissions-policy-camera-allowall": ["permissions-policy.allow-all-camera"],
     "permissions-policy-invalid": ["permissions-policy.invalid"],
     "permissions-policy-partial": ["permissions-policy.high-risk-omitted"],
-    "permissions-policy-clean": []
+    "permissions-policy-clean": [],
+    "no-csp": ["csp.missing"],
+    "csp-unsafe-inline": ["csp.script-unsafe-inline"],
+    "csp-unsafe-eval": ["csp.script-unsafe-eval"],
+    "csp-wildcard-script": ["csp.script-wildcard"],
+    "csp-no-trusted-types": ["csp.no-trusted-types"],
+    "csp-clean": []
   }
 }

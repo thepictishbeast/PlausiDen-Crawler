@@ -44,6 +44,7 @@ export interface CapturedEvent {
     | 'font-loading'
     | 'cookie-security'
     | 'permissions-policy'
+    | 'csp-policy'
     | 'link-underline'
     | 'cross-page-title'
     | 'cross-page-meta-description';
@@ -115,6 +116,8 @@ export interface Report {
     cookieSecurityFindingsStrict: number;
     permissionsPolicyFindings: number;
     permissionsPolicyFindingsStrict: number;
+    cspFindings: number;
+    cspFindingsStrict: number;
     linkUnderlineFindings: number;
     linkUnderlineFindingsStrict: number;
     crossPageTitleFindings: number;
@@ -323,6 +326,14 @@ export interface Diff {
    */
   newPermissionsPolicyFindings: CapturedEvent[];
   /**
+   * csp-policy findings new in this run vs prior. Strict =
+   * script-src 'unsafe-inline' / 'unsafe-eval' / wildcard. Warn
+   * = missing CSP / invalid / no default-src+script-src / no
+   * object-src / no base-uri / no form-action / no frame-
+   * ancestors / no require-trusted-types-for. T76.
+   */
+  newCspFindings: CapturedEvent[];
+  /**
    * link-underline findings new in this run vs prior. Warn-only:
    * inline link inside running text distinguished only by colour.
    * WCAG 1.4.1 Level A. T76.
@@ -384,6 +395,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     newFontLoadingFindings: [],
     newCookieSecurityFindings: [],
     newPermissionsPolicyFindings: [],
+    newCspFindings: [],
     newLinkUnderlineFindings: [],
     newCrossPageTitleFindings: [],
     newCrossPageMetaDescriptionFindings: [],
@@ -423,6 +435,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     out.newFontLoadingFindings = current.events.filter(e => e.kind === 'font-loading');
     out.newCookieSecurityFindings = current.events.filter(e => e.kind === 'cookie-security');
     out.newPermissionsPolicyFindings = current.events.filter(e => e.kind === 'permissions-policy');
+    out.newCspFindings = current.events.filter(e => e.kind === 'csp-policy');
     out.newLinkUnderlineFindings = current.events.filter(e => e.kind === 'link-underline');
     out.newCrossPageTitleFindings = current.events.filter(e => e.kind === 'cross-page-title');
     out.newCrossPageMetaDescriptionFindings = current.events.filter(e => e.kind === 'cross-page-meta-description');
@@ -463,6 +476,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     else if (e.kind === 'font-loading') out.newFontLoadingFindings.push(e);
     else if (e.kind === 'cookie-security') out.newCookieSecurityFindings.push(e);
     else if (e.kind === 'permissions-policy') out.newPermissionsPolicyFindings.push(e);
+    else if (e.kind === 'csp-policy') out.newCspFindings.push(e);
     else if (e.kind === 'link-underline') out.newLinkUnderlineFindings.push(e);
     else if (e.kind === 'cross-page-title') out.newCrossPageTitleFindings.push(e);
     else if (e.kind === 'cross-page-meta-description') out.newCrossPageMetaDescriptionFindings.push(e);
@@ -717,6 +731,18 @@ export function renderPositiveSignal(report: Report, diff: Diff): string {
       total: report.events.filter((e) => e.kind === 'permissions-policy').length,
       news: diff.newPermissionsPolicyFindings.length,
       strictNews: strict(diff.newPermissionsPolicyFindings),
+    },
+    {
+      // T76 (Crawler): csp-policy — full Content-Security-Policy
+      // audit. Strict on script-src 'unsafe-inline' /
+      // 'unsafe-eval' / wildcard. Warn on missing CSP / invalid /
+      // missing structural-baseline directives (object-src /
+      // base-uri / form-action / frame-ancestors /
+      // require-trusted-types-for). Localhost exempt.
+      name: 'cspPolicy',
+      total: report.events.filter((e) => e.kind === 'csp-policy').length,
+      news: diff.newCspFindings.length,
+      strictNews: strict(diff.newCspFindings),
     },
     {
       // T76 (Crawler): link-underline — WCAG 1.4.1 (Use of Color, A).
