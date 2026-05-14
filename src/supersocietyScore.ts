@@ -105,6 +105,11 @@ const KIND_TO_CATEGORY: Record<string, string> = {
   'corp': 'originIsolation',
   'x-frame-options': 'originIsolation',
   'permissions-policy': 'originIsolation',
+  // T76 cycle 73: gap surfaced by mutation analysis. Cycle
+  // 45 detector emitted `origin-agent-cluster` events but
+  // they fell into `unbucketed` and didn't penalise. Closes
+  // the same Spectre/process-isolation category.
+  'origin-agent-cluster': 'originIsolation',
 
   // Content security — CSP, SRI, DOM XSS surface, Trusted Types,
   // Document-Policy (CSP-Level-3 feature-control companion).
@@ -160,6 +165,17 @@ const KIND_TO_CATEGORY: Record<string, string> = {
   'css-health': 'uxHygiene',
 
   // Reliability — JS errors, network failures.
+  // T76 cycle 73: gaps surfaced by mutation analysis. These
+  // detector kinds were emitting events but `unbucketed` —
+  // visible UI failures (blank main, error boundary text,
+  // stuck loading skeleton, error text in body) belong to
+  // reliability + uxHygiene depending on whether the page
+  // FAILED or just LOOKED bad.
+  'blank-main': 'uxHygiene',
+  'error-boundary-visible': 'reliability',
+  'stuck-loading': 'reliability',
+  'ui-error-text': 'reliability',
+
   'console': 'reliability',
   'pageerror': 'reliability',
   'request-failed': 'reliability',

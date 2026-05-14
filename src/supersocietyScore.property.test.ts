@@ -162,6 +162,33 @@ const MAX_EVENTS_PER_CASE = 60;
     `${failures}/${CASES} cases violate. First: ${firstFail}`);
 }
 
+// --- Property 3b (T76 cycle 73, tightening from mutation
+// analysis): adding a single strict event to a CLEAN baseline
+// STRICTLY DECREASES composite. Without this stronger form,
+// property 3 alone allows STRICT_PENALTY=0 (mutation M2) to
+// pass — making "strict is free" indistinguishable from
+// "strict is expensive". Cycle 73's mutation harness surfaced
+// the gap; this property closes it.
+{
+  let failures = 0;
+  let firstFail: string | null = null;
+  const rng = makeRng(11112);
+  for (let i = 0; i < CASES; i++) {
+    const kind = KNOWN_KINDS[Math.floor(rng() * KNOWN_KINDS.length)];
+    const baseline = calculateSupersocietyScore([]);
+    const withStrict = calculateSupersocietyScore([{ kind, severity: 'strict' }]);
+    // Strict on clean baseline MUST reduce composite. If it
+    // doesn't, the penalty is zero or negative.
+    if (withStrict.composite >= baseline.composite) {
+      failures += 1;
+      if (firstFail === null)
+        firstFail = `strict ${kind} on clean baseline: ${baseline.composite} → ${withStrict.composite}`;
+    }
+  }
+  assert(failures === 0, 'strict on clean baseline strictly DECREASES composite',
+    `${failures}/${CASES} cases violate. First: ${firstFail}`);
+}
+
 // --- Property 4: adding a single warn event never INCREASES composite.
 {
   let failures = 0;
