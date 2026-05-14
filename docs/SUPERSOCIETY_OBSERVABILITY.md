@@ -7,7 +7,7 @@ diagnose why a CSP violation didn't reach your inbox, audit a new
 PlausiDen surface, and add a detector without breaking the supersociety
 score.
 
-The system is the cumulative output of T76 cycles 22–76 (Crawler,
+The system is the cumulative output of T76 cycles 22–88 (Crawler,
 Loom, Forge, Sentinel-GUI). Every layer was built incrementally and
 proves out under E2E test, mutation analysis, and dogfood audit.
 
@@ -23,8 +23,10 @@ proves out under E2E test, mutation analysis, and dogfood audit.
 DETECT → ENFORCE → REPORT → COLLECT → AUDIT → REVIEW
   ↑         ↑         ↑         ↑        ↑       ↑
  specs    browser    spec     loom     crawler  loom
-                              edit-     detector  report-
-                              serve     audit     tail/stats
+                              edit-    detector  report-
+                              serve    audit     tail
+                                                 stats
+                                                 review (88)
 ```
 
 Six layers. Each one cycle of cumulative work. Each layer has E2E
@@ -264,10 +266,11 @@ shows the worst-of-N composite across every audited journey
 
 ---
 
-## Layer 6: REVIEW (loom report-tail / report-stats)
+## Layer 6: REVIEW (loom report-tail / report-stats / report-review)
 
-**Where**: `loom-cli/src/main.rs::cmd_report_tail` and `cmd_report_stats`.
-**What**: operator-readable views over the collector log.
+**Where**: `loom-cli/src/main.rs::cmd_report_tail`, `cmd_report_stats`,
+and `cmd_report_review`.
+**What**: operator-readable views over the collector log + triage workflow.
 
 ### `loom report-tail` (cycle 70)
 
@@ -317,6 +320,90 @@ Flags:
 Both subcommands share the same JSON walker + date formatter +
 classifier (cycle 76 dedupe). Hand-rolled — no serde / chrono dep.
 The auditor is byte-verifiable.
+
+### `loom report-review` (cycle 88) — operator triage
+
+`report-tail` + `report-stats` are read-only views. `report-review`
+adds the *triage* surface: operators acknowledge or dismiss
+individual reports without mutating the underlying log. Triage
+decisions live in `.review-state.jsonl` alongside the violations
+log — itself append-only, so the audit trail of the audit trail
+is also audit-able.
+
+List + status, default view:
+
+```
+$ loom report-review list
+sig            status      ts                      kind              url
+3a9f0b1c8e44   NEW         2026-05-14 18:42:11Z    csp-violation     https://app.example.com/edit
+8e4d77ab10f0   ACK         2026-05-14 18:40:00Z    nel               https://app.example.com/api
+               └─ note: investigated; transient AT&T DNS hiccup
+1f0e2c5b9d77   DISMISSED   2026-05-14 18:15:22Z    csp-violation     https://app.example.com/
+               └─ note: known Adblock Plus injection — extension noise
+
+(showed 3 of 28 entries; triage decisions: 12)
+```
+
+Acknowledge a report (note optional):
+
+```
+$ loom report-review ack 3a9f0b1c8e44 --note "fixed in next deploy"
+loom report-review: ack 3a9f0b1c8e44 (note="fixed in next deploy")
+```
+
+Dismiss a report (note REQUIRED — the system refuses an empty note,
+so the audit trail always records reasoning):
+
+```
+$ loom report-review dismiss 1f0e2c5b9d77 --note "extension noise"
+$ loom report-review dismiss 1f0e2c5b9d77 --note ""
+loom report-review: --note is required and cannot be empty
+```
+
+Unique-prefix resolution — operators don't have to type the full
+12-char signature; any prefix of ≥4 chars that uniquely identifies
+a report is accepted:
+
+```
+$ loom report-review ack 3a9f --note "ok"          # works if unique
+$ loom report-review ack 3a    --note "ok"          # fails (ambiguous)
+loom report-review: ambiguous signature prefix "3a" matches 4 reports:
+  3a0d1c5b9d77, 3a9f0b1c8e44, 3afe28e7a2b1, 3a1cc01e94e0
+```
+
+Aggregate counts:
+
+```
+$ loom report-review status
+loom report-review status — reports
+  total distinct reports : 28
+  NEW (untriaged)        : 16
+  ACK                    :  9
+  DISMISSED              :  3
+  raw lines              : 47
+  audit-log decisions    : 12
+```
+
+(`raw lines` = total log entries; the gap with `total distinct
+reports` is normal — the same violation may fire many times. The
+audit chain triages by *signature* — the sha256 of the body —
+not by line number.)
+
+**Signature**: first 12 hex chars of sha256(body). Stable across
+log rotations, runs, and re-orderings because it's content-hash
+based. 12 hex chars = 48 bits ≈ 280 trillion collision space —
+collision-resistant for any realistic report volume.
+
+**Latest-wins**: if an operator dismisses a report and later
+acks the same signature, the ACK wins on the next `list`. The
+`.review-state.jsonl` retains BOTH decisions in chronological
+order so a later auditor can reconstruct the operator's reasoning.
+
+**REGRESSION-GUARD**: every `report-review` command is purely
+additive — it NEVER mutates `violations.jsonl`. Cycle 88's E2E
+test `list_purely_additive_does_not_mutate_violations` pins
+this contract (mtime + content hash before/after `list`, `ack`,
+`dismiss`, `status`).
 
 ---
 
