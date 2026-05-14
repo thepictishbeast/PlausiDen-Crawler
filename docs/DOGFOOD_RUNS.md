@@ -1033,6 +1033,95 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (seventy-fourth entry) — Drift detector — CI gate against the cycle 73 bug class
+
+### What's new since last cycle (seventy-third entry)
+- **Drift detector** (this commit): `src/supersocietyScore.
+  drift.test.ts`. Walks the src tree, extracts every
+  `kind: 'X'` and `.kind === 'X'` reference, compares
+  against `KIND_TO_CATEGORY` keys + a 25-entry allow-list
+  of non-finding kinds. Fails if any drift exists.
+- **Verified by canary injection**: temporarily inserted
+  `log({ kind: 'cycle-74-drift-canary' })` into main.ts;
+  detector correctly flagged it. After revert, all checks
+  pass.
+- Aggregate badge holds at **A 100/100 (16)**.
+
+### Why this exists
+Cycle 73 found 5 silent score-inflation bugs MANUALLY by
+running a tightened property test on the production
+calculator. The bugs were all the same class: a detector
+emits `kind: 'X'` events, but `X` is missing from
+`KIND_TO_CATEGORY`, so events fall into `unbucketed` and
+silently never penalize the score.
+
+That bug class was easy to introduce — every cycle that
+adds a new detector has to remember to update the map.
+Cycle 73 caught 5 instances. There WILL be more without an
+automated gate.
+
+### The detector
+```typescript
+const emitted = walkSrc()
+  .flatMap(extractKinds)  // kind: 'X' and .kind === 'X'
+  .filter(notInAllowlist) // strip journey-step lifecycles
+  .filter(notInMap);      // strip mapped kinds
+
+if (emitted.length > 0) FAIL;
+```
+
+The allow-list (`NON_FINDING_KINDS`) holds 25 deliberate
+exclusions: journey-step kinds (`goto`, `screenshot`,
+`wait`, etc.), runner-internal noise (`crawler`,
+`crawler-error`), Service-Worker lifecycle, and
+`BrokenResource`-type union members (`image`, `script`,
+`stylesheet`, `font`, `manifest`, `other`) — adding to
+this list is a DELIBERATE acknowledgement that the kind
+is excluded from scoring.
+
+### The Tier-6 validation stack is now four layers deep
+```
+property tests   → catch MATH bugs (cycle 66)
+mutation tests   → catch GAPS in property tests (cycle 73)
+drift detector   → catch UNMAPPED-KIND regressions (cycle 74)
+production audit → catch real-world bugs the above can't see
+```
+
+Each layer is independent: they catch DIFFERENT bug
+classes. Property tests can't catch unmapped kinds (their
+random inputs don't trigger them). Mutation tests can't
+catch unmapped kinds (the mutations are on penalty
+constants, not on the kind map). Drift tests can't catch
+math bugs (they only walk the source).
+
+### Validation evidence
+Canary test: temporarily inserted a fake `kind` reference
+into main.ts. Drift detector immediately flagged it. After
+revert, clean. The detector has real teeth.
+
+### Score arc (cycles 41-74)
+  C73: aggregate A 100/100 (16) — 5 silent bugs fixed.
+  C74: aggregate A 100/100 (16) — drift CI gate in place.
+
+### Cumulative cross-repo dogfood scoreboard (cycles 38-74)
+  31 Loom commits + 3 Forge + 1 Sentinel-GUI + **10 crawler
+  enhancements** + 3 E2E suites + property + mutation +
+  drift test suites.
+
+### Action items
+- [ ] Cycle 75: tighten property 4 ("warn on clean baseline
+      strictly decreases") to mirror cycle 73's property 3b.
+- [ ] Cycle 76: tighten property 5 — decide strict > warn
+      (currently >=).
+- [ ] Cycle 77: wire all three meta-test suites (property,
+      mutation, drift) into a single `npm run test:meta`
+      script for one-shot Tier-6 invocation.
+- [ ] Cycle 78: extend dogfood to a new surface (Atrium
+      doesn't have HTTP; consider plausiden-orchestrator
+      web UI or a fresh BleachBit bridge probe).
+
+---
+
 ## 2026-05-14 (seventy-third entry) — Mutation testing finds 5 silent score-inflation bugs
 
 ### What's new since last cycle (seventy-second entry)
