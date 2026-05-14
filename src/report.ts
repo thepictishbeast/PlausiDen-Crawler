@@ -49,6 +49,7 @@ export interface CapturedEvent {
     | 'coep'
     | 'sri'
     | 'info-leak'
+    | 'corp'
     | 'link-underline'
     | 'cross-page-title'
     | 'cross-page-meta-description';
@@ -130,6 +131,8 @@ export interface Report {
     sriFindingsStrict: number;
     infoLeakFindings: number;
     infoLeakFindingsStrict: number;
+    corpFindings: number;
+    corpFindingsStrict: number;
     linkUnderlineFindings: number;
     linkUnderlineFindingsStrict: number;
     crossPageTitleFindings: number;
@@ -375,6 +378,14 @@ export interface Diff {
    */
   newInfoLeakFindings: CapturedEvent[];
   /**
+   * corp findings new in this run vs prior. Strict =
+   * cross-origin sub-resource without CORP on a page that
+   * sets COEP=require-corp (resource will be BLOCKED at
+   * load). Warn = same defect on a page without COEP
+   * (forward-compat gap). T76 cycle 27.
+   */
+  newCorpFindings: CapturedEvent[];
+  /**
    * link-underline findings new in this run vs prior. Warn-only:
    * inline link inside running text distinguished only by colour.
    * WCAG 1.4.1 Level A. T76.
@@ -441,6 +452,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     newCoepFindings: [],
     newSriFindings: [],
     newInfoLeakFindings: [],
+    newCorpFindings: [],
     newLinkUnderlineFindings: [],
     newCrossPageTitleFindings: [],
     newCrossPageMetaDescriptionFindings: [],
@@ -485,6 +497,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     out.newCoepFindings = current.events.filter(e => e.kind === 'coep');
     out.newSriFindings = current.events.filter(e => e.kind === 'sri');
     out.newInfoLeakFindings = current.events.filter(e => e.kind === 'info-leak');
+    out.newCorpFindings = current.events.filter(e => e.kind === 'corp');
     out.newLinkUnderlineFindings = current.events.filter(e => e.kind === 'link-underline');
     out.newCrossPageTitleFindings = current.events.filter(e => e.kind === 'cross-page-title');
     out.newCrossPageMetaDescriptionFindings = current.events.filter(e => e.kind === 'cross-page-meta-description');
@@ -530,6 +543,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     else if (e.kind === 'coep') out.newCoepFindings.push(e);
     else if (e.kind === 'sri') out.newSriFindings.push(e);
     else if (e.kind === 'info-leak') out.newInfoLeakFindings.push(e);
+    else if (e.kind === 'corp') out.newCorpFindings.push(e);
     else if (e.kind === 'link-underline') out.newLinkUnderlineFindings.push(e);
     else if (e.kind === 'cross-page-title') out.newCrossPageTitleFindings.push(e);
     else if (e.kind === 'cross-page-meta-description') out.newCrossPageMetaDescriptionFindings.push(e);
@@ -838,6 +852,17 @@ export function renderPositiveSignal(report: Report, diff: Diff): string {
       total: report.events.filter((e) => e.kind === 'info-leak').length,
       news: diff.newInfoLeakFindings.length,
       strictNews: strict(diff.newInfoLeakFindings),
+    },
+    {
+      // T76 cycle 27 (Crawler): corp — Cross-Origin-Resource-
+      // Policy per-sub-resource audit. First detector that
+      // walks the new allResponseHeaders Map. Strict on cross-
+      // origin sub-resource without CORP when page sets
+      // COEP=require-corp; warn otherwise. Localhost exempt.
+      name: 'corp',
+      total: report.events.filter((e) => e.kind === 'corp').length,
+      news: diff.newCorpFindings.length,
+      strictNews: strict(diff.newCorpFindings),
     },
     {
       // T76 (Crawler): link-underline — WCAG 1.4.1 (Use of Color, A).

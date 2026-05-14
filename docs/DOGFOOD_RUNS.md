@@ -1033,6 +1033,134 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (twenty-seventh entry) — CORP detector + sub-resource capture-layer expansion
+
+### What's new since last cycle (twenty-sixth entry)
+- 1 new detector axis: **`corp`** — Cross-Origin-Resource-
+  Policy per-sub-resource audit. Brings the active-axis count
+  to **39** (42 with the three legacy event kinds counted
+  separately).
+- **NEW capture path**: `allResponseHeaders: Map<url,
+  Record<string, string>>`, sister to the existing
+  `topLevelResponseHeaders` Map. Populated for every response
+  that is NOT a top-level navigation (i.e. all sub-resources:
+  scripts, stylesheets, images, fonts, fetch'd JSON, etc.).
+- First detector that reads from `allResponseHeaders`. Sets
+  up future per-sub-resource audits (sub-resource SRI by
+  hash mismatch, sub-resource cookie analysis, sub-resource
+  CSP report-only, etc.).
+- 17 unit tests in `corp.test.ts`, all passing.
+- No new HTTPS fixture routes — wiring is verified by the
+  existing 43-route gate (CORP correctly fires zero findings
+  on these routes since they all load same-origin sub-
+  resources only). The detection LOGIC is verified by the
+  unit tests. End-to-end cross-origin testing requires a
+  second TLS listener on a different port; queued for a
+  follow-up cycle if real-world dogfood shows blind spots.
+
+### Why CORP now
+CORP is the third member of the cross-origin-isolation triad.
+COOP controls window.opener. COEP controls which sub-resources
+the page is willing to embed. CORP is set on the RESOURCE side
+to opt INTO being embedded by cross-origin pages. Without all
+three, the supersociety primitives — SharedArrayBuffer,
+high-resolution timers, performance.measureUserAgentSpecific-
+Memory — stay disabled and the page is exposed to Spectre-
+class side-channel attacks from co-tenant origins inside the
+same browser process.
+
+CORP also has standalone defensive value: when set to
+`same-origin`, browsers refuse to even FETCH the resource
+cross-origin, which prevents some cache-timing attacks that
+observe whether the resource was already cached.
+
+### Capture-layer expansion details
+The existing 9 response-header detectors all consume
+`topLevelResponseHeaders`, which only stores headers from
+top-level navigation responses. CORP needs sub-resource
+headers, so the response listener now ALSO populates
+`allResponseHeaders` for every non-navigation response.
+
+Capture choice: sync `headers()` (not `allHeaders()`) for
+sub-resources. Reasoning:
+
+  1. CORP doesn't carry the Set-Cookie semantics that the
+     sync form strips.
+  2. Awaiting `allHeaders()` for hundreds of sub-resources
+     per page would double the audit wall-clock time.
+  3. Sub-resource Set-Cookie audit is not yet in scope.
+
+When sub-resource Set-Cookie auditing lands, the capture
+switches to `allHeaders()` with a REGRESSION-GUARD comment
+mirroring the top-level one (cycle 20).
+
+### Detector design
+Two finding kinds:
+
+  - `corp.cross-origin-resource-no-corp` — the main one. The
+    severity depends on the page's own COEP header value:
+    * COEP=require-corp → STRICT (the cross-origin sub-
+      resource will be BLOCKED at load; the page is broken).
+    * COEP not set → WARN (forward-compat gap; the moment
+      the page adopts COEP, the resource stops working).
+    The detail message specifically calls out which scenario
+    applies so the operator knows whether they're looking at
+    a breakage or a future trap.
+
+  - `corp.cross-origin-resource-invalid` — CORP set to a
+    value not in the W3C-recognised set. Browsers may reject.
+
+Out of scope:
+  * Same-origin sub-resources (CORP doesn't apply).
+  * The page's OWN top-level CORP (separate concern; most
+    top-level HTML pages legitimately don't set CORP).
+  * Localhost (consistent with the response-header family).
+  * `data:` / `blob:` / `about:` URLs (no transport).
+
+### Bespoke wiring (does not use responseHeaderDetector helper)
+Per the cycle-22 verdict, the helper applies only to detectors
+whose classifier signature matches "snapshot → findings". CORP's
+shape is genuinely different:
+  - Walks an entire Map of sub-resource headers.
+  - Needs the page's own COEP value to set severity.
+  - Aggregates across multiple sub-resources (4 missing CORP
+    → 1 finding count=4).
+
+A generic `perSubResourceDetector` helper would emerge if a
+SECOND per-sub-resource detector lands (probable: sub-resource
+Set-Cookie audit). Not extracting prematurely.
+
+### Verified
+- HTTP gate: 43/43 routes pass.
+- HTTPS gate: 43/43 routes pass — CORP fires zero findings
+  because all routes load same-origin sub-resources only.
+  Wiring is exercised end-to-end (per-step record pushed,
+  exception-swallow path tested implicitly).
+- SkillShots audit: 42 axes total, all silent vs prior. CORP
+  fires nothing because SkillShots loads no cross-origin
+  sub-resources.
+- Type-check: clean (only pre-existing aria.ts +
+  vendor/puppeteer issues, neither touched).
+
+### Action items
+- [ ] **End-to-end CORP fixture verification**: spin up a
+      second TLS listener on port 8774 (cross-origin by port-
+      difference rule) serving sub-resource bytes with various
+      CORP header values. Add gate routes that load those.
+      Validates the cross-origin detection path end-to-end.
+- [ ] Sub-resource Set-Cookie audit detector — second per-
+      sub-resource detector. Triggers the
+      `perSubResourceDetector` helper-extract question. Will
+      need the capture switched to `allHeaders()` for sub-
+      resources too.
+- [ ] Cache-Control hygiene detector — single-value, classifier
+      depends on response status + content-type. Helper applies.
+- [ ] CSP `report-only` header parser.
+- [ ] Inline-script-without-nonce detector.
+- [ ] Vary header completeness — single-value, helper applies.
+
+---
+
 ## 2026-05-14 (twenty-sixth entry) — info-leak headers opsec audit
 
 ### What's new since last cycle (twenty-fifth entry)

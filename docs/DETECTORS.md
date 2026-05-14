@@ -225,6 +225,26 @@ Multi-token policies are honored per the W3C spec — the LAST recognised token 
 
 **Third response-header detector.** Reads from the same `topLevelResponseHeaders` Map as hsts + xFrameOptions. With three concrete examples now in hand, the ~70% structural overlap is a candidate for a generic `headerDetector(headerName, parser, classifier)` helper — extract on the next addition.
 
+### `corp` — Cross-Origin-Resource-Policy per-sub-resource audit *(T76 cycle 27 — added 2026-05-14)*
+Source: `src/corp.ts`
+
+| Finding | Sev | Catches |
+|---|---|---|
+| `corp.cross-origin-resource-no-corp` | strict / warn | A cross-origin sub-resource the page fetched lacks a `Cross-Origin-Resource-Policy` header. **Strict** if the page itself sets `COEP=require-corp` (the resource is BLOCKED by the browser at load — page is broken). **Warn** otherwise (forward-compat gap — the moment the page adopts COEP, this resource stops working). |
+| `corp.cross-origin-resource-invalid` | warn | A cross-origin sub-resource has CORP set to a value not in the W3C set (`same-origin`, `same-site`, `cross-origin`). Browsers may reject the resource entirely. |
+
+Acceptable values: `same-origin` (most restrictive), `same-site` (same eTLD+1), `cross-origin` (anyone can embed). Out of scope: same-origin sub-resources; the page's OWN top-level CORP (separate concern); localhost; `data:` / `blob:` / `about:` URLs.
+
+**FIRST per-sub-resource detector.** Reads from a NEW capture path — `allResponseHeaders` Map — populated by the response listener for EVERY response (not just top-level navigation). The existing 9 response-header detectors keep using `topLevelResponseHeaders`. The new sub-resource Map uses Playwright's sync `headers()` (not `allHeaders()`) because:
+
+  1. CORP doesn't carry the Set-Cookie semantics that the sync form strips.
+  2. Awaiting `allHeaders()` for hundreds of sub-resources per page would double the audit wall-clock time.
+  3. Sub-resource Set-Cookie audit is not yet in scope.
+
+When sub-resource Set-Cookie auditing lands, the capture will switch to `allHeaders()` with a similar REGRESSION-GUARD comment.
+
+**Bespoke wiring** (does not use the cycle-24 `responseHeaderDetector` helper). The helper's contract is "one snapshot per page navigation, classify into findings". CORP's contract is "walk every sub-resource, aggregate". Different shape — kept bespoke per the cycle-22 verdict on heterogeneous classifier shapes. The detector takes both `pageUrl`, the page's own headers (for COEP), and the full `allResponseHeaders` Map.
+
 ### `infoLeak` — opsec hygiene response-header audit *(T76 — added 2026-05-14)*
 Source: `src/infoLeakHeaders.ts`
 

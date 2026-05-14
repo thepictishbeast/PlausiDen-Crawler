@@ -58,6 +58,7 @@ import { buildCoepSnapshot, detectCoepIssues, type CoepFinding } from './coep.js
 import { makeResponseHeaderCheck, type PerStepRecord } from './responseHeaderDetector.js';
 import { detectSriIssues, SRI_DOM_CAPTURE_JS, type SriFinding, type SriSnapshot } from './sri.js';
 import { buildInfoLeakSnapshot, detectInfoLeakIssues, type InfoLeakFinding } from './infoLeakHeaders.js';
+import { buildCorpSnapshot, detectCorpIssues, type CorpFinding } from './corp.js';
 
 interface Budget {
   newConsoleErrors: number;
@@ -622,6 +623,16 @@ async function main(args: string[]): Promise<number> {
   // http://x.com that 301s to https://x.com produces a record
   // for the https URL.
   const topLevelResponseHeaders = new Map<string, Record<string, string>>();
+  // T76 (2026-05-14, cycle 27): CORP detector needs SUB-RESOURCE
+  // response headers, not just the top-level navigation. This
+  // sister Map captures EVERY response (including stylesheets,
+  // scripts, images, fonts, fetch'd JSON, etc.) so the per-sub-
+  // resource CORP audit can find cross-origin embeds that lack
+  // CORP attestation. Memory cap is implicit — Playwright's
+  // headers() returns a small string Map per response and a
+  // typical audit tops out at ~1000 entries per page. Indexed
+  // by the resource URL.
+  const allResponseHeaders = new Map<string, Record<string, string>>();
   page.on('requestfailed', (req) => {
     log({ kind: 'request-failed', text: req.failure()?.errorText || 'unknown', url: req.url() });
     cssHealthNetworkResponses.set(req.url(), {
@@ -677,6 +688,20 @@ async function main(args: string[]): Promise<number> {
         } catch {
           topLevelResponseHeaders.set(res.url(), headers);
         }
+      } else {
+        // T76 cycle 27: capture sub-resource headers for the
+        // CORP detector. We use the sync `headers()` here (not
+        // allHeaders) because:
+        //   1. CORP doesn't carry on Set-Cookie semantics that
+        //      the sync form strips, so sync is sufficient.
+        //   2. We're inside a per-response listener — awaiting
+        //      allHeaders for hundreds of sub-resources per page
+        //      doubles audit wall-clock time.
+        //   3. Sub-resource Set-Cookie audit is not in scope yet
+        //      (cycle 27 plan); when it lands we'll switch to
+        //      allHeaders here too with a similar REGRESSION-
+        //      GUARD note.
+        allResponseHeaders.set(res.url(), headers);
       }
     } catch {
       /* response handler is best-effort */
@@ -1098,6 +1123,48 @@ async function main(args: string[]): Promise<number> {
   // verified by the HTTPS fixture gate (34 routes, exact
   // ruleId match). Before changing the helper, run
   // `bash scripts/check-t76-https-detectors.sh` and confirm 34/34.
+
+  /**
+   * T76 cycle 27: CORP per-sub-resource audit. FIRST detector
+   * that consumes the new `allResponseHeaders` Map (sister to
+   * the existing `topLevelResponseHeaders`). Walks every
+   * cross-origin sub-resource the page fetched, flags those
+   * lacking a Cross-Origin-Resource-Policy header. Severity
+   * depends on whether the page itself sets COEP=require-corp
+   * (strict — the resource is BLOCKED at load) or not (warn —
+   * forward-compat gap).
+   *
+   * Doesn't use the responseHeaderDetector helper because the
+   * shape is different: walks a Map of sub-resource headers
+   * + needs the page's own COEP value to set severity. Bespoke
+   * per the cycle-22 verdict on heterogeneous classifier shapes.
+   */
+  const corpFindingsByStep: Array<{ stepLabel: string; pageUrl: string; findings: CorpFinding[] }> = [];
+  const checkCorp = async (afterLabel: string) => {
+    try {
+      const pageUrl = page.url();
+      const pageHeaders = topLevelResponseHeaders.get(pageUrl);
+      const snap = buildCorpSnapshot(pageUrl, pageHeaders, allResponseHeaders);
+      if (disableLocalhostExemption) snap.pageIsLocalhost = false;
+      const findings = detectCorpIssues(snap);
+      corpFindingsByStep.push({ stepLabel: afterLabel, pageUrl, findings });
+      for (const f of findings) {
+        log({
+          kind: 'corp',
+          text: `[${f.kind}] ${f.detail}`,
+          url: pageUrl,
+          severity: f.severity,
+          ruleId: f.kind,
+          impact: f.severity === 'strict' ? 'serious' : 'minor',
+        });
+      }
+    } catch (e) {
+      log({
+        kind: 'pageerror',
+        text: `[corp] detector threw on step ${afterLabel}: ${(e as Error).message}`,
+      });
+    }
+  };
 
   /**
    * T76: info-leak headers detector. Opsec hygiene — flags
@@ -1896,6 +1963,7 @@ async function main(args: string[]): Promise<number> {
       await checkCoep(step.label || `goto-${i}`);
       await checkSri(step.label || `goto-${i}`);
       await checkInfoLeak(step.label || `goto-${i}`);
+      await checkCorp(step.label || `goto-${i}`);
       await checkWebVitals(step.label || `goto-${i}`);
     }
     // Memory snapshot at end of each step so the report shows heap growth
@@ -2046,6 +2114,8 @@ async function main(args: string[]): Promise<number> {
       sriFindingsStrict: events.filter(e => e.kind === 'sri' && e.severity === 'strict').length,
       infoLeakFindings: events.filter(e => e.kind === 'info-leak').length,
       infoLeakFindingsStrict: events.filter(e => e.kind === 'info-leak' && e.severity === 'strict').length,
+      corpFindings: events.filter(e => e.kind === 'corp').length,
+      corpFindingsStrict: events.filter(e => e.kind === 'corp' && e.severity === 'strict').length,
       linkUnderlineFindings: events.filter(e => e.kind === 'link-underline').length,
       linkUnderlineFindingsStrict: events.filter(e => e.kind === 'link-underline' && e.severity === 'strict').length,
       crossPageTitleFindings: events.filter(e => e.kind === 'cross-page-title').length,
@@ -2233,6 +2303,12 @@ async function main(args: string[]): Promise<number> {
       JSON.stringify(infoLeakFindingsByStep, null, 2),
     );
   }
+  if (corpFindingsByStep.length > 0) {
+    writeFileSync(
+      join(outDir, 'corp.json'),
+      JSON.stringify(corpFindingsByStep, null, 2),
+    );
+  }
   if (linkUnderlineFindingsByStep.length > 0) {
     writeFileSync(
       join(outDir, 'link-underline.json'),
@@ -2339,6 +2415,7 @@ async function main(args: string[]): Promise<number> {
   console.log(`  coep:              ${report.counts.coepFindings} (strict ${report.counts.coepFindingsStrict})`);
   console.log(`  sri:               ${report.counts.sriFindings} (strict ${report.counts.sriFindingsStrict})`);
   console.log(`  info-leak headers: ${report.counts.infoLeakFindings} (strict ${report.counts.infoLeakFindingsStrict})`);
+  console.log(`  corp:              ${report.counts.corpFindings} (strict ${report.counts.corpFindingsStrict})`);
   console.log(`  link underline:    ${report.counts.linkUnderlineFindings} (strict ${report.counts.linkUnderlineFindingsStrict})`);
   console.log(`  cross-page title:  ${report.counts.crossPageTitleFindings} (strict ${report.counts.crossPageTitleFindingsStrict})`);
   console.log(`  cross-page meta:   ${report.counts.crossPageMetaDescriptionFindings} (strict ${report.counts.crossPageMetaDescriptionFindingsStrict})`);
@@ -2435,6 +2512,9 @@ async function main(args: string[]): Promise<number> {
     const newIlStrict = diff.newInfoLeakFindings.filter(e => e.severity === 'strict').length;
     const newIlWarn = diff.newInfoLeakFindings.length - newIlStrict;
     console.log(`    NEW info-leak:        ${diff.newInfoLeakFindings.length} (strict ${newIlStrict}, warn ${newIlWarn})`);
+    const newCorpStrict = diff.newCorpFindings.filter(e => e.severity === 'strict').length;
+    const newCorpWarn = diff.newCorpFindings.length - newCorpStrict;
+    console.log(`    NEW corp:             ${diff.newCorpFindings.length} (strict ${newCorpStrict}, warn ${newCorpWarn})`);
     const newLinkUnderlineStrict = diff.newLinkUnderlineFindings.filter(e => e.severity === 'strict').length;
     const newLinkUnderlineWarn = diff.newLinkUnderlineFindings.length - newLinkUnderlineStrict;
     console.log(`    NEW link underline:   ${diff.newLinkUnderlineFindings.length} (strict ${newLinkUnderlineStrict}, warn ${newLinkUnderlineWarn})`);
