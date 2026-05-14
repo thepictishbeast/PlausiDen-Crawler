@@ -809,10 +809,78 @@ URLs sharing 'T76 Fixture'. The detector is alive end-to-end.
 
 - [x] **DONE 2026-05-14 (thirteenth cycle)**: second aggregates
       detector — `crossPageMetaDescription`. Pattern validated.
-- [ ] HTTPS fixture variant for mixedContent live integration.
+- [ ] HTTPS fixture variant for mixedContent + hsts live
+      integration.
 - [ ] login-flow fixture.
-- [ ] Remaining roadmap: `fontLoading`, `hstsHeader`,
-      `xFrameOptions`.
+- [x] **DONE 2026-05-14 (fourteenth cycle)**: `hstsHeader` —
+      first response-header detector + capture path. See
+      fourteenth entry below.
+- [ ] Remaining roadmap: `fontLoading`, `xFrameOptions`.
+
+---
+
+## 2026-05-14 (fourteenth entry) — first response-header detector
+
+### What's new since last cycle (thirteenth entry)
+- `hstsHeader` detector landed (mix of strict+warn).
+- `topLevelResponseHeaders: Map<url, headers>` accumulator
+  added to main.ts. Populated by the existing `page.on('response')`
+  listener for any response where `request().isNavigationRequest()`.
+- Total active detector axes: 24 (was 23).
+
+### Why a new capture path
+
+The 23 prior detectors all read from one of:
+- `page.evaluate()` — DOM / runtime computed styles
+- per-page snapshots accumulated during the loop
+- cross-page accumulators (the aggregates layer)
+
+HSTS lives in the HTTP response headers — invisible to any
+DOM or computed-style query. Adding the response-header capture
+path opens the door for an entire FAMILY of header-flavoured
+detectors (xFrameOptions, referrerPolicy, contentSecurityPolicy
+strict mode, COEP/COOP, etc.). One listener; many detectors.
+
+### Detector design
+
+  - hsts.missing            strict   no Strict-Transport-Security
+                                     on https response (or
+                                     unparseable).
+  - hsts.max-age-too-short  warn     max-age < 6 months.
+  - hsts.no-subdomains      warn     adequate max-age but missing
+                                     includeSubDomains.
+
+  Localhost and http pages exempt (HSTS doesn't apply on
+  loopback or non-https origins).
+
+  14 unit tests cover http-page exemption, localhost (and
+  *.localhost) exemption, missing/short/no-subdomains paths,
+  case-insensitive headers + directives, quoted max-age values,
+  unparseable header → missing fallback.
+
+### SkillShots dogfood
+
+**0 findings** — SkillShots dev server runs on http://127.0.0.1
+which short-circuits at the localhost check. Correct behaviour.
+For real https + production-deployed PlausiDen sites, this
+detector will be load-bearing.
+
+### Re-audit result
+
+**ALL 31 DETECTION AXES SILENT** on SkillShots (was 30; +1 axis).
+Liveness gate (33/33) still PASS.
+
+### Action items
+
+- [ ] HTTPS fixture variant for full mixedContent + hsts live
+      integration. Self-signed cert + Playwright
+      `ignoreHTTPSErrors: true` would let the gate verify these
+      detectors fire end-to-end.
+- [ ] Add `xFrameOptions` and `referrerPolicy` detectors —
+      same response-header capture path, smallest possible
+      additional code (one detector module each).
+- [ ] login-flow fixture (still queued).
+- [ ] Remaining roadmap: `fontLoading`.
 
 ---
 

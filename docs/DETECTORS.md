@@ -187,6 +187,19 @@ Out of scope (NOT flagged):
 
 **Detector ordering note**: linkUnderline runs FIRST in the per-goto detector chain. Other detectors (focus simulation, contrast walks) can transiently mutate computed styles; capturing pristine state avoids false negatives.
 
+### `hsts` — Strict-Transport-Security response header *(T76 — added 2026-05-14)*
+Source: `src/hstsHeader.ts`
+
+| Finding | Sev | Catches |
+|---|---|---|
+| `hsts.missing` | strict | https page response carries no `Strict-Transport-Security` header (or unparseable). First-hit users on a clean browser remain MITM-vulnerable before the https redirect. |
+| `hsts.max-age-too-short` | warn | Header present but `max-age` < 6 months (15552000s). Protection lapses if the user doesn't return within the window. |
+| `hsts.no-subdomains` | warn | Adequate `max-age` but missing `includeSubDomains`. Subdomain takeovers can serve `http://attacker.example.com`. |
+
+Out of scope: http pages (HSTS doesn't apply), localhost / 127.0.0.1 / `*.localhost` (browsers don't honour HSTS on loopback).
+
+**First response-header detector.** Reads from main.ts's `topLevelResponseHeaders: Map<url, headers>` accumulator, populated by the existing `page.on('response')` listener for any response where `request().isNavigationRequest()`. Future header-flavoured detectors (xFrameOptions, referrerPolicy, contentSecurityPolicy strict mode) read from the same Map — no new listener needed per detector.
+
 ### `mixedContent` — HTTPS-page-loads-HTTP-resource *(T76 — added 2026-05-14)*
 Source: `src/mixedContent.ts` · Rust: `mixed_content.rs`
 
@@ -443,9 +456,6 @@ zero-overlap with existing axes:
 
 - **`fontLoading`** — `font-display: swap` missing → invisible-text
   flash (FOIT).
-- **`hstsHeader`** — `Strict-Transport-Security` header missing /
-  `max-age` too short (< 6 months). Server-response header check;
-  needs response-header capture path. SECURITY.
 - **`xFrameOptions`** — `X-Frame-Options` header missing (clickjacking
   defence). SECURITY.
 - **`mixedFormSubmission`** — `<form action="http://...">` on

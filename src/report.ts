@@ -38,6 +38,7 @@ export interface CapturedEvent {
     | 'meta-description'
     | 'favicon'
     | 'mixed-content'
+    | 'hsts'
     | 'link-underline'
     | 'cross-page-title'
     | 'cross-page-meta-description';
@@ -97,6 +98,8 @@ export interface Report {
     faviconFindingsStrict: number;
     mixedContentFindings: number;
     mixedContentFindingsStrict: number;
+    hstsFindings: number;
+    hstsFindingsStrict: number;
     linkUnderlineFindings: number;
     linkUnderlineFindingsStrict: number;
     crossPageTitleFindings: number;
@@ -265,6 +268,13 @@ export interface Diff {
    */
   newMixedContentFindings: CapturedEvent[];
   /**
+   * hsts response-header findings new in this run vs prior.
+   * Strict = missing on https / unparseable. Warn = short
+   * max-age or no includeSubDomains. Localhost + http exempt.
+   * T76.
+   */
+  newHstsFindings: CapturedEvent[];
+  /**
    * link-underline findings new in this run vs prior. Warn-only:
    * inline link inside running text distinguished only by colour.
    * WCAG 1.4.1 Level A. T76.
@@ -320,6 +330,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     newMetaDescriptionFindings: [],
     newFaviconFindings: [],
     newMixedContentFindings: [],
+    newHstsFindings: [],
     newLinkUnderlineFindings: [],
     newCrossPageTitleFindings: [],
     newCrossPageMetaDescriptionFindings: [],
@@ -353,6 +364,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     out.newMetaDescriptionFindings = current.events.filter(e => e.kind === 'meta-description');
     out.newFaviconFindings = current.events.filter(e => e.kind === 'favicon');
     out.newMixedContentFindings = current.events.filter(e => e.kind === 'mixed-content');
+    out.newHstsFindings = current.events.filter(e => e.kind === 'hsts');
     out.newLinkUnderlineFindings = current.events.filter(e => e.kind === 'link-underline');
     out.newCrossPageTitleFindings = current.events.filter(e => e.kind === 'cross-page-title');
     out.newCrossPageMetaDescriptionFindings = current.events.filter(e => e.kind === 'cross-page-meta-description');
@@ -387,6 +399,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     else if (e.kind === 'meta-description') out.newMetaDescriptionFindings.push(e);
     else if (e.kind === 'favicon') out.newFaviconFindings.push(e);
     else if (e.kind === 'mixed-content') out.newMixedContentFindings.push(e);
+    else if (e.kind === 'hsts') out.newHstsFindings.push(e);
     else if (e.kind === 'link-underline') out.newLinkUnderlineFindings.push(e);
     else if (e.kind === 'cross-page-title') out.newCrossPageTitleFindings.push(e);
     else if (e.kind === 'cross-page-meta-description') out.newCrossPageMetaDescriptionFindings.push(e);
@@ -582,6 +595,15 @@ export function renderPositiveSignal(report: Report, diff: Diff): string {
       total: report.events.filter((e) => e.kind === 'mixed-content').length,
       news: diff.newMixedContentFindings.length,
       strictNews: strict(diff.newMixedContentFindings),
+    },
+    {
+      // T76 (Crawler): hsts — Strict-Transport-Security response
+      // header. missing/unparseable strict; max-age-too-short or
+      // no-includeSubDomains warn. Localhost + http exempt.
+      name: 'hsts',
+      total: report.events.filter((e) => e.kind === 'hsts').length,
+      news: diff.newHstsFindings.length,
+      strictNews: strict(diff.newHstsFindings),
     },
     {
       // T76 (Crawler): link-underline — WCAG 1.4.1 (Use of Color, A).

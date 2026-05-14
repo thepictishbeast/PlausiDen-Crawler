@@ -46,6 +46,7 @@ import { captureMixedContentSnapshot, detectMixedContentIssues, type MixedConten
 import { captureLinkUnderlineSnapshot, detectLinkUnderlineIssues, type LinkUnderlineFinding } from './linkUnderline.js';
 import { newCrossPageTitleAccumulator, recordPageTitle, detectCrossPageTitleDuplicates } from './crossPageTitle.js';
 import { newCrossPageMetaDescriptionAccumulator, recordPageMetaDescription, detectCrossPageMetaDescriptionDuplicates } from './crossPageMetaDescription.js';
+import { buildHstsSnapshot, detectHstsIssues, type HstsFinding } from './hstsHeader.js';
 
 interface Budget {
   newConsoleErrors: number;
@@ -593,6 +594,13 @@ async function main(args: string[]): Promise<number> {
     string,
     { status: number; contentType: string | null; bodyBytes: number; errorText: string | null }
   >();
+  // T76 (2026-05-14): hstsHeader detector reads response headers
+  // from this Map. Populated in the response handler below for
+  // EVERY top-level navigation response (request().isNavigationRequest()).
+  // Indexed by the final URL (post-redirect) so a goto to
+  // http://x.com that 301s to https://x.com produces a record
+  // for the https URL.
+  const topLevelResponseHeaders = new Map<string, Record<string, string>>();
   page.on('requestfailed', (req) => {
     log({ kind: 'request-failed', text: req.failure()?.errorText || 'unknown', url: req.url() });
     cssHealthNetworkResponses.set(req.url(), {
@@ -624,6 +632,13 @@ async function main(args: string[]): Promise<number> {
         bodyBytes,
         errorText: null,
       });
+      // T76: stash FULL headers for top-level navigation responses
+      // so the hstsHeader detector can read Strict-Transport-Security
+      // (and any future header-flavoured detectors don't need their
+      // own listener).
+      if (res.request().isNavigationRequest()) {
+        topLevelResponseHeaders.set(res.url(), headers);
+      }
     } catch {
       /* response handler is best-effort */
     }
@@ -960,6 +975,39 @@ async function main(args: string[]): Promise<number> {
       log({
         kind: 'pageerror',
         text: `[linkUnderline] detector threw on step ${afterLabel}: ${(e as Error).message}`,
+      });
+    }
+  };
+
+  /**
+   * T76: HSTS response-header detector. SECURITY-flavoured.
+   * Reads the Strict-Transport-Security header from the top-
+   * level navigation response captured in
+   * `topLevelResponseHeaders`. Short-circuits on http pages
+   * and localhost.
+   */
+  const hstsFindingsByStep: Array<{ stepLabel: string; pageUrl: string; findings: HstsFinding[] }> = [];
+  const checkHsts = async (afterLabel: string) => {
+    try {
+      const pageUrl = page.url();
+      const headers = topLevelResponseHeaders.get(pageUrl);
+      const snap = buildHstsSnapshot(pageUrl, headers);
+      const findings = detectHstsIssues(snap);
+      hstsFindingsByStep.push({ stepLabel: afterLabel, pageUrl, findings });
+      for (const f of findings) {
+        log({
+          kind: 'hsts',
+          text: `[${f.kind}] ${f.detail}`,
+          url: pageUrl,
+          severity: f.severity,
+          ruleId: f.kind,
+          impact: f.severity === 'strict' ? 'serious' : 'minor',
+        });
+      }
+    } catch (e) {
+      log({
+        kind: 'pageerror',
+        text: `[hsts] detector threw on step ${afterLabel}: ${(e as Error).message}`,
       });
     }
   };
@@ -1597,6 +1645,7 @@ async function main(args: string[]): Promise<number> {
       await checkMetaDescription(step.label || `goto-${i}`);
       await checkFavicon(step.label || `goto-${i}`);
       await checkMixedContent(step.label || `goto-${i}`);
+      await checkHsts(step.label || `goto-${i}`);
       await checkWebVitals(step.label || `goto-${i}`);
     }
     // Memory snapshot at end of each step so the report shows heap growth
@@ -1725,6 +1774,8 @@ async function main(args: string[]): Promise<number> {
       faviconFindingsStrict: events.filter(e => e.kind === 'favicon' && e.severity === 'strict').length,
       mixedContentFindings: events.filter(e => e.kind === 'mixed-content').length,
       mixedContentFindingsStrict: events.filter(e => e.kind === 'mixed-content' && e.severity === 'strict').length,
+      hstsFindings: events.filter(e => e.kind === 'hsts').length,
+      hstsFindingsStrict: events.filter(e => e.kind === 'hsts' && e.severity === 'strict').length,
       linkUnderlineFindings: events.filter(e => e.kind === 'link-underline').length,
       linkUnderlineFindingsStrict: events.filter(e => e.kind === 'link-underline' && e.severity === 'strict').length,
       crossPageTitleFindings: events.filter(e => e.kind === 'cross-page-title').length,
@@ -1846,6 +1897,12 @@ async function main(args: string[]): Promise<number> {
       JSON.stringify(mixedContentFindingsByStep, null, 2),
     );
   }
+  if (hstsFindingsByStep.length > 0) {
+    writeFileSync(
+      join(outDir, 'hsts.json'),
+      JSON.stringify(hstsFindingsByStep, null, 2),
+    );
+  }
   if (linkUnderlineFindingsByStep.length > 0) {
     writeFileSync(
       join(outDir, 'link-underline.json'),
@@ -1941,6 +1998,7 @@ async function main(args: string[]): Promise<number> {
   console.log(`  meta description:  ${report.counts.metaDescriptionFindings} (strict ${report.counts.metaDescriptionFindingsStrict})`);
   console.log(`  favicon:           ${report.counts.faviconFindings} (strict ${report.counts.faviconFindingsStrict})`);
   console.log(`  mixed content:     ${report.counts.mixedContentFindings} (strict ${report.counts.mixedContentFindingsStrict})`);
+  console.log(`  hsts:              ${report.counts.hstsFindings} (strict ${report.counts.hstsFindingsStrict})`);
   console.log(`  link underline:    ${report.counts.linkUnderlineFindings} (strict ${report.counts.linkUnderlineFindingsStrict})`);
   console.log(`  cross-page title:  ${report.counts.crossPageTitleFindings} (strict ${report.counts.crossPageTitleFindingsStrict})`);
   console.log(`  cross-page meta:   ${report.counts.crossPageMetaDescriptionFindings} (strict ${report.counts.crossPageMetaDescriptionFindingsStrict})`);
@@ -2004,6 +2062,9 @@ async function main(args: string[]): Promise<number> {
     const newMixedStrict = diff.newMixedContentFindings.filter(e => e.severity === 'strict').length;
     const newMixedWarn = diff.newMixedContentFindings.length - newMixedStrict;
     console.log(`    NEW mixed content:    ${diff.newMixedContentFindings.length} (strict ${newMixedStrict}, warn ${newMixedWarn})`);
+    const newHstsStrict = diff.newHstsFindings.filter(e => e.severity === 'strict').length;
+    const newHstsWarn = diff.newHstsFindings.length - newHstsStrict;
+    console.log(`    NEW hsts:             ${diff.newHstsFindings.length} (strict ${newHstsStrict}, warn ${newHstsWarn})`);
     const newLinkUnderlineStrict = diff.newLinkUnderlineFindings.filter(e => e.severity === 'strict').length;
     const newLinkUnderlineWarn = diff.newLinkUnderlineFindings.length - newLinkUnderlineStrict;
     console.log(`    NEW link underline:   ${diff.newLinkUnderlineFindings.length} (strict ${newLinkUnderlineStrict}, warn ${newLinkUnderlineWarn})`);
