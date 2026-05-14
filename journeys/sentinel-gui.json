@@ -1,0 +1,9 @@
+{
+  "name": "sentinel-gui",
+  "description": "T76 cycle 66: dogfood loop extension. PlausiDen-Sentinel-GUI is the security dashboard for the daemon (sentinel + sentinel-update.timer). Single-page server at 127.0.0.1:9001 — first surface beyond Loom edit-serve + Forge SkillShots to enter the supersociety audit matrix. The first audit's findings define the cycle 67+ backlog.",
+  "baseUrl": "http://127.0.0.1:9001",
+  "viewport": { "width": 1280, "height": 900 },
+  "steps": [
+    { "kind": "goto", "url": "http://127.0.0.1:9001/", "label": "sentinel-index" }
+  ]
+}

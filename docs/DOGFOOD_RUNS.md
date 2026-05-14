@@ -1033,6 +1033,89 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (sixty-sixth entry) — Property tests + dogfood loop extends to Sentinel-GUI
+
+### What's new since last cycle (sixty-fifth entry)
+- **Property-based test suite** for the supersociety score
+  module (Tier 6 meta-validation). 10 properties × 200 random
+  cases each = 2000 case-evaluations. Hand-rolled deterministic
+  PRNG so the tests are reproducible without an external dep.
+- **New audited surface: PlausiDen-Sentinel-GUI** at
+  `127.0.0.1:9001` joins the dogfood matrix as the **first
+  surface beyond Loom edit-serve + Forge SkillShots**.
+  Journey: `journeys/sentinel-gui.json`.
+- **Aggregate badge: A 100/100 (15) → A 93/100 (16)** —
+  honest representation now that a real, unhardened surface
+  joined the matrix.
+
+### Property-based invariants (200 cases each, all pass)
+1. composite ∈ [0, 100] always.
+2. grade monotonic with composite (higher composite ⇒ ≥ grade).
+3. adding strict event never INCREASES composite.
+4. adding warn event never INCREASES composite.
+5. strict penalty ≥ warn penalty for the same kind.
+6. empty events → 100/A/0/0.
+7. unknown event kind → no penalty, lands in unbucketed list.
+8. determinism: same input → same output (JSON-equal).
+9. every category score ∈ [0, 100].
+10. composite ≈ weighted average of category scores (within 1
+    unit of rounded value).
+
+These invariants encode what we BELIEVE about the score model.
+If a future refactor or detector-mapping change breaks one,
+the property catches the bug before it lies on the dashboard.
+
+The score module is THE auditor of the auditor — if its
+arithmetic is wrong, the green badge means nothing. 2000 case-
+evaluations of randomised stress is the Tier 6 evidence.
+
+### Sentinel-GUI first audit findings (cycle 66 baseline)
+PlausiDen-Sentinel-GUI scored **A 93/100** on its first dogfood
+audit — solid foundation; 10 things to fix in follow-up cycles:
+
+- 1 strict: `runtime-landmarks` (missing main/aside landmark).
+- 5 warns contentSecurity: 3× inline-script + 2× trusted-types
+  (the dashboard ships inline `<style>` + `<script>`; would
+  benefit from hash-pinned CSP + Trusted-Types directive).
+- 2 warns accessibility: skip-link missing + tap-targets
+  below 44px.
+- 2 warns uxHygiene: favicon missing + meta-description missing.
+
+These mirror the early-cycle Loom edit-server findings — same
+problem class, ready for the same fix-pattern in cycles 67+.
+
+### Aggregate badge: honest now
+Pre-cycle-66:
+  A 100/100 (15) — Loom + Forge only
+
+Post-cycle-66:
+  A 93/100 (16) — Sentinel-GUI joins, drags the worst-of-N
+  floor down. The honest representation: not every PlausiDen
+  surface is at the supersociety baseline yet.
+
+This is the dogfood loop's intended behaviour. The badge
+brightens when EVERY surface is at 100, not when 90% are.
+
+### Cumulative cross-repo dogfood scoreboard (cycles 38-66)
+  26 Loom commits + 3 Forge commits + 8 crawler enhancements +
+  property test suite + 1 new audited surface (Sentinel-GUI).
+
+### Action items
+- [ ] Cycle 67: harden PlausiDen-Sentinel-GUI to A 100/100.
+      Mirror the early-Loom fix path:
+      - favicon + meta-description on the dashboard HTML
+      - skip-link + main/aside landmark
+      - ≥44px tap targets
+      - hash-pinned CSP for the inline style + script
+      - Trusted-Types directive
+- [ ] Cycle 68: TUI viewer for violations.jsonl.
+- [ ] Cycle 69: extend dogfood to PlausiDen-Atrium.
+- [ ] Cycle 70: mutation testing on score module — flip a
+      constant (STRICT_PENALTY = 5) and verify property 5
+      catches the bug.
+
+---
+
 ## 2026-05-14 (sixty-fifth entry) — NEL detector: axis 50
 
 ### What's new since last cycle (sixty-fourth entry)

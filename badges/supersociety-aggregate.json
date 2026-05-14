@@ -1,7 +1,7 @@
 {
-  "composite": 100,
+  "composite": 93,
   "grade": "A",
-  "journeyCount": 15,
+  "journeyCount": 16,
   "perJourney": [
     {
       "name": "forge-skillshots-build",
@@ -16,6 +16,11 @@
     {
       "name": "loom-state-matrix",
       "composite": 100,
+      "grade": "A"
+    },
+    {
+      "name": "sentinel-gui",
+      "composite": 93,
       "grade": "A"
     },
     {
