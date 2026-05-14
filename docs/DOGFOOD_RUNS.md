@@ -1033,6 +1033,98 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (forty-eighth entry) — Required-input * markers; second skip-link experiment
+
+### What's new since last cycle (forty-seventh entry)
+- **Cross-repo fix in PlausiDen-Loom** (commit 025c565):
+  required `<input>` labels get a visible red `*` marker
+  (aria-hidden) + SR-only "required" hint.
+- **Second failed skip-link experiment** — added skip-links
+  WITH the canonical `.loom-skip:focus` CSS pattern that the
+  Forge-built SkillShots uses successfully, but the tap-
+  targets detector STILL flagged 4 new strict findings.
+  Reverted. Detector-treatment difference between Forge-static
+  output and Loom-served output needs deeper investigation.
+- Composite stable at **B 85 / 3 strict / 21 warn**.
+- Accessibility category moved F=20 → F=25 — visible progress
+  WITHIN the F category (per cycle-46's F-clamp break).
+- Tenth cross-repo Loom commit since cycle 38.
+- Active named-detector axis count UNCHANGED at 44.
+
+### What was fixed
+Required inputs without visible `*` markers — sighted users
+only discovered the requirement on submission failure.
+WCAG 3.3.2 + UX best practice.
+
+Three required-input labels updated:
+  - new-page form: Slug
+  - per-page edit form: Title
+  - per-page edit form: Description
+
+Pattern used:
+```html
+<label for="...">Title <span aria-hidden="true" style="color:#b00020">*</span>
+  <span style="position:absolute;left:-9999px">required</span></label>
+```
+
+The aria-hidden `*` means screen readers don't announce
+"asterisk"; the visually-hidden "required" span gives them
+the actual cue.
+
+### The skip-link mystery (carried forward to cycle 49+)
+Two consecutive cycles (47, 48) tried adding skip-links and
+both got flagged with NEW `tap.too-small` strict findings
+(regressing the score). The CSS used in cycle 48 was
+EXACTLY the same hide-until-focus pattern the Forge-built
+SkillShots uses (which scores A=100 with no such warnings).
+
+Hypothesis: the tap-targets detector might be measuring
+bounding-rect via `getBoundingClientRect()` which returns
+the raw 1×1px size regardless of `position:absolute;
+left:-9999px` (an off-screen 1×1 is still 1×1). The Forge
+static might be passing because of WHEN the audit fires
+(maybe before the skip-link is rendered, or because of a
+different DOM-walk strategy).
+
+Cycle 49+ investigation: read the tap-targets detector
+source, understand the bounding-rect logic, decide if the
+detector should be smarter about off-screen elements or if
+the skip-link CSS pattern needs adjustment.
+
+### Why the composite stayed at 85 with only -1 warn
+Reduce by 5 deduction = 1 warn × 5pt. The warn change is
+small enough that the composite calculation rounds to the
+same integer (weighted average). The accessibility
+*category* score did move 20 → 25 (visible in the table).
+
+### Cumulative cross-repo dogfood scoreboard (cycles 38-48)
+  C38 Loom:  state-matrix CSS         C 75 → A 99.
+  C39 Loom:  nav-link 44px            A 95 → A 100.
+  C40 Forge: CMS title disambiguate   A 100 → A 100 (0).
+  C41 Loom:  viewport + lang          B 82 → B 83 (-8).
+  C42 Loom:  <main> landmark          B 83 → B 83 (-4).
+  C43 Loom:  contrast colours         B 83 → B 83 (-2).
+  C44 Loom:  toolbar buttons 24×24    B 83 → B 83 (-1).
+  C45 (detector cycle: originAgentCluster axis added.)
+  C46 Loom:  fieldset input labels    B 83 → B 85 (F-clamp breaks).
+  C47 Loom:  #555 → #595959 defensive B 85 stable.
+  C48 Loom:  required * markers       B 85 stable (-1 warn).
+
+Total: 10 cross-repo commits across Loom (×9) + Forge (×1).
+
+### Action items
+- [ ] Cycle 49: investigate the tap-targets detector source.
+      Decide between (a) detector improvement (skip
+      off-screen elements via clientRect intersect test) or
+      (b) different skip-link CSS pattern.
+- [ ] Cycle 50: contrast cluster on /about (9-element strict).
+- [ ] Cycle 51: tap.too-small on the about-section delete
+      button (1 strict).
+- [ ] Cycle 52+: detector axis (CSP-Report-Only is the
+      remaining easy quick-win).
+
+---
+
 ## 2026-05-14 (forty-seventh entry) — Learning cycle: skip-link needs styling
 
 ### What's new since last cycle (forty-sixth entry)
