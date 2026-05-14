@@ -49,6 +49,7 @@ import { newCrossPageMetaDescriptionAccumulator, recordPageMetaDescription, dete
 import { buildHstsSnapshot, detectHstsIssues, type HstsFinding } from './hstsHeader.js';
 import { buildXFrameOptionsSnapshot, detectXFrameOptionsIssues, type XFrameOptionsFinding } from './xFrameOptions.js';
 import { buildReferrerPolicySnapshot, detectReferrerPolicyIssues, type ReferrerPolicyFinding } from './referrerPolicy.js';
+import { captureFontLoadingSnapshot, detectFontLoadingIssues, type FontLoadingFinding } from './fontLoading.js';
 
 interface Budget {
   newConsoleErrors: number;
@@ -961,6 +962,37 @@ async function main(args: string[]): Promise<number> {
   };
 
   /**
+   * T76: font-loading detector. Walks document.styleSheets for
+   * `@font-face` rules and flags any without `font-display: swap`
+   * (or `fallback`/`optional`). The browser default is `block`,
+   * which causes Flash of Invisible Text (FOIT) — text renders
+   * blank until the font file loads.
+   */
+  const fontLoadingFindingsByStep: Array<{ stepLabel: string; pageUrl: string; findings: FontLoadingFinding[] }> = [];
+  const checkFontLoading = async (afterLabel: string) => {
+    try {
+      const snap = await captureFontLoadingSnapshot(page);
+      const findings = detectFontLoadingIssues(snap);
+      fontLoadingFindingsByStep.push({ stepLabel: afterLabel, pageUrl: snap.pageUrl, findings });
+      for (const f of findings) {
+        log({
+          kind: 'font-loading',
+          text: `[${f.kind}] ${f.detail}`,
+          url: snap.pageUrl,
+          severity: f.severity,
+          ruleId: f.kind,
+          impact: f.severity === 'strict' ? 'serious' : 'minor',
+        });
+      }
+    } catch (e) {
+      log({
+        kind: 'pageerror',
+        text: `[fontLoading] detector threw on step ${afterLabel}: ${(e as Error).message}`,
+      });
+    }
+  };
+
+  /**
    * T76: link-underline detector. WCAG 1.4.1 (Use of Color, A).
    * Flags inline links inside running text that distinguish
    * themselves from surrounding text ONLY by colour — fails
@@ -1731,6 +1763,7 @@ async function main(args: string[]): Promise<number> {
       await checkHsts(step.label || `goto-${i}`);
       await checkXFrameOptions(step.label || `goto-${i}`);
       await checkReferrerPolicy(step.label || `goto-${i}`);
+      await checkFontLoading(step.label || `goto-${i}`);
       await checkWebVitals(step.label || `goto-${i}`);
     }
     // Memory snapshot at end of each step so the report shows heap growth
@@ -1865,6 +1898,8 @@ async function main(args: string[]): Promise<number> {
       xFrameOptionsFindingsStrict: events.filter(e => e.kind === 'x-frame-options' && e.severity === 'strict').length,
       referrerPolicyFindings: events.filter(e => e.kind === 'referrer-policy').length,
       referrerPolicyFindingsStrict: events.filter(e => e.kind === 'referrer-policy' && e.severity === 'strict').length,
+      fontLoadingFindings: events.filter(e => e.kind === 'font-loading').length,
+      fontLoadingFindingsStrict: events.filter(e => e.kind === 'font-loading' && e.severity === 'strict').length,
       linkUnderlineFindings: events.filter(e => e.kind === 'link-underline').length,
       linkUnderlineFindingsStrict: events.filter(e => e.kind === 'link-underline' && e.severity === 'strict').length,
       crossPageTitleFindings: events.filter(e => e.kind === 'cross-page-title').length,
@@ -2004,6 +2039,12 @@ async function main(args: string[]): Promise<number> {
       JSON.stringify(referrerPolicyFindingsByStep, null, 2),
     );
   }
+  if (fontLoadingFindingsByStep.length > 0) {
+    writeFileSync(
+      join(outDir, 'font-loading.json'),
+      JSON.stringify(fontLoadingFindingsByStep, null, 2),
+    );
+  }
   if (linkUnderlineFindingsByStep.length > 0) {
     writeFileSync(
       join(outDir, 'link-underline.json'),
@@ -2102,6 +2143,7 @@ async function main(args: string[]): Promise<number> {
   console.log(`  hsts:              ${report.counts.hstsFindings} (strict ${report.counts.hstsFindingsStrict})`);
   console.log(`  x-frame-options:   ${report.counts.xFrameOptionsFindings} (strict ${report.counts.xFrameOptionsFindingsStrict})`);
   console.log(`  referrer-policy:   ${report.counts.referrerPolicyFindings} (strict ${report.counts.referrerPolicyFindingsStrict})`);
+  console.log(`  font loading:      ${report.counts.fontLoadingFindings} (strict ${report.counts.fontLoadingFindingsStrict})`);
   console.log(`  link underline:    ${report.counts.linkUnderlineFindings} (strict ${report.counts.linkUnderlineFindingsStrict})`);
   console.log(`  cross-page title:  ${report.counts.crossPageTitleFindings} (strict ${report.counts.crossPageTitleFindingsStrict})`);
   console.log(`  cross-page meta:   ${report.counts.crossPageMetaDescriptionFindings} (strict ${report.counts.crossPageMetaDescriptionFindingsStrict})`);
@@ -2174,6 +2216,9 @@ async function main(args: string[]): Promise<number> {
     const newRpStrict = diff.newReferrerPolicyFindings.filter(e => e.severity === 'strict').length;
     const newRpWarn = diff.newReferrerPolicyFindings.length - newRpStrict;
     console.log(`    NEW referrer-policy:  ${diff.newReferrerPolicyFindings.length} (strict ${newRpStrict}, warn ${newRpWarn})`);
+    const newFlStrict = diff.newFontLoadingFindings.filter(e => e.severity === 'strict').length;
+    const newFlWarn = diff.newFontLoadingFindings.length - newFlStrict;
+    console.log(`    NEW font loading:     ${diff.newFontLoadingFindings.length} (strict ${newFlStrict}, warn ${newFlWarn})`);
     const newLinkUnderlineStrict = diff.newLinkUnderlineFindings.filter(e => e.severity === 'strict').length;
     const newLinkUnderlineWarn = diff.newLinkUnderlineFindings.length - newLinkUnderlineStrict;
     console.log(`    NEW link underline:   ${diff.newLinkUnderlineFindings.length} (strict ${newLinkUnderlineStrict}, warn ${newLinkUnderlineWarn})`);

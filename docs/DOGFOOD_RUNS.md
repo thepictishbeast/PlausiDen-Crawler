@@ -946,7 +946,89 @@ HTTP gate (33/33), HTTPS gate (12/12).
       (permissionsPolicy is the natural next), extract a generic
       `headerDetector` helper — kills the ~70% duplication.
 - [ ] login-flow fixture (still queued).
-- [ ] Remaining roadmap: `fontLoading`.
+- [x] **DONE 2026-05-14 (eighteenth cycle)**: `fontLoading`
+      detector. See eighteenth entry below. Roadmap exhausted!
+
+---
+
+## 2026-05-14 (eighteenth entry) — fontLoading detector — last roadmap item
+
+### What's new since last cycle (seventeenth entry)
+- `fontLoading` detector landed (warn-only).
+- Total active detector axes: **27** (was 26).
+- HTTP gate: 34/34 (was 33; +1 font-no-display route).
+- The DETECTORS.md "Pending detectors *(roadmap)*" section is
+  now exhausted of original concrete roadmap items.
+
+### Detector design
+
+Walks `document.styleSheets` for every `@font-face` rule (CSS
+rule type 5). For each:
+- No `font-display` declaration → `font-loading.no-display` warn
+  (browser default is `block` → FOIT)
+- `font-display: block` or `auto` → `font-loading.display-block`
+  warn (FOIT)
+- `font-display: swap`, `fallback`, or `optional` → clean
+- Unknown values treated as `no-display` (typos / future tokens
+  fall back to default)
+
+Cross-origin sheets the browser refuses to expose via
+`SecurityError` on `.cssRules` are silently skipped, but the
+COUNT is carried in `evidence.inaccessibleSheetCount` so the
+audit reader knows where the detector's coverage ends.
+
+14 unit tests cover:
+- No faces / clean / each acceptable value
+- no-display + each FOIT value
+- Unknown value → no-display
+- Aggregation count
+- Examples capped at 5
+- Mixed clean+bad
+- Inaccessible-sheet count surfaces
+
+### SkillShots dogfood
+
+**0 fontLoading findings** — the typed CMS pages either have
+no `@font-face` declarations OR use `font-display: swap`. Either
+way, no FOIT risk. Loom's design-system token-driven approach
+pays off here: web fonts go through one canonical pipeline that
+sets `swap`.
+
+### Re-audit result
+
+**ALL 34 DETECTION AXES SILENT** on SkillShots (was 33; +1 axis).
+HTTP gate (34/34, +1 route), HTTPS gate (12/12) both green.
+
+### Roadmap status
+
+The original `docs/DETECTORS.md` § Pending detectors list
+(established 2026-05-14 cycle 4) had 10 items. As of this
+cycle, all 10 are shipped:
+
+  ✓ docTitle, htmlLang, skipLink, metaDescription, favicon,
+    mixedContent, linkUnderline, fontLoading, hstsHeader,
+    xFrameOptions
+
+Items added to the roadmap mid-stream and shipped:
+  ✓ tap-targets, form-labels, viewport-meta, autocomplete,
+    crossPageTitle, crossPageMetaDescription, referrerPolicy,
+    outboundLinks
+
+Future direction: future detectors will be added as need
+surfaces (a real bug found, an audit gap noticed). The
+"detector backlog" is now empty.
+
+### Action items
+
+- [ ] Extract `headerDetector` helper when permissionsPolicy
+      lands (at least 4 response-header detectors needed for
+      the abstraction to pay).
+- [ ] login-flow fixture (still queued — credential-class
+      autocomplete needs a login form to fire).
+- [ ] T76 has shipped 27 detector axes; consider whether to
+      mark the umbrella task complete and let new detectors
+      come from real-world dogfood findings rather than a
+      pre-planned roadmap.
 
 ---
 

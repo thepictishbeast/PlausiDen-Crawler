@@ -173,6 +173,18 @@ Source: `src/crossPageMetaDescription.ts`
 
 Sister to `crossPageTitle` — same accumulator+record+detect pattern, piggybacked off the existing per-page `metaDescription` capture. Validates that the aggregates-layer pattern generalises cleanly. If a third aggregates detector lands, the current ~80% structural overlap is a candidate for a generic `dupGroupDetector(accumulator, kind, label)` helper.
 
+### `fontLoading` — `@font-face` font-display strategy *(T76 — added 2026-05-14)*
+Source: `src/fontLoading.ts`
+
+| Finding | Sev | Catches |
+|---|---|---|
+| `font-loading.no-display` | warn | `@font-face` rule with no `font-display` declaration. Browser default is `block` → text renders blank until font loads (Flash of Invisible Text / FOIT). |
+| `font-loading.display-block` | warn | `@font-face` rule explicitly sets `font-display: block` or `auto`. Same FOIT effect. |
+
+Walks `document.styleSheets` for every `CSSFontFaceRule` (type 5). Cross-origin sheets the browser refuses to expose (`SecurityError` on `cssRules` access) are counted in `evidence.inaccessibleSheetCount` so the audit reader knows where the detector's coverage ends.
+
+Acceptable values: `swap` (recommended), `fallback`, `optional`. Any other value (or absence) is a finding. Unknown values (typos, future tokens) are treated as `no-display`.
+
 ### `linkUnderline` — link distinguishability *(T76 — added 2026-05-14)*
 Source: `src/linkUnderline.ts` · Rust: `link_underline.rs`
 
@@ -480,8 +492,6 @@ Wire to CI: any pre-merge check or scheduled job can shell out to
 Detectors queued for future T76 firings — each is high-leverage,
 zero-overlap with existing axes:
 
-- **`fontLoading`** — `font-display: swap` missing → invisible-text
-  flash (FOIT).
 - **`mixedFormSubmission`** — `<form action="http://...">` on
   https page. SECURITY.
 

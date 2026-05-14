@@ -36,7 +36,8 @@
     { "kind": "goto", "url": "http://127.0.0.1:8771/opener-explicit/", "label": "opener-explicit" },
     { "kind": "goto", "url": "http://127.0.0.1:8771/no-favicon/", "label": "no-favicon" },
     { "kind": "goto", "url": "http://127.0.0.1:8771/link-color-only/", "label": "link-color-only" },
-    { "kind": "goto", "url": "http://127.0.0.1:8771/link-in-chrome/", "label": "link-in-chrome" }
+    { "kind": "goto", "url": "http://127.0.0.1:8771/link-in-chrome/", "label": "link-in-chrome" },
+    { "kind": "goto", "url": "http://127.0.0.1:8771/font-no-display/", "label": "font-no-display" }
   ],
   "expectedFindingsByLabel": {
     "control": [],
@@ -71,6 +72,7 @@
     "opener-explicit": ["link.opener-explicit"],
     "no-favicon": ["favicon.missing-link"],
     "link-color-only": ["link.color-only-distinction"],
-    "link-in-chrome": []
+    "link-in-chrome": [],
+    "font-no-display": ["font-loading.no-display"]
   }
 }

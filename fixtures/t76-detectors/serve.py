@@ -353,6 +353,20 @@ def link_in_chrome():
     return page(body)
 
 
+# ----- font-loading family -----
+@route('/font-no-display/')
+def font_no_display():
+    # Inline @font-face WITHOUT font-display. Browser default
+    # is `block` → FOIT. Detector should fire warn.
+    body = (
+        '<style>'
+        '@font-face { font-family: "FixtureFont"; src: url("/never-loaded.woff2"); }'
+        '</style>'
+        '<h1>Page declares an @font-face with no font-display</h1>'
+    )
+    return page(body)
+
+
 # ----- favicon family -----
 @route('/no-favicon/')
 def no_favicon():

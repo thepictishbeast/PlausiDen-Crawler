@@ -41,6 +41,7 @@ export interface CapturedEvent {
     | 'hsts'
     | 'x-frame-options'
     | 'referrer-policy'
+    | 'font-loading'
     | 'link-underline'
     | 'cross-page-title'
     | 'cross-page-meta-description';
@@ -106,6 +107,8 @@ export interface Report {
     xFrameOptionsFindingsStrict: number;
     referrerPolicyFindings: number;
     referrerPolicyFindingsStrict: number;
+    fontLoadingFindings: number;
+    fontLoadingFindingsStrict: number;
     linkUnderlineFindings: number;
     linkUnderlineFindingsStrict: number;
     crossPageTitleFindings: number;
@@ -294,6 +297,12 @@ export interface Diff {
    */
   newReferrerPolicyFindings: CapturedEvent[];
   /**
+   * font-loading findings new in this run vs prior. Warn-only:
+   * @font-face rule with no font-display / font-display:block /
+   * font-display:auto. T76.
+   */
+  newFontLoadingFindings: CapturedEvent[];
+  /**
    * link-underline findings new in this run vs prior. Warn-only:
    * inline link inside running text distinguished only by colour.
    * WCAG 1.4.1 Level A. T76.
@@ -352,6 +361,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     newHstsFindings: [],
     newXFrameOptionsFindings: [],
     newReferrerPolicyFindings: [],
+    newFontLoadingFindings: [],
     newLinkUnderlineFindings: [],
     newCrossPageTitleFindings: [],
     newCrossPageMetaDescriptionFindings: [],
@@ -388,6 +398,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     out.newHstsFindings = current.events.filter(e => e.kind === 'hsts');
     out.newXFrameOptionsFindings = current.events.filter(e => e.kind === 'x-frame-options');
     out.newReferrerPolicyFindings = current.events.filter(e => e.kind === 'referrer-policy');
+    out.newFontLoadingFindings = current.events.filter(e => e.kind === 'font-loading');
     out.newLinkUnderlineFindings = current.events.filter(e => e.kind === 'link-underline');
     out.newCrossPageTitleFindings = current.events.filter(e => e.kind === 'cross-page-title');
     out.newCrossPageMetaDescriptionFindings = current.events.filter(e => e.kind === 'cross-page-meta-description');
@@ -425,6 +436,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     else if (e.kind === 'hsts') out.newHstsFindings.push(e);
     else if (e.kind === 'x-frame-options') out.newXFrameOptionsFindings.push(e);
     else if (e.kind === 'referrer-policy') out.newReferrerPolicyFindings.push(e);
+    else if (e.kind === 'font-loading') out.newFontLoadingFindings.push(e);
     else if (e.kind === 'link-underline') out.newLinkUnderlineFindings.push(e);
     else if (e.kind === 'cross-page-title') out.newCrossPageTitleFindings.push(e);
     else if (e.kind === 'cross-page-meta-description') out.newCrossPageMetaDescriptionFindings.push(e);
@@ -648,6 +660,14 @@ export function renderPositiveSignal(report: Report, diff: Diff): string {
       total: report.events.filter((e) => e.kind === 'referrer-policy').length,
       news: diff.newReferrerPolicyFindings.length,
       strictNews: strict(diff.newReferrerPolicyFindings),
+    },
+    {
+      // T76 (Crawler): font-loading — @font-face without
+      // font-display:swap → FOIT.
+      name: 'fontLoading',
+      total: report.events.filter((e) => e.kind === 'font-loading').length,
+      news: diff.newFontLoadingFindings.length,
+      strictNews: strict(diff.newFontLoadingFindings),
     },
     {
       // T76 (Crawler): link-underline — WCAG 1.4.1 (Use of Color, A).
