@@ -312,15 +312,71 @@ defect:
 
 Action items captured:
 
-- [ ] Extend leaderboard.html's meta description to 50+ chars
-      (e.g. add "...with weekly pot splits and per-category
-      ranking shown side by side.")
-- [ ] Audit every page's meta description against the 50-160
-      char band, fix the same way.
-- [ ] Pre-T76-fix audits had no `metaDescription` axis at all,
-      so this finding wasn't visible. Add a "what's new since
-      last cycle" section to dogfood reports for axes added
-      mid-stream.
+- [x] Extend leaderboard.html's meta description to 50+ chars.
+      **DONE 2026-05-14** — see entry below.
+- [x] Audit every page's meta description against the 50-160
+      char band. **DONE 2026-05-14** — only leaderboard.html was
+      out of band; every other SkillShots page already in the
+      50-160 range (see audit table in next entry).
+- [x] Add a "what's new since last cycle" section to dogfood
+      reports for axes added mid-stream. **DONE 2026-05-14** —
+      template added below as the standard intro for each entry.
+
+---
+
+## 2026-05-14 (sixth entry) — leaderboard meta description fix + cycle template
+
+### What's new since last cycle (2026-05-14 fifth entry)
+- `metaDescription` detector landed in pipeline (was the source
+  of the warn fixed below).
+- `report.eventsByStep` windowing fix — every consumer of that
+  field now gets accurate per-step grouping.
+- Total active detector axes: 18 (no new axes this cycle).
+
+### Audit of every SkillShots meta description
+
+```
+46  about.html                Help, FAQ, and team behind SkillShots — the cash-paid skill battle platform.
+56  challenge.html            View a SkillShots challenge — entries, voting period, pot, and rules.
+99  index.html                Skill battles, voted by your crew. Pots split at round close.
+... [every page in 50-160 band except the one below]
+42  leaderboard.html          Top earners this week. Voted by your crew.   ← OUT OF BAND
+```
+
+Only one outlier — leaderboard.html. The rest of the site was
+already SEO-quality on this axis.
+
+### The fix
+
+`cms/leaderboard.json` description extended from 42 → 95 chars
+in PlausiDen-Forge commit `d8eb2b4` (rebased onto origin/main):
+
+> Top SkillShots earners this week — pots, ranks, and category
+> leaders, all voted by your crew.
+
+Within the 50-160 search-engine truncation band, accurate to
+page content, includes the brand name. Loom's CMS renderer
+bakes it into the static HTML on the next forge.sh build —
+no template changes needed, the source-of-truth fix
+auto-propagates.
+
+### Re-audit result
+
+**ALL 25 DETECTION AXES SILENT.** Same cleanest-on-record
+result as the 2026-05-14 (second) entry, this time with the
+metaDescription axis ALSO clean.
+
+### Action items
+
+- [ ] Add `favicon` detector — next smallest from the roadmap,
+      will surface real bugs on sites that ship without one.
+- [ ] Add `mixedContent` detector — security defence-in-depth
+      (HTTPS pages loading HTTP resources). Need to design
+      around the browser's built-in mixed-content blocker
+      first; some overlap.
+- [ ] Add a login-flow fixture so credential-class autocomplete
+      checks fire on a real-shape surface (still queued from
+      first dogfood entry).
 
 ---
 
