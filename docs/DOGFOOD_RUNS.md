@@ -1033,6 +1033,99 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (seventy-fifth entry) — Property 4 tightened + `test:meta` one-shot runner
+
+### What's new since last cycle (seventy-fourth entry)
+- **Property 4b** added: "warn on clean baseline strictly
+  DECREASES the affected category's score". Mirrors cycle
+  73's P3b for the warn-event case; closes mutation gap M4
+  (WARN_PENALTY=0).
+- **`npm run test:meta`** wires all three meta-test suites
+  into a single command:
+  - property tests (cycle 66)
+  - mutation tests (cycle 73)
+  - drift detector (cycle 74)
+- **`npm run test:supersociety`** adds the existing
+  example-based tests to the front.
+- 12 property scenarios × 200 cases now pass.
+- Aggregate badge holds at **A 100/100 (16)**.
+
+### The category-vs-composite refinement
+Property 4b's first formulation ("strictly DECREASE the
+composite") FAILED 158/200 cases. Investigation: a single
+warn (penalty 5) spread over the weighted composite
+(combined weight ~14.5) shifts the unrounded value by only
+~0.34 — which rounds to 0 in most cases.
+
+Reformulated to check the CATEGORY score directly (where
+the warn lives) instead of the composite. The category
+penalty is unambiguous: 100 → 95 → 90 → … as warns
+accumulate. Property 4b passes 200/200.
+
+This is a real insight: rounded-composite tests aren't
+sensitive to single-event changes. To catch zero-penalty
+mutations, the assertions need to look at the layer
+where the math is exact.
+
+### The one-shot runner
+```
+$ npm run test:meta
+=== supersocietyScore.property.test.ts ===
+PASSED 12: ✓ ✓ ✓ ... All 12 property scenarios passed.
+
+=== supersocietyScore.mutation.test.ts ===
+PASSED 5: ✓ ✓ ✓ ✓ ✓ All 5 mutation scenarios captured.
+
+=== supersocietyScore.drift.test.ts ===
+PASSED 4: ✓ ✓ ✓ ✓ All 4 drift checks passed.
+
+=== Tier-6 meta-validation: ALL THREE LAYERS PASSED ===
+```
+
+Operators get the full Tier-6 stack with one command.
+Before today, each suite ran separately; a forgetful
+maintainer could run property without mutation, ship,
+and miss a regression.
+
+### The Tier-6 validation stack is now operationally cohesive
+```
+property tests (12 × 200 cases)   → MATH bugs
+mutation tests (5 scenarios)       → GAPS in property tests
+drift detector (4 checks)          → UNMAPPED KINDS in source
+                                     ↓
+                            `npm run test:meta`
+                                     ↓
+                            ALL THREE LAYERS PASSED
+                                     ↓
+                          production audit (50 axes × 16 surfaces)
+                                     ↓
+                            aggregate A 100/100 (16)
+```
+
+### Score arc (cycles 41-75)
+  C74: A 100/100 (16) — drift CI gate in place.
+  C75: A 100/100 (16) — property 4 tightened + meta runner.
+
+### Cumulative cross-repo dogfood scoreboard (cycles 38-75)
+  31 Loom commits + 3 Forge + 1 Sentinel-GUI + 10 crawler
+  enhancements + 3 E2E suites + property + mutation + drift
+  test suites + meta-runner.
+
+### Action items
+- [ ] Cycle 76: tighten property 5 — strict cost MUST be
+      strictly greater than warn (currently ">="). Closes
+      mutation gap M1.
+- [ ] Cycle 77: extend dogfood to a new HTTP surface
+      (orchestrator dashboard, BleachBit-bridge UI).
+- [ ] Cycle 78: extract the cycle 70/72 hand-rolled JSON
+      walker + Howard Hinnant date formatter into a shared
+      `report_log_parser` module used by both subcommands.
+- [ ] Cycle 79: wire `test:meta` into a pre-push git hook
+      so meta-test failures block push (after operator
+      opt-in).
+
+---
+
 ## 2026-05-14 (seventy-fourth entry) — Drift detector — CI gate against the cycle 73 bug class
 
 ### What's new since last cycle (seventy-third entry)
