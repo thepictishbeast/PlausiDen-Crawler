@@ -176,6 +176,35 @@ function extractMappedKinds(src: string): Set<string> {
   return found;
 }
 
+/**
+ * T76 cycle 78: extract the CapturedEvent.kind union members
+ * from report.ts.
+ *
+ * The TS source declares:
+ *   export interface CapturedEvent {
+ *     kind:
+ *       | 'console'
+ *       | 'pageerror'
+ *       ...
+ *       | 'cross-page-meta-description';
+ *     ...
+ *   }
+ *
+ * The walker grabs the union by finding `kind:` followed by
+ * `|` lines until a `;` closes the union. Each `'X'` literal
+ * gets captured.
+ */
+function extractTypedKinds(src: string): Set<string> {
+  const found = new Set<string>();
+  // Match `kind:` followed by a multi-line union ending in `;`.
+  const m = src.match(/kind\s*:\s*((?:\s*\|\s*['"][a-z0-9-]+['"]\s*)+);/);
+  if (!m) return found;
+  const re = /['"]([a-z][a-z0-9-]*)['"]/g;
+  let lit;
+  while ((lit = re.exec(m[1]))) found.add(lit[1]);
+  return found;
+}
+
 // --- Run.
 {
   const files = walkTs(SRC);
@@ -241,6 +270,66 @@ function extractMappedKinds(src: string): Set<string> {
     PASSED.push(
       `KIND_TO_CATEGORY has ${stale.length} stale entry/entries (kind no longer emitted): ${JSON.stringify(stale).slice(0, 200)}`,
     );
+  }
+
+  // T76 cycle 78: cross-check against report.ts's CapturedEvent
+  // kind union. Catches the OTHER class of forgotten-update
+  // bugs: a kind in KIND_TO_CATEGORY that isn't in the type
+  // union (TypeScript can't verify because string-literal
+  // events are constructed from `as` casts) AND a kind in
+  // the type union that has no category mapping.
+  const reportSrc = readFileSync(
+    join(SRC, 'report.ts'), 'utf8');
+  const typed = extractTypedKinds(stripComments(reportSrc));
+  assert(typed.size > 30, 'extracted CapturedEvent.kind union from report.ts',
+    `expected >30 typed kinds; found ${typed.size}`);
+
+  // Check 1: every mapped kind must be in the type union.
+  // Otherwise the score module penalises events the type
+  // says don't exist — the dispatcher's filter
+  // `events.filter(e => e.kind === X)` would never fire on
+  // them in production code.
+  const mappedNotTyped: string[] = [];
+  for (const k of mapped) {
+    if (typed.has(k)) continue;
+    if (NON_FINDING_KINDS.has(k)) continue;
+    mappedNotTyped.push(k);
+  }
+  mappedNotTyped.sort();
+  if (mappedNotTyped.length === 0) {
+    PASSED.push('every KIND_TO_CATEGORY entry is in the CapturedEvent type union');
+  } else {
+    FAILED.push({
+      name: 'KIND_TO_CATEGORY entry missing from CapturedEvent type union',
+      reason: `${mappedNotTyped.length} kind(s) mapped but NOT in report.ts CapturedEvent.kind ` +
+        `union: ${JSON.stringify(mappedNotTyped)}\n\n` +
+        `To fix: add the kind to the union in report.ts ` +
+        `(or remove from KIND_TO_CATEGORY if the detector was deleted).`,
+    });
+  }
+
+  // Check 2: every typed kind must be either in the score
+  // map OR in NON_FINDING_KINDS. A type-union member with
+  // no mapping is silent score inflation in disguise — the
+  // type tells you the kind exists, but events with that
+  // kind hit the unbucketed pile.
+  const typedNotMapped: string[] = [];
+  for (const k of typed) {
+    if (mapped.has(k)) continue;
+    if (NON_FINDING_KINDS.has(k)) continue;
+    typedNotMapped.push(k);
+  }
+  typedNotMapped.sort();
+  if (typedNotMapped.length === 0) {
+    PASSED.push('every CapturedEvent type-union kind is in KIND_TO_CATEGORY');
+  } else {
+    FAILED.push({
+      name: 'CapturedEvent type-union kind missing from KIND_TO_CATEGORY',
+      reason: `${typedNotMapped.length} kind(s) in report.ts CapturedEvent.kind ` +
+        `union but NOT mapped to a score category: ${JSON.stringify(typedNotMapped)}\n\n` +
+        `To fix: add the kind to KIND_TO_CATEGORY in supersocietyScore.ts ` +
+        `(or remove from the union if the detector was deleted).`,
+    });
   }
 }
 

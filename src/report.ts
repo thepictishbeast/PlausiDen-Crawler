@@ -60,7 +60,17 @@ export interface CapturedEvent {
     | 'origin-agent-cluster'
     | 'link-underline'
     | 'cross-page-title'
-    | 'cross-page-meta-description';
+    | 'cross-page-meta-description'
+    // T76 cycle 78: gaps surfaced by extended drift detector.
+    // These kinds were mapped to score categories in cycle 73
+    // but were missing from the CapturedEvent type union —
+    // log() callers used `as CapturedEvent` casts to bypass
+    // the type check. Adding them here makes the type system
+    // catch any future cast-bypass at compile time.
+    | 'blank-main'
+    | 'error-boundary-visible'
+    | 'stuck-loading'
+    | 'ui-error-text';
   level?: string;
   text: string;
   url?: string;
