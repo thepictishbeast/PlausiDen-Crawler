@@ -1033,6 +1033,88 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (eighty-sixth entry) — Reorder endpoint contractually pinned
+
+### What's new since last cycle (eighty-fifth entry)
+- **Cross-repo Loom fix** (commit aad1abb): 7 E2E
+  integration tests for cycle 85's
+  `POST /<slug>/sections/reorder` endpoint.
+- 7/7 pass in 0.15s. Aggregate badge holds at **A 100/100 (16)**.
+
+### What the tests pin
+The cycle 85 commit smoke-tested via curl. The cycle 86 tests
+make the wire contract a regression suite:
+
+1. `reorder_moves_section_from_a_to_b_atomically` — verifies
+   the splice direction (`remove(from)` then `insert(to)`).
+2. `reorder_to_end_works` — boundary case: 0 → last.
+3. `reorder_to_start_works` — boundary case: last → 0.
+4. `reorder_no_op_redirects_without_writing` — `from==to`
+   returns 303 but DOES NOT trigger a cycle 80 backup
+   write or touch the active file. Important contract:
+   no-ops are free.
+5. `reorder_out_of_range_returns_400` — bad indices reject
+   with 400, file untouched.
+6. `reorder_missing_from_returns_400` — missing form field
+   rejects with 400.
+7. `reorder_writes_a_backup_revision` — successful reorder
+   triggers cycle 80's `save_cms_revision` (verified by
+   counting `.bak.<ts>.json` files before/after).
+
+### Discovery during test development
+First version of the helper `read_section_texts()` probed
+the file with `"text":"X"` — no whitespace between colon
+and value-quote. The on-disk format
+(`serde_json::to_string_pretty`) emits `"text": "X"` WITH
+a space. Three tests failed with `left: []`.
+
+Fix: trim whitespace between `":"` and value-quote, handle
+escape sequences properly. This is the cycle 70/72/76/81/84
+hand-rolled-parser discipline applied to a TEST — same
+careful byte-by-byte logic as production code.
+
+The cycle 85 → 86 ladder follows the cycle 67 → 68 pattern:
+ship the feature, then pin its wire format. Every operator-
+visible endpoint should have a regression suite before the
+next cycle relies on its behaviour.
+
+### Cumulative E2E test scoreboard
+```
+report_collector_e2e   6 tests   cycles 68 + 69 + 71
+report_tail_e2e        4 tests   cycle 70
+report_stats_e2e       5 tests   cycle 72
+revisions_e2e          8 tests   cycles 81 + 84
+section_reorder_e2e    7 tests   cycle 86 (NEW)
+                      ────
+                      30 tests across 5 suites
+```
+
+Every production endpoint and operator command in Loom is
+now E2E-pinned. The cycle 68 doctrine ("any change to the
+wire format fails the test gate") now covers the full
+mutation + viewer + revision surface.
+
+### Score arc (cycles 41-86)
+  C85: aggregate A 100/100 (16) — drag-drop ships.
+  C86: aggregate A 100/100 (16) — reorder endpoint pinned.
+
+### Cumulative cross-repo dogfood scoreboard (cycles 38-86)
+  39 Loom commits + 3 Forge + 1 Sentinel-GUI + 15 crawler
+  enhancements + **5 E2E suites** + property + mutation +
+  drift test suites + meta-runner + 2 design+ops manuals +
+  pre-push hook.
+
+### Action items
+- [ ] Cycle 87: section-level "open in new tab" preview.
+- [ ] Cycle 88: JSON-aware diff for cycle 81's line-set diff.
+- [ ] Cycle 89: SSE stream for `report-tail --follow` instead
+      of 1s polling.
+- [ ] Cycle 90: dogfood loop pivot — find a NEW PlausiDen
+      surface to audit (every existing surface has reached
+      A 100/100, the dashboard needs frontier work).
+
+---
+
 ## 2026-05-14 (eighty-fifth entry) — Drag-drop section reorder; contrast bug self-caught
 
 ### What's new since last cycle (eighty-fourth entry)
