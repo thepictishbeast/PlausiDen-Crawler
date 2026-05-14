@@ -1033,6 +1033,76 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (fifty-first entry) — Loom edit-serve crosses into GRADE A (91)
+
+### What's new since last cycle (fiftieth entry)
+- **Cross-repo fix in PlausiDen-Loom** (commit cea8ed4): two
+  related fixes that together pushed composite from B 89 to
+  **A 91** — Loom edit-serve enters Grade A territory for
+  the first time.
+- 13th cross-repo Loom commit since cycle 38.
+- Active named-detector axis count UNCHANGED at 44.
+
+### The two fixes
+1. **box-sizing:border-box** on all 100%-width inputs +
+   selects. Without it, the `padding:.5rem` adds to the 100%
+   width and overflows the container. The crawler's
+   `overflow.text-clipped` strict was flagging the Slug +
+   Template field `<div>`s on the new-page form.
+   Global find-replace touched 9 input/select style strings.
+
+2. **Removed the visually-hidden "required" SR-only span**
+   from the Slug label. `<input required>` already exposes
+   `aria-required=true` to assistive tech via the platform;
+   the span was redundant AND triggered overflow detection
+   because of its `left:-9999px` position inside a relatively-
+   sized container.
+
+### Score arc (cycles 41-51)
+  C41 pre:  B 82, 19 strict, accessibility F=0.
+  C46:      B 85, 3 strict (F-clamp accessibility BREAKS).
+  C49:      B 87, 3 strict (skip-link works after detector fix).
+  C50:      B 89, 2 strict (accessibility F → C=70).
+  C51:      **A 91**, 1 strict (uxHygiene F=10 → F=35).
+
+### What's left (1 strict + 17 warn)
+- 1× overflow.text-clipped on /uploads (the `<style>` block
+  inside `<main>` is text-content; needs structural rework
+  to move it to head context).
+- 17 warns spread across accessibility (6), uxHygiene (8),
+  contentSecurity (3).
+
+To reach 0 strict + reduce warns further:
+- Move per-page `<style>` blocks BEFORE `<body>` so they're
+  not inside `<main>`. Larger refactor.
+- Add favicon link (4 warns clear: 1 per page).
+- Add meta description (4 warns clear: 1 per page).
+
+### Cumulative cross-repo dogfood scoreboard (cycles 38-51)
+  C38 Loom:  state-matrix CSS         C 75 → A 99.
+  C39 Loom:  nav-link 44px            A 95 → A 100.
+  C40 Forge: CMS title disambiguate   A 100 → A 100 (0).
+  C41-44 Loom (4 cycles):              B 82 → B 83 (-15 strict).
+  C45 (originAgentCluster axis added.)
+  C46 Loom:  fieldset labels          B 83 → B 85 (F-clamp BREAKS).
+  C47 Loom:  defensive cleanup        B 85 stable.
+  C48 Loom:  required * markers       B 85 (-1 warn).
+  C49 Loom+Crawler: skip-link + DETECTOR FIX → B 87.
+  C50 Loom:  fieldset button colour   B 87 → B 89 (F-clamp BREAKS again).
+  C51 Loom:  box-sizing + slug cleanup B 89 → **A 91** (GRADE A reached!).
+
+Total: 13 cross-repo Loom commits + 1 Forge + 1 crawler
+detector improvement.
+
+### Action items
+- [ ] Cycle 52: the last overflow strict on /uploads (move
+      `<style>` blocks out of `<main>` — structural change).
+- [ ] Cycle 53+: add favicon + meta-description to admin pages
+      (cleans 8 warns total, would lift uxHygiene above F).
+- [ ] Cycle 54+: detector axis pivot (CSP-Report-Only).
+
+---
+
 ## 2026-05-14 (fiftieth entry) — F-CLAMP BREAKS AGAIN: accessibility C=70 → B 89
 
 ### What's new since last cycle (forty-ninth entry)
