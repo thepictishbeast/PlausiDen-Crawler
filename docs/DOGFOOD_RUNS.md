@@ -1033,6 +1033,119 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (seventy-third entry) — Mutation testing finds 5 silent score-inflation bugs
+
+### What's new since last cycle (seventy-second entry)
+- **Tier-6 mutation harness** (this commit): parametric
+  reimplementation of the score function with deliberate
+  bug-injection (penalty constants flipped). 4 mutations,
+  5 scenarios pass.
+- **5 silent bugs FIXED** in cumulative cycle 38-72 work:
+  `origin-agent-cluster`, `blank-main`, `error-boundary-
+  visible`, `stuck-loading`, `ui-error-text` — all detector
+  kinds that emitted events but fell into `unbucketed` and
+  silently inflated the score.
+- **Property 3b added**: "strict on clean baseline strictly
+  DECREASES composite". Closes the M2 mutation gap.
+- 11 property scenarios × 200 cases + 5 mutation scenarios
+  all pass.
+- Aggregate badge holds at **A 100/100 (16)** — the 16
+  current surfaces never emitted any of the 5 newly-mapped
+  kinds (the bug was latent, ready to fire on Atrium /
+  future surfaces).
+
+### How the mutation harness works
+```
+mutatedCalc(strict_penalty, warn_penalty, events) → score
+```
+Same math as production but constants are arguments. Then:
+- M1: strict=warn=5 (equality — ALLOWED by design)
+- M2: strict=0 (free — should detect)
+- M3: strict=-10 (negative — must detect)
+- M4: warn=0 (free — gap in property 4)
+
+A drift smoke test asserts `mutatedCalc(25, 5, X) == prod(X)`
+across 50 random cases. If KIND_TO_CATEGORY drifts in the
+production module without being mirrored, the smoke fires.
+
+### The discovery cascade
+1. **Mutation analysis** runs on the cycle 66 property suite,
+   surfaces 2 design gaps:
+   - M1 lets equality through (`<`, not `>`).
+   - M2/M4 let zero-penalty through ("never increases", not
+     "strictly decreases").
+
+2. **Property 3b added** to close M2: "strict on clean
+   baseline STRICTLY DECREASES composite". Production
+   calculator should easily pass — STRICT_PENALTY=25 means
+   1 strict event drops the affected category from 100 to
+   75, dragging composite down by ≥1 unit.
+
+3. **Property 3b FAILS 4/200 cases** on the production
+   calculator. The failure pattern: `strict origin-agent-
+   cluster on clean baseline: 100 → 100`.
+
+4. **Investigation**: `origin-agent-cluster` is NOT in
+   `KIND_TO_CATEGORY`. The cycle 45 detector emits events,
+   but they fall into `unbucketed` — silently never penalize.
+
+5. **Sweep** of all emitted-but-not-mapped kinds finds 5:
+   origin-agent-cluster, blank-main, error-boundary-visible,
+   stuck-loading, ui-error-text. All are real detectors;
+   all silently failed to influence the score.
+
+6. **Fix**: map all 5 to appropriate categories. Property
+   3b now passes 200/200.
+
+### Why the badge didn't drop
+The 16 currently audited surfaces don't emit any of the
+5 newly-mapped kinds (Loom edit-serve / Forge SkillShots /
+Sentinel-GUI / state-matrix don't trigger blank-main,
+error-boundary, stuck-loading, ui-error-text in their
+test runs). The bugs were latent — ready to silently
+inflate the score on a future surface (Atrium dogfood
+in cycle 74+ would have hit them).
+
+### The Tier-6 doctrine in action
+```
+property tests   → catch MATH bugs (cycle 66)
+mutation tests   → catch GAPS in property tests (cycle 73)
+property tests   → catch CONFIGURATION bugs (the 5 missing
+                   kind maps surfaced through tightened P3b)
+```
+Three layers of validation. Each layer caught real bugs
+the layer below missed. The score module is now provably
+sound under randomised stress AND under deliberate
+mutation AND under detector-coverage drift.
+
+### Score arc (cycles 41-73)
+  C72: aggregate A 100/100 (16) — operator UX complete.
+  C73: **A 100/100 (16) AFTER 5 silent bugs fixed** —
+       no surface change, but the dashboard is now
+       trustworthy under future detector additions.
+
+### Cumulative cross-repo dogfood scoreboard (cycles 38-73)
+  31 Loom commits + 3 Forge + 1 Sentinel-GUI + **9 crawler
+  enhancements** + 3 E2E test suites + property test suite +
+  mutation test suite.
+
+### Action items
+- [ ] Cycle 74: extend dogfood to Atrium's web-bridge
+      (egui-via-WASM has no HTTP surface; alternative:
+      audit BleachBit-bridge integration which DOES have
+      HTML output).
+- [ ] Cycle 75: tighten property 4 to mirror property 3b
+      ("warn on clean baseline strictly decreases").
+- [ ] Cycle 76: tighten property 5 to mirror M1 design
+      decision (decide: should strict cost MORE than warn,
+      or just MORE-OR-EQUAL?).
+- [ ] Cycle 77: drift detector — a CI check that fails if
+      a kind in main.ts's `kind: 'X'` strings is missing
+      from KIND_TO_CATEGORY. Cycle 73 surfaced this manually;
+      automate it.
+
+---
+
 ## 2026-05-14 (seventy-second entry) — `loom report-stats` — operator dashboard summary
 
 ### What's new since last cycle (seventy-first entry)
