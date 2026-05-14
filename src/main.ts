@@ -32,6 +32,7 @@ import { captureHeadingOrderSnapshot, detectHeadingOrderIssues, type HeadingOrde
 import { captureRuntimeLandmarksSnapshot, detectRuntimeLandmarksIssues, type RuntimeLandmarksFinding } from './runtimeLandmarks.js';
 import { captureLinkTextSnapshot, detectLinkTextIssues, type LinkTextFinding } from './linkText.js';
 import { capturePlaceholderTextSnapshot, detectPlaceholderTextIssues, type PlaceholderTextFinding } from './placeholderText.js';
+import { captureTapTargetsSnapshot, detectTapTargetIssues, type TapTargetFinding } from './tapTargets.js';
 
 interface Budget {
   newConsoleErrors: number;
@@ -853,6 +854,36 @@ async function main(args: string[]): Promise<number> {
   };
 
   /**
+   * T76: tap-target size detector. WCAG 2.5.8 (24×24 AA strict) +
+   * 2.5.5 (44×44 AAA warn). Runs after each goto so per-step
+   * regressions are visible. Mobile UX defect — top-3 most
+   * common usability issue per WebAIM 2024 survey.
+   */
+  const tapTargetsFindingsByStep: Array<{ stepLabel: string; pageUrl: string; findings: TapTargetFinding[] }> = [];
+  const checkTapTargets = async (afterLabel: string) => {
+    try {
+      const snap = await captureTapTargetsSnapshot(page);
+      const findings = detectTapTargetIssues(snap);
+      tapTargetsFindingsByStep.push({ stepLabel: afterLabel, pageUrl: snap.pageUrl, findings });
+      for (const f of findings) {
+        log({
+          kind: 'tap-targets',
+          text: `[${f.kind}] ${f.detail}`,
+          url: snap.pageUrl,
+          severity: f.severity,
+          ruleId: f.kind,
+          impact: f.severity === 'strict' ? 'serious' : 'minor',
+        });
+      }
+    } catch (e) {
+      log({
+        kind: 'pageerror',
+        text: `[tapTargets] detector threw on step ${afterLabel}: ${(e as Error).message}`,
+      });
+    }
+  };
+
+  /**
    * T28: ui-overflow + tap-target detector. Runs after each goto in
    * the same place as cssHealth.
    */
@@ -1178,6 +1209,7 @@ async function main(args: string[]): Promise<number> {
       await checkRuntimeLandmarks(step.label || `goto-${i}`);
       await checkLinkText(step.label || `goto-${i}`);
       await checkPlaceholderText(step.label || `goto-${i}`);
+      await checkTapTargets(step.label || `goto-${i}`);
       await checkWebVitals(step.label || `goto-${i}`);
     }
     // Memory snapshot at end of each step so the report shows heap growth
@@ -1248,6 +1280,8 @@ async function main(args: string[]): Promise<number> {
       runtimeFocusFindingsStrict: events.filter(e => e.kind === 'runtime-focus' && e.severity === 'strict').length,
       webVitalsFindings: events.filter(e => e.kind === 'web-vitals').length,
       webVitalsFindingsStrict: events.filter(e => e.kind === 'web-vitals' && e.severity === 'strict').length,
+      tapTargetsFindings: events.filter(e => e.kind === 'tap-targets').length,
+      tapTargetsFindingsStrict: events.filter(e => e.kind === 'tap-targets' && e.severity === 'strict').length,
       cspViolations: events.filter(e => e.kind === 'csp-violation').length,
       total: events.length,
       stepsOk: stepResults.filter(s => s.ok).length,
@@ -1295,6 +1329,12 @@ async function main(args: string[]): Promise<number> {
     writeFileSync(
       join(outDir, 'web-vitals.json'),
       JSON.stringify(webVitalsByStep, null, 2),
+    );
+  }
+  if (tapTargetsFindingsByStep.length > 0) {
+    writeFileSync(
+      join(outDir, 'tap-targets.json'),
+      JSON.stringify(tapTargetsFindingsByStep, null, 2),
     );
   }
   writeFileSync(join(outDir, 'report.json'), JSON.stringify(report, null, 2));
@@ -1375,6 +1415,7 @@ async function main(args: string[]): Promise<number> {
   console.log(`  runtime contrast:  ${report.counts.runtimeContrastFindings} (strict ${report.counts.runtimeContrastFindingsStrict})`);
   console.log(`  runtime images:    ${report.counts.runtimeImagesFindings} (strict ${report.counts.runtimeImagesFindingsStrict})`);
   console.log(`  runtime focus:     ${report.counts.runtimeFocusFindings} (strict ${report.counts.runtimeFocusFindingsStrict})`);
+  console.log(`  tap targets:       ${report.counts.tapTargetsFindings} (strict ${report.counts.tapTargetsFindingsStrict})`);
   console.log(`  web vitals:        ${report.counts.webVitalsFindings} (strict ${report.counts.webVitalsFindingsStrict})`);
   console.log(`  csp violations:    ${report.counts.cspViolations}`);
   console.log(`  steps ok/failed:   ${report.counts.stepsOk}/${report.counts.stepsFailed}`);
@@ -1402,6 +1443,9 @@ async function main(args: string[]): Promise<number> {
     const newWebVitalsStrict = diff.newWebVitalsFindings.filter(e => e.severity === 'strict').length;
     const newWebVitalsWarn = diff.newWebVitalsFindings.length - newWebVitalsStrict;
     console.log(`    NEW web vitals:       ${diff.newWebVitalsFindings.length} (strict ${newWebVitalsStrict}, warn ${newWebVitalsWarn})`);
+    const newTapTargetsStrict = diff.newTapTargetsFindings.filter(e => e.severity === 'strict').length;
+    const newTapTargetsWarn = diff.newTapTargetsFindings.length - newTapTargetsStrict;
+    console.log(`    NEW tap targets:      ${diff.newTapTargetsFindings.length} (strict ${newTapTargetsStrict}, warn ${newTapTargetsWarn})`);
     console.log(`    NEW csp violations:   ${diff.newCspViolations.length}`);
     console.log(`    newly broken steps:   ${diff.newlyBrokenSteps.length}`);
     console.log(`    fixed steps:          ${diff.fixedSteps.length}`);

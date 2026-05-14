@@ -26,7 +26,8 @@ export interface CapturedEvent {
     | 'heading-order'
     | 'runtime-landmarks'
     | 'link-text'
-    | 'placeholder-text';
+    | 'placeholder-text'
+    | 'tap-targets';
   level?: string;
   text: string;
   url?: string;
@@ -61,6 +62,8 @@ export interface Report {
     runtimeFocusFindingsStrict: number;
     webVitalsFindings: number;
     webVitalsFindingsStrict: number;
+    tapTargetsFindings: number;
+    tapTargetsFindingsStrict: number;
     cspViolations: number;
     total: number;
     stepsOk: number;
@@ -161,6 +164,12 @@ export interface Diff {
    * rendered DOM. Warn = "coming soon" / "TBD". T16 (2026-05-04).
    */
   newPlaceholderTextFindings: CapturedEvent[];
+  /**
+   * tap-target findings new in this run vs prior. Strict = target
+   * smaller than 24×24 CSS px (WCAG 2.5.8 AA). Warn = below 44×44
+   * (WCAG 2.5.5 AAA + Apple/Material recommendation). T76.
+   */
+  newTapTargetsFindings: CapturedEvent[];
   newlyBrokenSteps: StepResult[];
   fixedSteps: StepResult[];
 }
@@ -189,6 +198,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     newRuntimeLandmarksFindings: [],
     newLinkTextFindings: [],
     newPlaceholderTextFindings: [],
+    newTapTargetsFindings: [],
     newlyBrokenSteps: [],
     fixedSteps: [],
   };
@@ -208,6 +218,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     out.newRuntimeLandmarksFindings = current.events.filter(e => e.kind === 'runtime-landmarks');
     out.newLinkTextFindings = current.events.filter(e => e.kind === 'link-text');
     out.newPlaceholderTextFindings = current.events.filter(e => e.kind === 'placeholder-text');
+    out.newTapTargetsFindings = current.events.filter(e => e.kind === 'tap-targets');
     return out;
   }
   const priorKeys = new Set(prior.events.map(key));
@@ -228,6 +239,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     else if (e.kind === 'runtime-landmarks') out.newRuntimeLandmarksFindings.push(e);
     else if (e.kind === 'link-text') out.newLinkTextFindings.push(e);
     else if (e.kind === 'placeholder-text') out.newPlaceholderTextFindings.push(e);
+    else if (e.kind === 'tap-targets') out.newTapTargetsFindings.push(e);
   }
   const priorStepLabels = new Map(
     prior.steps.map((s, i) => [s.step.label || `${s.step.kind}-${i}`, s])
@@ -329,6 +341,15 @@ export function renderPositiveSignal(report: Report, diff: Diff): string {
       total: report.events.filter((e) => e.kind === 'placeholder-text').length,
       news: diff.newPlaceholderTextFindings.length,
       strictNews: strict(diff.newPlaceholderTextFindings),
+    },
+    {
+      // T76 (Crawler): tap-targets — WCAG 2.5.8 AA (24×24 strict)
+      // + 2.5.5 AAA recommendation (44×44 warn). Top mobile-UX
+      // defect.
+      name: 'tapTargets',
+      total: report.events.filter((e) => e.kind === 'tap-targets').length,
+      news: diff.newTapTargetsFindings.length,
+      strictNews: strict(diff.newTapTargetsFindings),
     },
   ];
   const lines: string[] = [];
