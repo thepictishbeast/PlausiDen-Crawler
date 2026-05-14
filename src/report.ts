@@ -45,6 +45,8 @@ export interface CapturedEvent {
     | 'cookie-security'
     | 'permissions-policy'
     | 'csp-policy'
+    | 'coop'
+    | 'coep'
     | 'link-underline'
     | 'cross-page-title'
     | 'cross-page-meta-description';
@@ -118,6 +120,10 @@ export interface Report {
     permissionsPolicyFindingsStrict: number;
     cspFindings: number;
     cspFindingsStrict: number;
+    coopFindings: number;
+    coopFindingsStrict: number;
+    coepFindings: number;
+    coepFindingsStrict: number;
     linkUnderlineFindings: number;
     linkUnderlineFindingsStrict: number;
     crossPageTitleFindings: number;
@@ -334,6 +340,20 @@ export interface Diff {
    */
   newCspFindings: CapturedEvent[];
   /**
+   * coop findings new in this run vs prior. Warn = missing /
+   * unsafe-none / invalid. Cross-Origin-Opener-Policy controls
+   * window.opener scriptability + enables crossOriginIsolated
+   * state. T76.
+   */
+  newCoopFindings: CapturedEvent[];
+  /**
+   * coep findings new in this run vs prior. Warn = missing /
+   * unsafe-none / invalid. Cross-Origin-Embedder-Policy pairs
+   * with COOP to enable crossOriginIsolated state, gating
+   * SharedArrayBuffer + Spectre mitigation. T76.
+   */
+  newCoepFindings: CapturedEvent[];
+  /**
    * link-underline findings new in this run vs prior. Warn-only:
    * inline link inside running text distinguished only by colour.
    * WCAG 1.4.1 Level A. T76.
@@ -396,6 +416,8 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     newCookieSecurityFindings: [],
     newPermissionsPolicyFindings: [],
     newCspFindings: [],
+    newCoopFindings: [],
+    newCoepFindings: [],
     newLinkUnderlineFindings: [],
     newCrossPageTitleFindings: [],
     newCrossPageMetaDescriptionFindings: [],
@@ -436,6 +458,8 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     out.newCookieSecurityFindings = current.events.filter(e => e.kind === 'cookie-security');
     out.newPermissionsPolicyFindings = current.events.filter(e => e.kind === 'permissions-policy');
     out.newCspFindings = current.events.filter(e => e.kind === 'csp-policy');
+    out.newCoopFindings = current.events.filter(e => e.kind === 'coop');
+    out.newCoepFindings = current.events.filter(e => e.kind === 'coep');
     out.newLinkUnderlineFindings = current.events.filter(e => e.kind === 'link-underline');
     out.newCrossPageTitleFindings = current.events.filter(e => e.kind === 'cross-page-title');
     out.newCrossPageMetaDescriptionFindings = current.events.filter(e => e.kind === 'cross-page-meta-description');
@@ -477,6 +501,8 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     else if (e.kind === 'cookie-security') out.newCookieSecurityFindings.push(e);
     else if (e.kind === 'permissions-policy') out.newPermissionsPolicyFindings.push(e);
     else if (e.kind === 'csp-policy') out.newCspFindings.push(e);
+    else if (e.kind === 'coop') out.newCoopFindings.push(e);
+    else if (e.kind === 'coep') out.newCoepFindings.push(e);
     else if (e.kind === 'link-underline') out.newLinkUnderlineFindings.push(e);
     else if (e.kind === 'cross-page-title') out.newCrossPageTitleFindings.push(e);
     else if (e.kind === 'cross-page-meta-description') out.newCrossPageMetaDescriptionFindings.push(e);
@@ -743,6 +769,25 @@ export function renderPositiveSignal(report: Report, diff: Diff): string {
       total: report.events.filter((e) => e.kind === 'csp-policy').length,
       news: diff.newCspFindings.length,
       strictNews: strict(diff.newCspFindings),
+    },
+    {
+      // T76 (Crawler): coop — Cross-Origin-Opener-Policy.
+      // Warn on missing/unsafe-none/invalid. Required (with
+      // COEP) to enable crossOriginIsolated state.
+      name: 'coop',
+      total: report.events.filter((e) => e.kind === 'coop').length,
+      news: diff.newCoopFindings.length,
+      strictNews: strict(diff.newCoopFindings),
+    },
+    {
+      // T76 (Crawler): coep — Cross-Origin-Embedder-Policy.
+      // Warn on missing/unsafe-none/invalid. Pairs with COOP
+      // to enable SharedArrayBuffer + Spectre-mitigation
+      // primitives.
+      name: 'coep',
+      total: report.events.filter((e) => e.kind === 'coep').length,
+      news: diff.newCoepFindings.length,
+      strictNews: strict(diff.newCoepFindings),
     },
     {
       // T76 (Crawler): link-underline — WCAG 1.4.1 (Use of Color, A).

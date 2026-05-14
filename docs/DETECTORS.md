@@ -225,6 +225,32 @@ Multi-token policies are honored per the W3C spec — the LAST recognised token 
 
 **Third response-header detector.** Reads from the same `topLevelResponseHeaders` Map as hsts + xFrameOptions. With three concrete examples now in hand, the ~70% structural overlap is a candidate for a generic `headerDetector(headerName, parser, classifier)` helper — extract on the next addition.
 
+### `coop` — Cross-Origin-Opener-Policy response header *(T76 — added 2026-05-14)*
+Source: `src/coop.ts`
+
+| Finding | Sev | Catches |
+|---|---|---|
+| `coop.missing` | warn | No header at all → defaults to `unsafe-none`. Tab-nabbing surface remains; cross-origin isolation cannot be enabled. |
+| `coop.unsafe-none` | warn | Header explicitly set to `unsafe-none`. Operator made the choice intentionally — surfaced for confirmation. |
+| `coop.invalid` | warn | Value not in the W3C-recognised set (`same-origin`, `same-origin-allow-popups`, `same-origin-plus-coep`, `noopener-allow-popups`, `unsafe-none`). |
+
+Acceptable values: `same-origin` (strictest), `same-origin-allow-popups`, `same-origin-plus-coep`, `noopener-allow-popups`. Out of scope: localhost (consistent with response-header detector family).
+
+**Seventh response-header detector.** Reads from the same `topLevelResponseHeaders` Map. With COOP+COEP now in hand, the single-value response-header detector count reaches FIVE (hsts, xframeOptions, referrerPolicy, coop, coep) — strong enough to extract the `responseHeaderDetector(headerName, snapshotBuilder, classifier)` helper in the next cycle.
+
+### `coep` — Cross-Origin-Embedder-Policy response header *(T76 — added 2026-05-14)*
+Source: `src/coep.ts`
+
+| Finding | Sev | Catches |
+|---|---|---|
+| `coep.missing` | warn | No header at all → defaults to `unsafe-none`. Cross-origin isolation cannot be enabled, so SharedArrayBuffer + high-resolution timers stay disabled and Spectre-class side-channel mitigations are unavailable. |
+| `coep.unsafe-none` | warn | Header explicitly set to `unsafe-none`. Confirm intentional. |
+| `coep.invalid` | warn | Value not in the W3C-recognised set (`require-corp`, `credentialless`, `unsafe-none`). |
+
+Acceptable values: `require-corp` (strictest, requires every cross-origin sub-resource to opt in via CORP) or `credentialless` (newer; allows cross-origin embeds without credentials).
+
+**Eighth response-header detector.** Pairs with COOP — together they enable `crossOriginIsolated` document state, the modern browser primitive that gates `SharedArrayBuffer`, high-resolution `performance.now()`, and `performance.measureUserAgentSpecificMemory()`. Without cross-origin isolation, Spectre-class side-channel attacks can leak data from co-tenant origins inside the same browser process.
+
 ### `cspPolicy` — full Content-Security-Policy response header *(T76 — added 2026-05-14)*
 Source: `src/contentSecurityPolicy.ts`
 

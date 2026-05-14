@@ -53,6 +53,8 @@ import { captureFontLoadingSnapshot, detectFontLoadingIssues, type FontLoadingFi
 import { buildCookieSecuritySnapshot, detectCookieSecurityIssues, type CookieSecurityFinding } from './cookieSecurity.js';
 import { buildPermissionsPolicySnapshot, detectPermissionsPolicyIssues, type PermissionsPolicyFinding } from './permissionsPolicy.js';
 import { buildCspSnapshot, detectCspIssues, type CspFinding } from './contentSecurityPolicy.js';
+import { buildCoopSnapshot, detectCoopIssues, type CoopFinding } from './coop.js';
+import { buildCoepSnapshot, detectCoepIssues, type CoepFinding } from './coep.js';
 
 interface Budget {
   newConsoleErrors: number;
@@ -1052,6 +1054,72 @@ async function main(args: string[]): Promise<number> {
    * combinations.
    */
   /**
+   * T76: Cross-Origin-Opener-Policy detector. SEVENTH consumer
+   * of the shared `topLevelResponseHeaders` capture path.
+   * Audits the COOP header that controls window.opener
+   * scriptability + enables cross-origin isolation.
+   */
+  const coopFindingsByStep: Array<{ stepLabel: string; pageUrl: string; findings: CoopFinding[] }> = [];
+  const checkCoop = async (afterLabel: string) => {
+    try {
+      const pageUrl = page.url();
+      const headers = topLevelResponseHeaders.get(pageUrl);
+      const snap = buildCoopSnapshot(pageUrl, headers);
+      if (disableLocalhostExemption) snap.pageIsLocalhost = false;
+      const findings = detectCoopIssues(snap);
+      coopFindingsByStep.push({ stepLabel: afterLabel, pageUrl, findings });
+      for (const f of findings) {
+        log({
+          kind: 'coop',
+          text: `[${f.kind}] ${f.detail}`,
+          url: pageUrl,
+          severity: f.severity,
+          ruleId: f.kind,
+          impact: f.severity === 'strict' ? 'serious' : 'minor',
+        });
+      }
+    } catch (e) {
+      log({
+        kind: 'pageerror',
+        text: `[coop] detector threw on step ${afterLabel}: ${(e as Error).message}`,
+      });
+    }
+  };
+
+  /**
+   * T76: Cross-Origin-Embedder-Policy detector. EIGHTH consumer
+   * of the shared `topLevelResponseHeaders` capture path.
+   * Pairs with COOP to enable crossOriginIsolated state, which
+   * gates SharedArrayBuffer + Spectre-mitigation primitives.
+   */
+  const coepFindingsByStep: Array<{ stepLabel: string; pageUrl: string; findings: CoepFinding[] }> = [];
+  const checkCoep = async (afterLabel: string) => {
+    try {
+      const pageUrl = page.url();
+      const headers = topLevelResponseHeaders.get(pageUrl);
+      const snap = buildCoepSnapshot(pageUrl, headers);
+      if (disableLocalhostExemption) snap.pageIsLocalhost = false;
+      const findings = detectCoepIssues(snap);
+      coepFindingsByStep.push({ stepLabel: afterLabel, pageUrl, findings });
+      for (const f of findings) {
+        log({
+          kind: 'coep',
+          text: `[${f.kind}] ${f.detail}`,
+          url: pageUrl,
+          severity: f.severity,
+          ruleId: f.kind,
+          impact: f.severity === 'strict' ? 'serious' : 'minor',
+        });
+      }
+    } catch (e) {
+      log({
+        kind: 'pageerror',
+        text: `[coep] detector threw on step ${afterLabel}: ${(e as Error).message}`,
+      });
+    }
+  };
+
+  /**
    * T76: full Content-Security-Policy audit. SIXTH consumer
    * of the shared `topLevelResponseHeaders` capture path.
    * Surfaces missing CSP, script-src unsafe-inline /
@@ -1893,6 +1961,8 @@ async function main(args: string[]): Promise<number> {
       await checkCookieSecurity(step.label || `goto-${i}`);
       await checkPermissionsPolicy(step.label || `goto-${i}`);
       await checkCsp(step.label || `goto-${i}`);
+      await checkCoop(step.label || `goto-${i}`);
+      await checkCoep(step.label || `goto-${i}`);
       await checkWebVitals(step.label || `goto-${i}`);
     }
     // Memory snapshot at end of each step so the report shows heap growth
@@ -2035,6 +2105,10 @@ async function main(args: string[]): Promise<number> {
       permissionsPolicyFindingsStrict: events.filter(e => e.kind === 'permissions-policy' && e.severity === 'strict').length,
       cspFindings: events.filter(e => e.kind === 'csp-policy').length,
       cspFindingsStrict: events.filter(e => e.kind === 'csp-policy' && e.severity === 'strict').length,
+      coopFindings: events.filter(e => e.kind === 'coop').length,
+      coopFindingsStrict: events.filter(e => e.kind === 'coop' && e.severity === 'strict').length,
+      coepFindings: events.filter(e => e.kind === 'coep').length,
+      coepFindingsStrict: events.filter(e => e.kind === 'coep' && e.severity === 'strict').length,
       linkUnderlineFindings: events.filter(e => e.kind === 'link-underline').length,
       linkUnderlineFindingsStrict: events.filter(e => e.kind === 'link-underline' && e.severity === 'strict').length,
       crossPageTitleFindings: events.filter(e => e.kind === 'cross-page-title').length,
@@ -2198,6 +2272,18 @@ async function main(args: string[]): Promise<number> {
       JSON.stringify(cspFindingsByStep, null, 2),
     );
   }
+  if (coopFindingsByStep.length > 0) {
+    writeFileSync(
+      join(outDir, 'coop.json'),
+      JSON.stringify(coopFindingsByStep, null, 2),
+    );
+  }
+  if (coepFindingsByStep.length > 0) {
+    writeFileSync(
+      join(outDir, 'coep.json'),
+      JSON.stringify(coepFindingsByStep, null, 2),
+    );
+  }
   if (linkUnderlineFindingsByStep.length > 0) {
     writeFileSync(
       join(outDir, 'link-underline.json'),
@@ -2300,6 +2386,8 @@ async function main(args: string[]): Promise<number> {
   console.log(`  cookie security:   ${report.counts.cookieSecurityFindings} (strict ${report.counts.cookieSecurityFindingsStrict})`);
   console.log(`  permissions policy:${report.counts.permissionsPolicyFindings} (strict ${report.counts.permissionsPolicyFindingsStrict})`);
   console.log(`  csp policy:        ${report.counts.cspFindings} (strict ${report.counts.cspFindingsStrict})`);
+  console.log(`  coop:              ${report.counts.coopFindings} (strict ${report.counts.coopFindingsStrict})`);
+  console.log(`  coep:              ${report.counts.coepFindings} (strict ${report.counts.coepFindingsStrict})`);
   console.log(`  link underline:    ${report.counts.linkUnderlineFindings} (strict ${report.counts.linkUnderlineFindingsStrict})`);
   console.log(`  cross-page title:  ${report.counts.crossPageTitleFindings} (strict ${report.counts.crossPageTitleFindingsStrict})`);
   console.log(`  cross-page meta:   ${report.counts.crossPageMetaDescriptionFindings} (strict ${report.counts.crossPageMetaDescriptionFindingsStrict})`);
@@ -2384,6 +2472,12 @@ async function main(args: string[]): Promise<number> {
     const newCspStrict = diff.newCspFindings.filter(e => e.severity === 'strict').length;
     const newCspWarn = diff.newCspFindings.length - newCspStrict;
     console.log(`    NEW csp policy:       ${diff.newCspFindings.length} (strict ${newCspStrict}, warn ${newCspWarn})`);
+    const newCoopStrict = diff.newCoopFindings.filter(e => e.severity === 'strict').length;
+    const newCoopWarn = diff.newCoopFindings.length - newCoopStrict;
+    console.log(`    NEW coop:             ${diff.newCoopFindings.length} (strict ${newCoopStrict}, warn ${newCoopWarn})`);
+    const newCoepStrict = diff.newCoepFindings.filter(e => e.severity === 'strict').length;
+    const newCoepWarn = diff.newCoepFindings.length - newCoepStrict;
+    console.log(`    NEW coep:             ${diff.newCoepFindings.length} (strict ${newCoepStrict}, warn ${newCoepWarn})`);
     const newLinkUnderlineStrict = diff.newLinkUnderlineFindings.filter(e => e.severity === 'strict').length;
     const newLinkUnderlineWarn = diff.newLinkUnderlineFindings.length - newLinkUnderlineStrict;
     console.log(`    NEW link underline:   ${diff.newLinkUnderlineFindings.length} (strict ${newLinkUnderlineStrict}, warn ${newLinkUnderlineWarn})`);

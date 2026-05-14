@@ -142,6 +142,8 @@ DEFAULT_HEADERS = {
     'Referrer-Policy': 'strict-origin-when-cross-origin',
     'Permissions-Policy': _DEFAULT_PERMISSIONS_POLICY,
     'Content-Security-Policy': _DEFAULT_CSP,
+    'Cross-Origin-Opener-Policy': 'same-origin',
+    'Cross-Origin-Embedder-Policy': 'require-corp',
     'Content-Type': 'text/html; charset=utf-8',
     'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
 }
@@ -292,6 +294,55 @@ def csp_clean():
     return (
         page('<h1>CSP hardened — clean baseline.</h1>'),
         {'Content-Security-Policy': _CSP_HARDENED},
+    )
+
+
+# ----- Cross-Origin-Opener-Policy / Embedder-Policy -----
+@route('/no-coop/')
+def no_coop():
+    return (
+        page('<h1>No Cross-Origin-Opener-Policy.</h1>'),
+        {'Cross-Origin-Opener-Policy': None},
+    )
+
+
+@route('/coop-unsafe-none/')
+def coop_unsafe_none():
+    return (
+        page('<h1>COOP unsafe-none.</h1>'),
+        {'Cross-Origin-Opener-Policy': 'unsafe-none'},
+    )
+
+
+@route('/coop-invalid/')
+def coop_invalid():
+    return (
+        page('<h1>COOP unrecognised value.</h1>'),
+        {'Cross-Origin-Opener-Policy': 'whatever-token'},
+    )
+
+
+@route('/no-coep/')
+def no_coep():
+    return (
+        page('<h1>No Cross-Origin-Embedder-Policy.</h1>'),
+        {'Cross-Origin-Embedder-Policy': None},
+    )
+
+
+@route('/coep-unsafe-none/')
+def coep_unsafe_none():
+    return (
+        page('<h1>COEP unsafe-none.</h1>'),
+        {'Cross-Origin-Embedder-Policy': 'unsafe-none'},
+    )
+
+
+@route('/coep-invalid/')
+def coep_invalid():
+    return (
+        page('<h1>COEP unrecognised value.</h1>'),
+        {'Cross-Origin-Embedder-Policy': 'wat'},
     )
 
 

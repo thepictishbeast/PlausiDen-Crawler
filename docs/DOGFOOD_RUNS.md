@@ -1033,6 +1033,139 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (twenty-third entry) — COOP + COEP cross-origin isolation pair
+
+### What's new since last cycle (twenty-second entry)
+- 2 new detector axes: **`coop`** (Cross-Origin-Opener-Policy)
+  + **`coep`** (Cross-Origin-Embedder-Policy). Brings the
+  active-axis count to **36** (39 with the three legacy event
+  kinds counted separately).
+- 6 new HTTPS fixture routes (3 per detector):
+  `/no-coop/`, `/coop-unsafe-none/`, `/coop-invalid/`,
+  `/no-coep/`, `/coep-unsafe-none/`, `/coep-invalid/`.
+  HTTPS gate now validates **34/34** routes (was 28/28).
+- DEFAULT_HEADERS now sets `Cross-Origin-Opener-Policy:
+  same-origin` + `Cross-Origin-Embedder-Policy: require-corp`
+  so unrelated routes don't leak `coop.missing` /
+  `coep.missing` into their audit notes.
+- Single-value response-header detector count now FIVE (hsts,
+  xframeOptions, referrerPolicy, coop, coep) — sufficient
+  evidence to extract `responseHeaderDetector` in the next
+  cycle.
+
+### Why COOP + COEP now
+Together these two headers enable `crossOriginIsolated`
+document state — the modern browser primitive that gates:
+
+  - `SharedArrayBuffer` (required for WebAssembly threads,
+    OffscreenCanvas in workers, real concurrency primitives).
+  - `performance.now()` high-resolution timing (necessary for
+    accurate profiling, but also useful for Spectre-class
+    timing attacks — restricted unless the page proves
+    isolation first).
+  - `performance.measureUserAgentSpecificMemory()` (memory
+    metrics; same threat model).
+
+Without isolation, Spectre-class side-channel attacks can leak
+data from co-tenant origins inside the same browser process.
+Modern security-sensitive apps (any banking, payments,
+healthcare, comms client) should set both. This is exactly the
+kind of supersociety control that the directive emphasises —
+defence-in-depth for the next-generation browser surface.
+
+### Detector design
+Both are single-value response-header detectors with three
+findings each:
+
+  - `<x>.missing`     warn   no header → defaults to unsafe-none
+  - `<x>.unsafe-none` warn   explicit unsafe-none
+  - `<x>.invalid`     warn   value not in W3C-recognised set
+
+The two snapshots / detectors are deliberately separate
+modules (rather than a combined `crossOriginIsolation` module)
+because they're independently configurable. A site might have
+COOP but not COEP, or vice versa, and we want one finding per
+defect.
+
+### Helper-extract setup (next cycle)
+With COOP + COEP shipped, the single-value response-header
+detector roster is:
+
+  1. hsts             — HSTS header parser + classifier
+  2. xframeOptions    — XFO header + CSP frame-ancestors fallback
+  3. referrerPolicy   — Referrer-Policy parser + classifier
+  4. coop             — COOP single-token classifier
+  5. coep             — COEP single-token classifier
+
+Five concrete examples is more than enough to validate the
+abstraction shape. The shared structure across all five:
+
+```ts
+function checkXxx(afterLabel: string) {
+  const pageUrl = page.url();
+  const headers = topLevelResponseHeaders.get(pageUrl);
+  const snap = buildXxxSnapshot(pageUrl, headers);
+  if (disableLocalhostExemption) snap.pageIsLocalhost = false;
+  const findings = detectXxxIssues(snap);
+  xxxFindingsByStep.push({ stepLabel: afterLabel, pageUrl, findings });
+  for (const f of findings) {
+    log({ kind: 'xxx', text: `[${f.kind}] ${f.detail}`, url: pageUrl,
+          severity: f.severity, ruleId: f.kind,
+          impact: f.severity === 'strict' ? 'serious' : 'minor' });
+  }
+}
+```
+
+The boilerplate is ~25 lines per detector, ×5 = 125 lines that
+compress to ~30 with the helper. Plus the proposed
+`responseHeaderDetector` becomes a single point of audit for
+the localhost-exemption + capture-Map plumbing — fewer surfaces
+where a future refactor can silently drop the protection.
+
+Cycle 24 plan:
+  1. Create `src/responseHeaderDetector.ts` exporting a generic
+     `runResponseHeaderDetector(opts)` helper.
+  2. Migrate hsts → coop → coep → xframeOptions → referrerPolicy
+     in five small commits, running the gate between each so a
+     regression is bisected to one detector.
+  3. After all five migrate, validate no behavioural change
+     against the HTTPS gate (still 34/34) + SkillShots audit
+     (still all silent on localhost).
+
+### Tests
+- 10 unit scenarios in `coop.test.ts`, all passing.
+- 9 unit scenarios in `coep.test.ts`, all passing.
+
+### Verified
+- HTTP gate: 36/36 routes pass.
+- HTTPS gate: 34/34 routes pass (28 prior + 6 new COOP/COEP routes).
+- SkillShots audit: 39 axes total, all silent vs prior — the
+  SkillShots dev server runs on localhost so the exemption
+  short-circuits, correct quiet-baseline confirmation that the
+  detectors are wired and active.
+
+### Action items
+- [ ] **Extract `responseHeaderDetector` helper next cycle.**
+      See cycle 24 plan above.
+- [ ] CORP (Cross-Origin-Resource-Policy) — third member of
+      the cross-origin-isolation triad. The complication: CORP
+      is a per-RESOURCE header, not per-page, so the
+      `topLevelResponseHeaders` Map (which only stores top-level
+      navigation responses) won't see it on cross-origin
+      sub-resources. To audit those, the response listener
+      needs to capture sub-resource headers too — a capture-
+      layer expansion. Queued as cycle-25 candidate.
+- [ ] Subresource Integrity (SRI) detector — per-element DOM
+      check (every cross-origin `<script>` and
+      `<link rel=stylesheet>` should have an `integrity=`
+      attribute). Different shape from response-header
+      detectors. CDN-compromise mitigation.
+- [ ] Server-header leak detector (server: nginx/1.20.1 etc.) —
+      opsec hygiene. Single-value response header — fits
+      perfectly into the helper-extracted pattern.
+
+---
+
 ## 2026-05-14 (twenty-second entry) — full CSP detector + helper-extract verdict
 
 ### What's new since last cycle (twenty-first entry)
