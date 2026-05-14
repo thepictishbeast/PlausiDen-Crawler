@@ -72,6 +72,7 @@ import { detectInlineScriptIssues, INLINE_SCRIPT_DOM_CAPTURE_JS, type InlineScri
 import { buildReportingEndpointsSnapshot, detectReportingEndpointsIssues, type ReportingEndpointsFinding } from './reportingEndpoints.js';
 import { buildOriginAgentClusterSnapshot, detectOriginAgentClusterIssues, type OriginAgentClusterFinding } from './originAgentCluster.js';
 import { buildDocumentPolicySnapshot, detectDocumentPolicyIssues, type DocumentPolicyFinding } from './documentPolicy.js';
+import { buildNelSnapshot, detectNelIssues, type NelFinding } from './networkErrorLogging.js';
 import { calculateSupersocietyScore, renderSupersocietyScore } from './supersocietyScore.js';
 import {
   buildScoreHistoryEntry,
@@ -1341,6 +1342,25 @@ async function main(args: string[]): Promise<number> {
   });
 
   /**
+   * T76 cycle 65: Network-Error-Logging header audit. Extends
+   * the Reporting-API to transport-level failures (TLS
+   * handshake, DNS, TCP RST, HTTP 4xx/5xx). Pairs with the
+   * cycle 63 collector — gives ops visibility into network-
+   * level failures that fire BEFORE the document even loads.
+   * 15th consumer of the shared response-header capture path.
+   */
+  const nelFindingsByStep: Array<PerStepRecord<NelFinding>> = [];
+  const checkNel = makeResponseHeaderCheck({
+    detectorName: 'nel',
+    eventKind: 'nel',
+    page, topLevelResponseHeaders, disableLocalhostExemption,
+    findingsByStep: nelFindingsByStep,
+    log,
+    buildSnapshot: buildNelSnapshot,
+    detectIssues: detectNelIssues,
+  });
+
+  /**
    * T76 cycle 31: Reporting API endpoint configuration audit.
    * Without endpoints configured, ALL browser-emitted security
    * reports (CSP violations, COEP violations, crash reports,
@@ -2202,6 +2222,7 @@ async function main(args: string[]): Promise<number> {
       await checkReportingEndpoints(step.label || `goto-${i}`);
       await checkOriginAgentCluster(step.label || `goto-${i}`);
       await checkDocumentPolicy(step.label || `goto-${i}`);
+      await checkNel(step.label || `goto-${i}`);
       await checkWebVitals(step.label || `goto-${i}`);
     }
     // Memory snapshot at end of each step so the report shows heap growth
@@ -2364,6 +2385,8 @@ async function main(args: string[]): Promise<number> {
       trustedTypesFindingsStrict: events.filter(e => e.kind === 'trusted-types' && e.severity === 'strict').length,
       documentPolicyFindings: events.filter(e => e.kind === 'document-policy').length,
       documentPolicyFindingsStrict: events.filter(e => e.kind === 'document-policy' && e.severity === 'strict').length,
+      nelFindings: events.filter(e => e.kind === 'nel').length,
+      nelFindingsStrict: events.filter(e => e.kind === 'nel' && e.severity === 'strict').length,
       reportingEndpointsFindings: events.filter(e => e.kind === 'reporting-endpoints').length,
       reportingEndpointsFindingsStrict: events.filter(e => e.kind === 'reporting-endpoints' && e.severity === 'strict').length,
       originAgentClusterFindings: events.filter(e => e.kind === 'origin-agent-cluster').length,

@@ -55,6 +55,7 @@ export interface CapturedEvent {
     | 'inline-script'
     | 'trusted-types'
     | 'document-policy'
+    | 'nel'
     | 'reporting-endpoints'
     | 'origin-agent-cluster'
     | 'link-underline'
@@ -150,6 +151,8 @@ export interface Report {
     trustedTypesFindingsStrict: number;
     documentPolicyFindings: number;
     documentPolicyFindingsStrict: number;
+    nelFindings: number;
+    nelFindingsStrict: number;
     reportingEndpointsFindings: number;
     reportingEndpointsFindingsStrict: number;
     originAgentClusterFindings: number;
@@ -444,6 +447,12 @@ export interface Diff {
    */
   newDocumentPolicyFindings: CapturedEvent[];
   /**
+   * NEL (Network-Error-Logging) findings new in this run vs
+   * prior. T76 cycle 65. All warn — missing header / invalid
+   * JSON / report_to missing / failure_fraction=0 / max_age=0.
+   */
+  newNelFindings: CapturedEvent[];
+  /**
    * reporting-endpoints findings new in this run vs prior.
    * All warn — Reporting API endpoint configuration. Missing
    * endpoints / Report-To-only legacy / CSP-report-uri
@@ -529,6 +538,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     newInlineScriptFindings: [],
     newTrustedTypesFindings: [],
     newDocumentPolicyFindings: [],
+    newNelFindings: [],
     newReportingEndpointsFindings: [],
     newOriginAgentClusterFindings: [],
     newLinkUnderlineFindings: [],
@@ -581,6 +591,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     out.newInlineScriptFindings = current.events.filter(e => e.kind === 'inline-script');
     out.newTrustedTypesFindings = current.events.filter(e => e.kind === 'trusted-types');
     out.newDocumentPolicyFindings = current.events.filter(e => e.kind === 'document-policy');
+    out.newNelFindings = current.events.filter(e => e.kind === 'nel');
     out.newReportingEndpointsFindings = current.events.filter(e => e.kind === 'reporting-endpoints');
     out.newOriginAgentClusterFindings = current.events.filter(e => e.kind === 'origin-agent-cluster');
     out.newLinkUnderlineFindings = current.events.filter(e => e.kind === 'link-underline');
@@ -634,6 +645,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     else if (e.kind === 'inline-script') out.newInlineScriptFindings.push(e);
     else if (e.kind === 'trusted-types') out.newTrustedTypesFindings.push(e);
     else if (e.kind === 'document-policy') out.newDocumentPolicyFindings.push(e);
+    else if (e.kind === 'nel') out.newNelFindings.push(e);
     else if (e.kind === 'reporting-endpoints') out.newReportingEndpointsFindings.push(e);
     else if (e.kind === 'origin-agent-cluster') out.newOriginAgentClusterFindings.push(e);
     else if (e.kind === 'link-underline') out.newLinkUnderlineFindings.push(e);
@@ -1013,6 +1025,16 @@ export function renderPositiveSignal(report: Report, diff: Diff): string {
       total: report.events.filter((e) => e.kind === 'document-policy').length,
       news: diff.newDocumentPolicyFindings.length,
       strictNews: strict(diff.newDocumentPolicyFindings),
+    },
+    {
+      // T76 cycle 65 (Crawler): nel — Network-Error-Logging.
+      // Extends the Reporting-API to transport-level failures
+      // (TLS / DNS / TCP / HTTP errors). Pairs with the cycle
+      // 63 collector for full pre-document-load observability.
+      name: 'nel',
+      total: report.events.filter((e) => e.kind === 'nel').length,
+      news: diff.newNelFindings.length,
+      strictNews: strict(diff.newNelFindings),
     },
     {
       // T76 cycle 31 (Crawler): reporting-endpoints —

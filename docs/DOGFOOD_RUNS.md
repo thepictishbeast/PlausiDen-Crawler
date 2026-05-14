@@ -1033,6 +1033,71 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (sixty-fifth entry) — NEL detector: axis 50
+
+### What's new since last cycle (sixty-fourth entry)
+- **New detector — `nel`** (this commit). 50th axis. Audits
+  the W3C Network-Error-Logging response header. Pairs with
+  cycle 63's collector + cycle 31's Reporting-Endpoints
+  detector — closes the transport-layer telemetry hole.
+- **Cross-repo Loom fix** (commit 4294cd1): respond_html now
+  emits an NEL header on every admin response, routing TLS /
+  DNS / TCP / HTTP-error reports through the existing
+  `default` Reporting-Endpoints group → /reports collector.
+- 11 unit tests pass (5 finding kinds covered).
+- **50 detection axes active** (was 49 in cycle 60).
+- Score holds: aggregate badge **A 100/100 (15)**.
+
+### What NEL detects (the 5 finding kinds)
+- `nel.missing` — header absent; transport-layer reports lost.
+- `nel.invalid` — header present but not valid JSON object.
+- `nel.report-to-missing` — JSON parses but no `report_to`
+  field; reports have nowhere to go.
+- `nel.max-age-zero` — explicit opt-out (`max_age: 0`).
+- `nel.failure-fraction-zero` — `failure_fraction: 0` defeats
+  the primary purpose of NEL.
+
+### The observability stack is now complete
+```
+detect (CSP / Trusted-Types / Document-Policy / NEL — cycle 65)
+  ↓
+enforce (browser policy / transport-layer monitoring)
+  ↓
+report (Reporting-API + NEL via 'default' group)
+  ↓
+collect (loom edit-serve /reports, cycle 63)
+  ↓
+review (operator reads violations.jsonl)
+```
+
+Before cycle 63, the report half fired into /dev/null. After
+cycle 63 it lands in a JSONL log. After cycle 64 the AUDIT
+verifies the config is sound. After cycle 65 the NETWORK side
+joins the policy side: TLS handshake failures and DNS errors
+land in the same log as CSP violations.
+
+### Score arc (cycles 41-65)
+  C64: aggregate A 100/100 (15) — audit loop closed.
+  C65: **aggregate A 100/100 (15)** — observability stack
+       complete (50 detection axes; transport-layer telemetry
+       now covered).
+
+### Cumulative cross-repo dogfood scoreboard (cycles 38-65)
+  26 Loom commits + 3 Forge commits + **8 crawler enhancements**.
+
+### Action items
+- [ ] Cycle 66: cargo-mutants pass on supersocietyScore
+      module (Tier 6 meta-validation — does the score code
+      actually compute what we think it does?).
+- [ ] Cycle 67: extend dogfood to PlausiDen-Atrium and
+      PlausiDen-Sentinel-GUI.
+- [ ] Cycle 68: TUI viewer for violations.jsonl.
+- [ ] Cycle 69: Trusted-Types policy enforcement detector —
+      runtime check that a registered policy exists with the
+      name in `trusted-types <name>` directive.
+
+---
+
 ## 2026-05-14 (sixty-fourth entry) — reportingEndpoints detector tightening
 
 ### What's new since last cycle (sixty-third entry)

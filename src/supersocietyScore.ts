@@ -127,6 +127,7 @@ const KIND_TO_CATEGORY: Record<string, string> = {
 
   // Observability — reporting + telemetry.
   'reporting-endpoints': 'observability',
+  'nel': 'observability',
 
   // Accessibility — a11y axe-core + WCAG-flavoured checks.
   'a11y-violation': 'accessibility',
