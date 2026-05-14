@@ -48,6 +48,7 @@ export interface CapturedEvent {
     | 'coop'
     | 'coep'
     | 'sri'
+    | 'info-leak'
     | 'link-underline'
     | 'cross-page-title'
     | 'cross-page-meta-description';
@@ -127,6 +128,8 @@ export interface Report {
     coepFindingsStrict: number;
     sriFindings: number;
     sriFindingsStrict: number;
+    infoLeakFindings: number;
+    infoLeakFindingsStrict: number;
     linkUnderlineFindings: number;
     linkUnderlineFindingsStrict: number;
     crossPageTitleFindings: number;
@@ -365,6 +368,13 @@ export interface Diff {
    */
   newSriFindings: CapturedEvent[];
   /**
+   * info-leak findings new in this run vs prior. All warn —
+   * opsec hygiene. Server-version / X-Powered-By /
+   * X-AspNet-Version / X-AspNetMvc-Version / X-Runtime /
+   * X-Debug-Token / Via / X-Generator. T76.
+   */
+  newInfoLeakFindings: CapturedEvent[];
+  /**
    * link-underline findings new in this run vs prior. Warn-only:
    * inline link inside running text distinguished only by colour.
    * WCAG 1.4.1 Level A. T76.
@@ -430,6 +440,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     newCoopFindings: [],
     newCoepFindings: [],
     newSriFindings: [],
+    newInfoLeakFindings: [],
     newLinkUnderlineFindings: [],
     newCrossPageTitleFindings: [],
     newCrossPageMetaDescriptionFindings: [],
@@ -473,6 +484,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     out.newCoopFindings = current.events.filter(e => e.kind === 'coop');
     out.newCoepFindings = current.events.filter(e => e.kind === 'coep');
     out.newSriFindings = current.events.filter(e => e.kind === 'sri');
+    out.newInfoLeakFindings = current.events.filter(e => e.kind === 'info-leak');
     out.newLinkUnderlineFindings = current.events.filter(e => e.kind === 'link-underline');
     out.newCrossPageTitleFindings = current.events.filter(e => e.kind === 'cross-page-title');
     out.newCrossPageMetaDescriptionFindings = current.events.filter(e => e.kind === 'cross-page-meta-description');
@@ -517,6 +529,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     else if (e.kind === 'coop') out.newCoopFindings.push(e);
     else if (e.kind === 'coep') out.newCoepFindings.push(e);
     else if (e.kind === 'sri') out.newSriFindings.push(e);
+    else if (e.kind === 'info-leak') out.newInfoLeakFindings.push(e);
     else if (e.kind === 'link-underline') out.newLinkUnderlineFindings.push(e);
     else if (e.kind === 'cross-page-title') out.newCrossPageTitleFindings.push(e);
     else if (e.kind === 'cross-page-meta-description') out.newCrossPageMetaDescriptionFindings.push(e);
@@ -814,6 +827,17 @@ export function renderPositiveSignal(report: Report, diff: Diff): string {
       total: report.events.filter((e) => e.kind === 'sri').length,
       news: diff.newSriFindings.length,
       strictNews: strict(diff.newSriFindings),
+    },
+    {
+      // T76 (Crawler): info-leak — opsec hygiene audit for
+      // version-disclosure response headers (Server,
+      // X-Powered-By, X-AspNet-Version, X-AspNetMvc-Version,
+      // X-Runtime, X-Debug-Token, Via, X-Generator). All
+      // warns; localhost exempt.
+      name: 'infoLeak',
+      total: report.events.filter((e) => e.kind === 'info-leak').length,
+      news: diff.newInfoLeakFindings.length,
+      strictNews: strict(diff.newInfoLeakFindings),
     },
     {
       // T76 (Crawler): link-underline — WCAG 1.4.1 (Use of Color, A).

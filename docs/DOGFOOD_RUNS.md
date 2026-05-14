@@ -1033,6 +1033,126 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (twenty-sixth entry) — info-leak headers opsec audit
+
+### What's new since last cycle (twenty-fifth entry)
+- 1 new detector axis: **`infoLeak`** — opsec hygiene audit
+  for version-disclosure response headers. Brings the active-
+  axis count to **38** (41 with the three legacy event kinds
+  counted separately). Eight finding kinds, all warn.
+- 9 new HTTPS fixture routes (8 finding-specific + 1 clean
+  control). HTTPS gate now validates **43/43** routes (was
+  34/34).
+- HTTPS fixture `Handler` class now overrides `server_version`
+  to `'web'` and `sys_version` to `''` so the auto-emitted
+  Python `Server: BaseHTTP/0.6 Python/3.13.X` header doesn't
+  fire info-leak.server-version on every unrelated route. The
+  bare product name passes cleanly; the version-leak routes
+  override Server explicitly.
+- First detector wired through the cycle-24 `responseHeader-
+  Detector` helper since it shipped — proves the helper's
+  ergonomics on a fresh detector. Six lines of factory args
+  in main.ts vs the ~25 lines the inline form would have
+  needed.
+
+### Why infoLeak now
+The user's CLAUDE.md threat model lists "supply-chain
+compromise" as a state-actor primitive, but the OTHER half of
+that pattern is reconnaissance: an adversary mapping a target
+site uses version-disclosure to cross-reference NVD / GitHub
+Advisories / ExploitDB and find the exact pre-built exploit
+modules to use against the target.
+
+A Server header reading `nginx/1.20.1` reveals which CVEs
+apply, which patch levels are missing, and which auxiliary
+intelligence (deployment date inferable from version) is
+available. Removing or generalising the header forces the
+adversary to enumerate the surface manually — significantly
+raising the cost of opportunistic attacks and slowing
+targeted ones.
+
+These headers have NO functional value to legitimate users.
+Stripping them is pure win.
+
+### Detector design
+Eight finding kinds, all warn:
+
+  - server-version (Server with a version token)
+  - x-powered-by (any value)
+  - x-aspnet-version
+  - x-aspnetmvc-version
+  - x-runtime
+  - x-debug-token (with x-debug-token-link variant collapsed
+    into the same finding)
+  - via
+  - x-generator
+
+The "version token" heuristic is `\d+\.\d+` — at least
+`<digit>.<digit>`. Bare product names (`Server: nginx`,
+`Server: cloudflare`) are deliberately NOT flagged because
+some routing infra needs Server set for debugging and the
+bare name without a version doesn't enable CVE lookup.
+
+### Helper validation
+This is the first NEW detector wired through the cycle-24
+`responseHeaderDetector` helper. Code shape:
+
+```ts
+const infoLeakFindingsByStep: Array<PerStepRecord<InfoLeakFinding>> = [];
+const checkInfoLeak = makeResponseHeaderCheck({
+  detectorName: 'infoLeak',
+  eventKind: 'info-leak',
+  page, topLevelResponseHeaders, disableLocalhostExemption,
+  findingsByStep: infoLeakFindingsByStep,
+  log,
+  buildSnapshot: buildInfoLeakSnapshot,
+  detectIssues: detectInfoLeakIssues,
+});
+```
+
+Six lines of factory args. The pre-helper inline form would
+have been ~25 lines. The helper is paying compound interest
+already.
+
+### Tests
+- 18 unit scenarios in `infoLeakHeaders.test.ts`, all passing.
+- Localhost exemption + per-header presence + Server-version-
+  token heuristic + bare-name-not-flagged + pile-on-with-all-
+  8-headers + header-name case-insensitivity + unrelated
+  headers ignored.
+
+### Verified
+- HTTP gate: 43/43 routes pass (no change; infoLeak fires on
+  HTTPS fixture only).
+- HTTPS gate: **43/43** routes pass (was 34/34; 9 new
+  info-leak routes).
+- SkillShots audit: 41 axes total, all silent vs prior. The
+  SkillShots dev server runs on localhost so the exemption
+  short-circuits even though Python's SimpleHTTPServer DOES
+  emit a `Server: SimpleHTTP/0.6 Python/3.13.X` header that
+  WOULD fire on a non-localhost site. Correct behaviour.
+
+### Action items
+- [ ] CORP detector — capture-layer expansion still needed.
+      Per-RESOURCE header.
+- [ ] Cache-Control hygiene detector — single-value but the
+      classifier depends on response status + content-type.
+      Helper applies.
+- [ ] CSP `report-only` header parser — pairs with existing
+      CSP detector.
+- [ ] Inline-script-without-nonce detector — second per-
+      element security audit, would re-open the
+      `perElementDetector` helper question.
+- [ ] Vary header completeness — if a response varies based
+      on Cookie or Authorization but doesn't say so,
+      intermediate caches can serve the wrong user's data.
+      Single-value response header.
+- [ ] Server-Timing header leak — exposes per-component
+      timing info similar to X-Runtime. Probably folded into
+      info-leak as a 9th finding kind in a follow-up.
+
+---
+
 ## 2026-05-14 (twenty-fifth entry) — Subresource Integrity supply-chain detector
 
 ### What's new since last cycle (twenty-fourth entry)

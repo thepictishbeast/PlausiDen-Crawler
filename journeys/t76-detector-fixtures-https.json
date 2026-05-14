@@ -37,7 +37,16 @@
     { "kind": "goto", "url": "https://127.0.0.1:8773/coop-invalid/", "label": "coop-invalid" },
     { "kind": "goto", "url": "https://127.0.0.1:8773/no-coep/", "label": "no-coep" },
     { "kind": "goto", "url": "https://127.0.0.1:8773/coep-unsafe-none/", "label": "coep-unsafe-none" },
-    { "kind": "goto", "url": "https://127.0.0.1:8773/coep-invalid/", "label": "coep-invalid" }
+    { "kind": "goto", "url": "https://127.0.0.1:8773/coep-invalid/", "label": "coep-invalid" },
+    { "kind": "goto", "url": "https://127.0.0.1:8773/info-leak-server-version/", "label": "info-leak-server-version" },
+    { "kind": "goto", "url": "https://127.0.0.1:8773/info-leak-x-powered-by/", "label": "info-leak-x-powered-by" },
+    { "kind": "goto", "url": "https://127.0.0.1:8773/info-leak-x-aspnet-version/", "label": "info-leak-x-aspnet-version" },
+    { "kind": "goto", "url": "https://127.0.0.1:8773/info-leak-x-aspnetmvc-version/", "label": "info-leak-x-aspnetmvc-version" },
+    { "kind": "goto", "url": "https://127.0.0.1:8773/info-leak-x-runtime/", "label": "info-leak-x-runtime" },
+    { "kind": "goto", "url": "https://127.0.0.1:8773/info-leak-x-debug-token/", "label": "info-leak-x-debug-token" },
+    { "kind": "goto", "url": "https://127.0.0.1:8773/info-leak-via/", "label": "info-leak-via" },
+    { "kind": "goto", "url": "https://127.0.0.1:8773/info-leak-x-generator/", "label": "info-leak-x-generator" },
+    { "kind": "goto", "url": "https://127.0.0.1:8773/info-leak-clean/", "label": "info-leak-clean" }
   ],
   "expectedFindingsByLabel": {
     "control": [],
@@ -73,6 +82,15 @@
     "coop-invalid": ["coop.invalid"],
     "no-coep": ["coep.missing"],
     "coep-unsafe-none": ["coep.unsafe-none"],
-    "coep-invalid": ["coep.invalid"]
+    "coep-invalid": ["coep.invalid"],
+    "info-leak-server-version": ["info-leak.server-version"],
+    "info-leak-x-powered-by": ["info-leak.x-powered-by"],
+    "info-leak-x-aspnet-version": ["info-leak.x-aspnet-version"],
+    "info-leak-x-aspnetmvc-version": ["info-leak.x-aspnetmvc-version"],
+    "info-leak-x-runtime": ["info-leak.x-runtime"],
+    "info-leak-x-debug-token": ["info-leak.x-debug-token"],
+    "info-leak-via": ["info-leak.via"],
+    "info-leak-x-generator": ["info-leak.x-generator"],
+    "info-leak-clean": []
   }
 }

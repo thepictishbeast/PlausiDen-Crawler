@@ -57,6 +57,7 @@ import { buildCoopSnapshot, detectCoopIssues, type CoopFinding } from './coop.js
 import { buildCoepSnapshot, detectCoepIssues, type CoepFinding } from './coep.js';
 import { makeResponseHeaderCheck, type PerStepRecord } from './responseHeaderDetector.js';
 import { detectSriIssues, SRI_DOM_CAPTURE_JS, type SriFinding, type SriSnapshot } from './sri.js';
+import { buildInfoLeakSnapshot, detectInfoLeakIssues, type InfoLeakFinding } from './infoLeakHeaders.js';
 
 interface Budget {
   newConsoleErrors: number;
@@ -1099,6 +1100,25 @@ async function main(args: string[]): Promise<number> {
   // `bash scripts/check-t76-https-detectors.sh` and confirm 34/34.
 
   /**
+   * T76: info-leak headers detector. Opsec hygiene — flags
+   * version-disclosure headers (Server, X-Powered-By,
+   * X-AspNet-Version, X-AspNetMvc-Version, X-Runtime,
+   * X-Debug-Token, Via, X-Generator) that hand attackers
+   * exact CVE-targeting information. All warns. Localhost
+   * exempt.
+   */
+  const infoLeakFindingsByStep: Array<PerStepRecord<InfoLeakFinding>> = [];
+  const checkInfoLeak = makeResponseHeaderCheck({
+    detectorName: 'infoLeak',
+    eventKind: 'info-leak',
+    page, topLevelResponseHeaders, disableLocalhostExemption,
+    findingsByStep: infoLeakFindingsByStep,
+    log,
+    buildSnapshot: buildInfoLeakSnapshot,
+    detectIssues: detectInfoLeakIssues,
+  });
+
+  /**
    * T76: Cross-Origin-Opener-Policy detector. Audits the COOP
    * header that controls window.opener scriptability + enables
    * cross-origin isolation.
@@ -1875,6 +1895,7 @@ async function main(args: string[]): Promise<number> {
       await checkCoop(step.label || `goto-${i}`);
       await checkCoep(step.label || `goto-${i}`);
       await checkSri(step.label || `goto-${i}`);
+      await checkInfoLeak(step.label || `goto-${i}`);
       await checkWebVitals(step.label || `goto-${i}`);
     }
     // Memory snapshot at end of each step so the report shows heap growth
@@ -2023,6 +2044,8 @@ async function main(args: string[]): Promise<number> {
       coepFindingsStrict: events.filter(e => e.kind === 'coep' && e.severity === 'strict').length,
       sriFindings: events.filter(e => e.kind === 'sri').length,
       sriFindingsStrict: events.filter(e => e.kind === 'sri' && e.severity === 'strict').length,
+      infoLeakFindings: events.filter(e => e.kind === 'info-leak').length,
+      infoLeakFindingsStrict: events.filter(e => e.kind === 'info-leak' && e.severity === 'strict').length,
       linkUnderlineFindings: events.filter(e => e.kind === 'link-underline').length,
       linkUnderlineFindingsStrict: events.filter(e => e.kind === 'link-underline' && e.severity === 'strict').length,
       crossPageTitleFindings: events.filter(e => e.kind === 'cross-page-title').length,
@@ -2204,6 +2227,12 @@ async function main(args: string[]): Promise<number> {
       JSON.stringify(sriFindingsByStep, null, 2),
     );
   }
+  if (infoLeakFindingsByStep.length > 0) {
+    writeFileSync(
+      join(outDir, 'info-leak.json'),
+      JSON.stringify(infoLeakFindingsByStep, null, 2),
+    );
+  }
   if (linkUnderlineFindingsByStep.length > 0) {
     writeFileSync(
       join(outDir, 'link-underline.json'),
@@ -2309,6 +2338,7 @@ async function main(args: string[]): Promise<number> {
   console.log(`  coop:              ${report.counts.coopFindings} (strict ${report.counts.coopFindingsStrict})`);
   console.log(`  coep:              ${report.counts.coepFindings} (strict ${report.counts.coepFindingsStrict})`);
   console.log(`  sri:               ${report.counts.sriFindings} (strict ${report.counts.sriFindingsStrict})`);
+  console.log(`  info-leak headers: ${report.counts.infoLeakFindings} (strict ${report.counts.infoLeakFindingsStrict})`);
   console.log(`  link underline:    ${report.counts.linkUnderlineFindings} (strict ${report.counts.linkUnderlineFindingsStrict})`);
   console.log(`  cross-page title:  ${report.counts.crossPageTitleFindings} (strict ${report.counts.crossPageTitleFindingsStrict})`);
   console.log(`  cross-page meta:   ${report.counts.crossPageMetaDescriptionFindings} (strict ${report.counts.crossPageMetaDescriptionFindingsStrict})`);
@@ -2402,6 +2432,9 @@ async function main(args: string[]): Promise<number> {
     const newSriStrict = diff.newSriFindings.filter(e => e.severity === 'strict').length;
     const newSriWarn = diff.newSriFindings.length - newSriStrict;
     console.log(`    NEW sri:              ${diff.newSriFindings.length} (strict ${newSriStrict}, warn ${newSriWarn})`);
+    const newIlStrict = diff.newInfoLeakFindings.filter(e => e.severity === 'strict').length;
+    const newIlWarn = diff.newInfoLeakFindings.length - newIlStrict;
+    console.log(`    NEW info-leak:        ${diff.newInfoLeakFindings.length} (strict ${newIlStrict}, warn ${newIlWarn})`);
     const newLinkUnderlineStrict = diff.newLinkUnderlineFindings.filter(e => e.severity === 'strict').length;
     const newLinkUnderlineWarn = diff.newLinkUnderlineFindings.length - newLinkUnderlineStrict;
     console.log(`    NEW link underline:   ${diff.newLinkUnderlineFindings.length} (strict ${newLinkUnderlineStrict}, warn ${newLinkUnderlineWarn})`);

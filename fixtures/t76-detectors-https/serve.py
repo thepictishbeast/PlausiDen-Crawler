@@ -297,6 +297,78 @@ def csp_clean():
     )
 
 
+# ----- Info-leak headers (opsec hygiene) -----
+@route('/info-leak-server-version/')
+def info_leak_server_version():
+    return (
+        page('<h1>Server header reveals version.</h1>'),
+        {'Server': 'nginx/1.20.1'},
+    )
+
+
+@route('/info-leak-x-powered-by/')
+def info_leak_x_powered_by():
+    return (
+        page('<h1>X-Powered-By header present.</h1>'),
+        {'X-Powered-By': 'PHP/7.4.3'},
+    )
+
+
+@route('/info-leak-x-aspnet-version/')
+def info_leak_x_aspnet_version():
+    return (
+        page('<h1>X-AspNet-Version header present.</h1>'),
+        {'X-AspNet-Version': '4.0.30319'},
+    )
+
+
+@route('/info-leak-x-aspnetmvc-version/')
+def info_leak_x_aspnetmvc_version():
+    return (
+        page('<h1>X-AspNetMvc-Version header present.</h1>'),
+        {'X-AspNetMvc-Version': '5.2'},
+    )
+
+
+@route('/info-leak-x-runtime/')
+def info_leak_x_runtime():
+    return (
+        page('<h1>X-Runtime header present.</h1>'),
+        {'X-Runtime': '0.123456'},
+    )
+
+
+@route('/info-leak-x-debug-token/')
+def info_leak_x_debug_token():
+    return (
+        page('<h1>X-Debug-Token (Symfony web-profiler).</h1>'),
+        {'X-Debug-Token': 'ab12cd'},
+    )
+
+
+@route('/info-leak-via/')
+def info_leak_via():
+    return (
+        page('<h1>Via header (intermediate proxy).</h1>'),
+        {'Via': '1.1 internal-proxy.corp.example (varnish/6.0.8)'},
+    )
+
+
+@route('/info-leak-x-generator/')
+def info_leak_x_generator():
+    return (
+        page('<h1>X-Generator (Drupal).</h1>'),
+        {'X-Generator': 'Drupal 9 (https://www.drupal.org)'},
+    )
+
+
+@route('/info-leak-clean/')
+def info_leak_clean():
+    # No info-leak headers set. Server: 'web' bare product name
+    # comes from the Handler class default and should NOT fire.
+    return page('<h1>Info-leak clean — no version-disclosure headers.</h1>'), {}
+
+
 # ----- Cross-Origin-Opener-Policy / Embedder-Policy -----
 @route('/no-coop/')
 def no_coop():
@@ -461,6 +533,22 @@ def mixed_passive():
 # Server
 # ============================================================
 class Handler(http.server.BaseHTTPRequestHandler):
+    # Override the default `Server: BaseHTTP/0.6 Python/3.13.X`
+    # auto-emit to a clean bare-product name. The infoLeakHeaders
+    # detector specifically tests for VERSION tokens — the bare
+    # name should pass cleanly so unrelated routes don't all
+    # fire info-leak.server-version. Routes that want to test
+    # that finding override the Server header explicitly via
+    # the per-route header dict.
+    server_version = 'web'
+    sys_version = ''
+
+    def date_time_string(self, timestamp=None):
+        # Stable Date for reproducible audit output. Doesn't
+        # affect the info-leak detector (it ignores Date) but
+        # avoids cross-run noise in cookie-security examples.
+        return super().date_time_string(timestamp)
+
     def do_GET(self):
         entry = ROUTES.get(self.path)
         if entry is None:

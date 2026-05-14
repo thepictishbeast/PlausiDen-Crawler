@@ -225,6 +225,26 @@ Multi-token policies are honored per the W3C spec — the LAST recognised token 
 
 **Third response-header detector.** Reads from the same `topLevelResponseHeaders` Map as hsts + xFrameOptions. With three concrete examples now in hand, the ~70% structural overlap is a candidate for a generic `headerDetector(headerName, parser, classifier)` helper — extract on the next addition.
 
+### `infoLeak` — opsec hygiene response-header audit *(T76 — added 2026-05-14)*
+Source: `src/infoLeakHeaders.ts`
+
+| Finding | Sev | Catches |
+|---|---|---|
+| `info-leak.server-version` | warn | `Server` header includes a version number (e.g. `nginx/1.20.1`, `Apache/2.4.41 (Ubuntu)`, `Microsoft-IIS/10.0`). Bare product names (`Server: cloudflare`, `Server: nginx`) are NOT flagged. |
+| `info-leak.x-powered-by` | warn | Any `X-Powered-By` header. Common emitters: PHP, Express, ASP.NET, Laravel, Symfony. Almost always auto-emitted. |
+| `info-leak.x-aspnet-version` | warn | `X-AspNet-Version` reveals CLR / .NET version. |
+| `info-leak.x-aspnetmvc-version` | warn | Same for MVC framework version. |
+| `info-leak.x-runtime` | warn | `X-Runtime` (Rails / Sinatra / Django) — per-request handling time. Useful for operator debugging but reveals performance characteristics that aid timing-attack reconnaissance. |
+| `info-leak.x-debug-token` | warn | `X-Debug-Token` / `X-Debug-Token-Link` (Symfony web-profiler). If these reach production the debug toolbar is also accessible — full route map + SQL queries + cache state. |
+| `info-leak.via` | warn | `Via` header — legitimate intermediate-proxy trace per RFC 7230, but in production usually leaks internal hostnames or proxy software versions. |
+| `info-leak.x-generator` | warn | `X-Generator` header reveals CMS/SSG (Drupal, WordPress, Hugo, Jekyll). |
+
+Threat model: an adversary mapping a target site uses version-disclosure to cross-reference public CVE databases (NVD, GitHub Advisories, ExploitDB) and find the exact pre-built exploit modules to use. The page WORKS without these headers — they're pure disclosure, no functional value to legitimate users.
+
+Out of scope: bare Server names without a version (some routing infra needs Server set for debugging); protective security headers (own detectors); caching headers (separate concern, queued); localhost (consistent with the response-header detector family).
+
+**Ninth response-header detector.** Uses the cycle-24 `responseHeaderDetector` helper for wiring — six lines of factory args. The classifier's parser-and-classify shape is comparable to cookieSecurity but the heuristic (per-header-name lookup, version-token regex on Server, presence-only on the rest) is genuinely different.
+
 ### `sri` — Subresource Integrity per-element DOM audit *(T76 — added 2026-05-14)*
 Source: `src/sri.ts`
 
