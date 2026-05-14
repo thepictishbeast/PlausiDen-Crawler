@@ -1033,6 +1033,92 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (seventy-sixth entry) — Property 5 tightened + report-log helpers deduped
+
+### What's new since last cycle (seventy-fifth entry)
+- **Property 5 tightened**: from `>=` to `>`. Strict
+  penalty must be STRICTLY greater than warn penalty.
+  Closes the last cycle-73 mutation gap (M1).
+- **Cross-repo Loom fix** (commit 59b946b): the report-log
+  helper functions (JSON walker, date formatter,
+  classifier) were duplicated between cycle 70's
+  `report-tail` and cycle 72's `report-stats`. Cycle 76
+  collapses to a single shared module-level set. Net:
+  -89 lines.
+- 15/15 collector E2E tests pass after the dedupe.
+- Aggregate badge holds at **A 100/100 (16)**.
+
+### The dedupe: silent-divergence bug class eliminated
+Pre-cycle-76:
+```
+cmd_report_tail (cycle 70) → field_or, body_type, format_unix_secs
+cmd_report_stats (cycle 72) → report_log_field, report_log_classify, report_log_format_unix
+```
+
+Two implementations of the same JSON walker for the same
+wire format. They were close but not identical (different
+function names, slightly different return-type defaults).
+A future maintainer fixing a parser bug in one would have
+silently introduced inconsistency between the two views —
+operators would see different timestamps / classifications
+in tail vs stats for the same data.
+
+Post-cycle-76:
+```
+cmd_report_tail → uses module-level helpers
+cmd_report_stats → uses module-level helpers
+        SAME PARSER, SAME FORMATTER, SAME CLASSIFIER
+```
+
+Both subcommands present the operator with provably
+consistent output. Auditor stays byte-verifiable: still no
+serde dep, still hand-rolled, still trivially auditable.
+
+### The Tier-6 property suite is now mutation-complete
+Cycle 73 surfaced 3 mutation gaps (M1, M2, M4). Each has now
+been closed:
+- M2 (STRICT_PENALTY=0): closed by cycle 73's P3b.
+- M4 (WARN_PENALTY=0): closed by cycle 75's P4b.
+- M1 (STRICT_PENALTY=WARN_PENALTY): closed by cycle 76's P5
+  tightening.
+
+Combined with the cycle 74 drift detector, the Tier-6 stack:
+```
+property tests   (12 × 200 cases)   ← mutation-complete vs cycle 73 M1/M2/M4
+mutation tests   (5 scenarios)       ← validates property tests' coverage
+drift detector   (4 checks)          ← prevents future unmapped-kind regressions
+                                       ↓
+                         `npm run test:meta`    (cycle 75)
+                                       ↓
+                  ALL THREE LAYERS PASSED
+```
+
+### Score arc (cycles 41-76)
+  C75: A 100/100 (16) — properties 4 + meta runner.
+  C76: A 100/100 (16) — property 5 + helper dedupe.
+
+### Cumulative cross-repo dogfood scoreboard (cycles 38-76)
+  32 Loom commits + 3 Forge + 1 Sentinel-GUI + 11 crawler
+  enhancements + 3 E2E suites + property + mutation + drift
+  test suites + meta-runner.
+
+### Action items
+- [ ] Cycle 77: extend dogfood to a new HTTP surface
+      (orchestrator at 3001 has API only — needs a small
+      `/dashboard` route added; OR pick a different surface).
+- [ ] Cycle 78: wire `test:meta` into a pre-push git hook
+      so meta-test failures block push (after operator
+      opt-in).
+- [ ] Cycle 79: extend the drift detector to also check
+      that every kind in `KIND_TO_CATEGORY` has a finding
+      class registered in CapturedEvent's `kind` union.
+- [ ] Cycle 80: documentation pass — write
+      `docs/SUPERSOCIETY_OBSERVABILITY.md` covering the
+      6-layer detect→report→COLLECT→audit→REVIEW pipeline
+      across both crawler + loom.
+
+---
+
 ## 2026-05-14 (seventy-fifth entry) — Property 4 tightened + `test:meta` one-shot runner
 
 ### What's new since last cycle (seventy-fourth entry)
