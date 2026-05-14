@@ -212,6 +212,47 @@ const MAX_EVENTS_PER_CASE = 60;
     `${failures}/${CASES} cases violate. First: ${firstFail}`);
 }
 
+// --- Property 4b (T76 cycle 75, mirror of cycle 73 P3b for
+// the warn-event case): adding a single warn event to a CLEAN
+// baseline STRICTLY DECREASES the AFFECTED CATEGORY's score.
+//
+// Note: the per-category warn penalty is 5. Spread over the
+// weighted-average composite (combined weight ~14.5), a
+// single warn shifts composite by only ~0.34 — often rounds
+// to 0 change. So we test the CATEGORY directly, not the
+// composite. This still closes mutation gap M4: if
+// WARN_PENALTY=0, the category score wouldn't change either.
+{
+  let failures = 0;
+  let firstFail: string | null = null;
+  const rng = makeRng(22223);
+  for (let i = 0; i < CASES; i++) {
+    const kind = KNOWN_KINDS[Math.floor(rng() * KNOWN_KINDS.length)];
+    const baseline = calculateSupersocietyScore([]);
+    const withWarn = calculateSupersocietyScore([{ kind, severity: 'warn' }]);
+    // Find which category was hit (the one with strict + warn > 0).
+    const hitCat = withWarn.categories.find(
+      (c) => c.strict + c.warn > 0,
+    );
+    if (!hitCat) {
+      // Kind doesn't map to any category (unbucketed) —
+      // skip, that's covered by the unknown-kind property.
+      continue;
+    }
+    const baselineCat = baseline.categories.find(
+      (c) => c.category === hitCat.category,
+    );
+    if (!baselineCat) continue;
+    if (hitCat.score >= baselineCat.score) {
+      failures += 1;
+      if (firstFail === null)
+        firstFail = `warn ${kind} (${hitCat.category}): ${baselineCat.score} → ${hitCat.score}`;
+    }
+  }
+  assert(failures === 0, 'warn on clean baseline strictly DECREASES the affected category score',
+    `${failures}/${CASES} cases violate. First: ${firstFail}`);
+}
+
 // --- Property 5: a single strict penalises >= a single warn (same kind).
 {
   let failures = 0;

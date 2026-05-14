@@ -13,6 +13,8 @@
     "test:css-health-unit": "npx tsx src/cssHealth.test.ts",
     "test:css-health-e2e": "python3 fixtures/css-health/serve.py --port 8766 & sleep 2 && npx tsx src/cssHealthEndToEnd.ts; status=$?; kill %1 2>/dev/null; exit $status",
     "check:skillshots-css": "npx tsx src/checkSkillshots.ts",
+    "test:meta": "npx tsx src/supersocietyScore.property.test.ts && npx tsx src/supersocietyScore.mutation.test.ts && npx tsx src/supersocietyScore.drift.test.ts && echo \"\\n=== Tier-6 meta-validation: ALL THREE LAYERS PASSED ===\"",
+    "test:supersociety": "npx tsx src/supersocietyScore.test.ts && npm run test:meta",
     "install:deps": "npm install && npx playwright install chromium"
   },
   "devDependencies": {
