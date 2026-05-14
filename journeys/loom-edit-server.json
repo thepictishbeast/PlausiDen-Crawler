@@ -1,12 +1,12 @@
 {
   "name": "loom-edit-server",
   "description": "Audit Loom's `edit-serve` CMS editor UI — the typed-form content-editing surface non-technical users will interact with (T42-on). Per the cycle 40 directive 'improve the content cms loom in forge generate', this is the most user-visible Loom output. Targets the index, tutorial, uploads gallery, and one page-editor form.",
-  "baseUrl": "http://127.0.0.1:8126",
+  "baseUrl": "http://127.0.0.1:8127",
   "viewport": { "width": 1280, "height": 900 },
   "steps": [
-    { "kind": "goto", "url": "http://127.0.0.1:8126/", "label": "edit-index" },
-    { "kind": "goto", "url": "http://127.0.0.1:8126/tutorial", "label": "edit-tutorial" },
-    { "kind": "goto", "url": "http://127.0.0.1:8126/uploads", "label": "edit-uploads" },
-    { "kind": "goto", "url": "http://127.0.0.1:8126/about", "label": "edit-page-form" }
+    { "kind": "goto", "url": "http://127.0.0.1:8127/", "label": "edit-index" },
+    { "kind": "goto", "url": "http://127.0.0.1:8127/tutorial", "label": "edit-tutorial" },
+    { "kind": "goto", "url": "http://127.0.0.1:8127/uploads", "label": "edit-uploads" },
+    { "kind": "goto", "url": "http://127.0.0.1:8127/about", "label": "edit-page-form" }
   ]
 }

@@ -1033,6 +1033,96 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (forty-second entry) — Loom edit-serve <main> landmark, 4 more strict cleared
+
+### What's new since last cycle (forty-first entry)
+- **Cross-repo fix in PlausiDen-Loom** (commit 25d580d):
+  every edit-serve HTML emission site now wraps body content
+  in `<body><main>` landmark.
+- Fifth consecutive cross-repo dogfood win.
+- Active named-detector axis count UNCHANGED at 43.
+
+### Score arc on Loom edit-serve
+  Cycle 41 pre-fix:  B 82/100, 19 strict.
+  Cycle 41 post-fix: B 83/100, 11 strict. (-8: viewport + lang)
+  Cycle 42 post-fix: B 83/100, **7 strict**. (-4: no-main)
+
+### What was fixed
+- **4× landmarks.no-main** — every admin page now has a
+  proper `<main>` landmark. Screen-reader users get a
+  consistent primary-content anchor.
+
+### What's still strict (next cycle)
+- 3× contrast.body-text-below-aa
+- 1× form.no-label
+- 1× tap.too-small
+
+### The composite clamp lesson learned (continues from c41)
+Composite stayed at 83 because the accessibility category
+clamps at F=0 with 5 strict remaining:
+
+  score = max(0, 100 - 5×25 - 11×5) = max(0, -80) = 0.
+
+To break the clamp: drop accessibility strict from 5 → 1
+(score = 100 - 25 - 55 = 20) or 5 → 0 (score = 100 - 55 =
+45). Either way the category jumps from F to D or C, and
+the composite climbs above 83.
+
+The contrast cluster (3 strict) is the biggest remaining
+pile. If those clear in one cycle, accessibility goes 5 → 2,
+score = 100 - 50 - 55 = -5 → still 0. So contrast + at
+least one other strict need to clear together to break the
+clamp. Cycle 43+ work.
+
+### Surprise lesson learned (this cycle)
+First attempt put `<body><main>` BEFORE `<title>` in the
+doctype prefix. Browser's HTML5 parser saw `<title>` in body
+context (after `<body>`) and treated it as text — 4×
+landmarks.no-main were swapped for 4× title.missing. Round-
+trip net zero on the score.
+
+Backed out and re-applied with `<body><main>` AFTER each
+`<title>` push. Now both <title> and <main> resolve
+correctly. Lesson: when injecting structural HTML, the
+parser's position matters — `<body>` is a state transition
+in the HTML5 tokeniser, not just markup.
+
+### Closing </main> intentionally omitted
+HTML5 implicit-close handles end-of-document, and adding
+explicit `</main>` would require finding each function's
+response-emit point separately. Browser DOM correctly
+recognises the `<main>` landmark either way; screen
+readers + axe-core + the runtime-landmarks detector all
+agree.
+
+### Cumulative cross-repo dogfood scoreboard (cycles 38-42)
+  C38 Loom:  state-matrix missing CSS                  C 75 → A 99.
+  C39 Loom:  nav-link 44px min-height                  A 95 → A 100.
+  C40 Forge: CMS title disambiguation                  A 100 → A 100 (0).
+  C41 Loom:  edit-serve viewport + lang                B 82 → B 83 (-8 strict).
+  C42 Loom:  edit-serve <main> landmark               B 83 → B 83 (-4 strict).
+
+Total cross-repo commits: 5 across PlausiDen-Loom (×4) +
+PlausiDen-Forge (×1). 12 strict findings cleared on the
+admin UI across cycles 41-42.
+
+### Verified
+- HTTP gate: 47/47 routes pass.
+- HTTPS gate: 60/60 routes pass.
+- 297/297 loom unit tests pass.
+- Loom edit-serve: B (83/100) post-fix, 7 strict remaining.
+
+### Action items
+- [ ] Cycle-43: contrast-token audit on edit-serve inline
+      styles. Tackle the 3× contrast.body-text-below-aa.
+- [ ] Cycle-44: form.no-label + tap.too-small fixes.
+- [ ] Address the F-clamp scoring policy — currently
+      improvements within a clamped category feel invisible
+      to the composite. Partial-credit-within-F could be a
+      cycle-32 score-policy revision.
+
+---
+
 ## 2026-05-14 (forty-first entry) — Loom edit-serve admin UI, partial fix (B 82→83)
 
 ### What's new since last cycle (fortieth entry)
