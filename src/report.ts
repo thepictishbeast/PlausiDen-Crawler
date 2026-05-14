@@ -37,7 +37,8 @@ export interface CapturedEvent {
     | 'autocomplete'
     | 'meta-description'
     | 'favicon'
-    | 'mixed-content';
+    | 'mixed-content'
+    | 'link-underline';
   level?: string;
   text: string;
   url?: string;
@@ -94,6 +95,8 @@ export interface Report {
     faviconFindingsStrict: number;
     mixedContentFindings: number;
     mixedContentFindingsStrict: number;
+    linkUnderlineFindings: number;
+    linkUnderlineFindingsStrict: number;
     cspViolations: number;
     total: number;
     stepsOk: number;
@@ -255,6 +258,12 @@ export interface Diff {
    * page. Warn = passive (img/audio/video). T76.
    */
   newMixedContentFindings: CapturedEvent[];
+  /**
+   * link-underline findings new in this run vs prior. Warn-only:
+   * inline link inside running text distinguished only by colour.
+   * WCAG 1.4.1 Level A. T76.
+   */
+  newLinkUnderlineFindings: CapturedEvent[];
   newlyBrokenSteps: StepResult[];
   fixedSteps: StepResult[];
 }
@@ -294,6 +303,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     newMetaDescriptionFindings: [],
     newFaviconFindings: [],
     newMixedContentFindings: [],
+    newLinkUnderlineFindings: [],
     newlyBrokenSteps: [],
     fixedSteps: [],
   };
@@ -324,6 +334,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     out.newMetaDescriptionFindings = current.events.filter(e => e.kind === 'meta-description');
     out.newFaviconFindings = current.events.filter(e => e.kind === 'favicon');
     out.newMixedContentFindings = current.events.filter(e => e.kind === 'mixed-content');
+    out.newLinkUnderlineFindings = current.events.filter(e => e.kind === 'link-underline');
     return out;
   }
   const priorKeys = new Set(prior.events.map(key));
@@ -355,6 +366,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     else if (e.kind === 'meta-description') out.newMetaDescriptionFindings.push(e);
     else if (e.kind === 'favicon') out.newFaviconFindings.push(e);
     else if (e.kind === 'mixed-content') out.newMixedContentFindings.push(e);
+    else if (e.kind === 'link-underline') out.newLinkUnderlineFindings.push(e);
   }
   const priorStepLabels = new Map(
     prior.steps.map((s, i) => [s.step.label || `${s.step.kind}-${i}`, s])
@@ -547,6 +559,14 @@ export function renderPositiveSignal(report: Report, diff: Diff): string {
       total: report.events.filter((e) => e.kind === 'mixed-content').length,
       news: diff.newMixedContentFindings.length,
       strictNews: strict(diff.newMixedContentFindings),
+    },
+    {
+      // T76 (Crawler): link-underline — WCAG 1.4.1 (Use of Color, A).
+      // Inline link distinguished only by colour.
+      name: 'linkUnderline',
+      total: report.events.filter((e) => e.kind === 'link-underline').length,
+      news: diff.newLinkUnderlineFindings.length,
+      strictNews: strict(diff.newLinkUnderlineFindings),
     },
   ];
   const lines: string[] = [];

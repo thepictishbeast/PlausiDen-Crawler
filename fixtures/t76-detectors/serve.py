@@ -317,6 +317,23 @@ def autocomplete_bogus():
     return page('<h1>Invalid autocomplete token</h1><form><label for=q>Comment</label><input id=q name=comment type=text autocomplete=BOGUS></form>')
 
 
+# ----- link distinguishability family -----
+@route('/link-color-only/')
+def link_color_only():
+    # An anchor inside a <p> with text-decoration:none and no
+    # other distinguishing feature beyond colour. The detector
+    # walks computed styles, so we need real CSS to reliably
+    # trigger — inline style on the <a> is the most direct.
+    body = (
+        '<h1>Link distinguishable only by colour</h1>'
+        '<p>This paragraph has '
+        '<a href="/somewhere" style="color:#0066cc;text-decoration:none">'
+        'a link inside it</a>'
+        ' that fails WCAG 1.4.1 because the only cue is colour.</p>'
+    )
+    return page(body)
+
+
 # ----- favicon family -----
 @route('/no-favicon/')
 def no_favicon():

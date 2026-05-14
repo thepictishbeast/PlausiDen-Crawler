@@ -34,7 +34,8 @@
     { "kind": "goto", "url": "http://127.0.0.1:8771/autocomplete-bogus/", "label": "autocomplete-bogus" },
     { "kind": "goto", "url": "http://127.0.0.1:8771/tabnab/", "label": "tabnab" },
     { "kind": "goto", "url": "http://127.0.0.1:8771/opener-explicit/", "label": "opener-explicit" },
-    { "kind": "goto", "url": "http://127.0.0.1:8771/no-favicon/", "label": "no-favicon" }
+    { "kind": "goto", "url": "http://127.0.0.1:8771/no-favicon/", "label": "no-favicon" },
+    { "kind": "goto", "url": "http://127.0.0.1:8771/link-color-only/", "label": "link-color-only" }
   ],
   "expectedFindingsByLabel": {
     "control": [],
@@ -67,6 +68,7 @@
     "autocomplete-bogus": ["autocomplete.invalid-token"],
     "tabnab": ["link.tabnab-vulnerable"],
     "opener-explicit": ["link.opener-explicit"],
-    "no-favicon": ["favicon.missing-link"]
+    "no-favicon": ["favicon.missing-link"],
+    "link-color-only": ["link.color-only-distinction"]
   }
 }

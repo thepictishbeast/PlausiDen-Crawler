@@ -149,6 +149,20 @@ Source: `src/formLabels.ts` · Rust: `form_labels.rs`
 | `form.placeholder-only-label` | warn | Placeholder is the ONLY label. WCAG 3.3.2. |
 | `form.required-no-indicator` | warn | `required` / `aria-required="true"` set but no `*` or "required" in the visible label. |
 
+### `linkUnderline` — link distinguishability *(T76 — added 2026-05-14)*
+Source: `src/linkUnderline.ts` · Rust: `link_underline.rs`
+
+| Finding | Sev | Catches |
+|---|---|---|
+| `link.color-only-distinction` | warn | Inline link inside running text (`<p>` / `<li>` / `<dd>` / `<blockquote>` / `<td>` / `<th>`) where the only visual cue distinguishing it from surrounding text is colour. WCAG 1.4.1 Level A. |
+
+Out of scope (NOT flagged):
+* Block-level links (nav items, button-like CTAs, card links).
+* Links inside `<header>` / `<nav>` / `<footer>` / `<aside>` chrome — they're conventionally button-styled.
+* Links with explicit visual distinction: underline (canonical), bold weight (≥200 unit difference vs parent), border, outline (with style != none), different background, box-shadow, italic, icon child (svg / img / `i.icon` / `[class*="icon"]`).
+
+**Detector ordering note**: linkUnderline runs FIRST in the per-goto detector chain. Other detectors (focus simulation, contrast walks) can transiently mutate computed styles; capturing pristine state avoids false negatives.
+
 ### `mixedContent` — HTTPS-page-loads-HTTP-resource *(T76 — added 2026-05-14)*
 Source: `src/mixedContent.ts` · Rust: `mixed_content.rs`
 
@@ -403,8 +417,6 @@ Wire to CI: any pre-merge check or scheduled job can shell out to
 Detectors queued for future T76 firings — each is high-leverage,
 zero-overlap with existing axes:
 
-- **`linkUnderline`** — links indistinguishable from surrounding
-  text (no underline + colour-only differentiation, fails WCAG 1.4.1).
 - **`fontLoading`** — `font-display: swap` missing → invisible-text
   flash (FOIT).
 - **`crossPageTitleDup`** — same `<title>` on every page of a

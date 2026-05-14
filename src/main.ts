@@ -43,6 +43,7 @@ import { captureAutocompleteSnapshot, detectAutocompleteIssues, type Autocomplet
 import { captureMetaDescriptionSnapshot, detectMetaDescriptionIssues, type MetaDescriptionFinding } from './metaDescription.js';
 import { captureFaviconSnapshot, detectFaviconIssues, type FaviconFinding } from './favicon.js';
 import { captureMixedContentSnapshot, detectMixedContentIssues, type MixedContentFinding } from './mixedContent.js';
+import { captureLinkUnderlineSnapshot, detectLinkUnderlineIssues, type LinkUnderlineFinding } from './linkUnderline.js';
 
 interface Budget {
   newConsoleErrors: number;
@@ -924,6 +925,37 @@ async function main(args: string[]): Promise<number> {
   };
 
   /**
+   * T76: link-underline detector. WCAG 1.4.1 (Use of Color, A).
+   * Flags inline links inside running text that distinguish
+   * themselves from surrounding text ONLY by colour — fails
+   * for ~8% of users (red-green colourblind) and many low-
+   * contrast environments.
+   */
+  const linkUnderlineFindingsByStep: Array<{ stepLabel: string; pageUrl: string; findings: LinkUnderlineFinding[] }> = [];
+  const checkLinkUnderline = async (afterLabel: string) => {
+    try {
+      const snap = await captureLinkUnderlineSnapshot(page);
+      const findings = detectLinkUnderlineIssues(snap);
+      linkUnderlineFindingsByStep.push({ stepLabel: afterLabel, pageUrl: snap.pageUrl, findings });
+      for (const f of findings) {
+        log({
+          kind: 'link-underline',
+          text: `[${f.kind}] ${f.detail}`,
+          url: snap.pageUrl,
+          severity: f.severity,
+          ruleId: f.kind,
+          impact: f.severity === 'strict' ? 'serious' : 'minor',
+        });
+      }
+    } catch (e) {
+      log({
+        kind: 'pageerror',
+        text: `[linkUnderline] detector threw on step ${afterLabel}: ${(e as Error).message}`,
+      });
+    }
+  };
+
+  /**
    * T76: mixed-content detector. SECURITY-flavoured. Catches
    * https pages loading http resources via static markup
    * analysis — more reliable than the runtime browser signal
@@ -1524,6 +1556,12 @@ async function main(args: string[]): Promise<number> {
     // last goto's snapshot would still apply. Skipped on press/
     // type as well for the same reason.
     if (step.kind === 'goto') {
+      // T76 (2026-05-14): linkUnderline runs FIRST — it inspects
+      // computed styles which other detectors (focus simulation,
+      // contrast walks) can mutate transiently. Catching the
+      // pristine state avoids false negatives from sibling
+      // detector side-effects.
+      await checkLinkUnderline(step.label || `goto-${i}`);
       await checkCssHealth(step.label || `goto-${i}`);
       await checkUiOverflow(step.label || `goto-${i}`);
       await checkRuntimeContrast(step.label || `goto-${i}`);
@@ -1643,6 +1681,8 @@ async function main(args: string[]): Promise<number> {
       faviconFindingsStrict: events.filter(e => e.kind === 'favicon' && e.severity === 'strict').length,
       mixedContentFindings: events.filter(e => e.kind === 'mixed-content').length,
       mixedContentFindingsStrict: events.filter(e => e.kind === 'mixed-content' && e.severity === 'strict').length,
+      linkUnderlineFindings: events.filter(e => e.kind === 'link-underline').length,
+      linkUnderlineFindingsStrict: events.filter(e => e.kind === 'link-underline' && e.severity === 'strict').length,
       cspViolations: events.filter(e => e.kind === 'csp-violation').length,
       total: events.length,
       stepsOk: stepResults.filter(s => s.ok).length,
@@ -1758,6 +1798,12 @@ async function main(args: string[]): Promise<number> {
       JSON.stringify(mixedContentFindingsByStep, null, 2),
     );
   }
+  if (linkUnderlineFindingsByStep.length > 0) {
+    writeFileSync(
+      join(outDir, 'link-underline.json'),
+      JSON.stringify(linkUnderlineFindingsByStep, null, 2),
+    );
+  }
   writeFileSync(join(outDir, 'report.json'), JSON.stringify(report, null, 2));
   // Write a terminal-friendly summary too so CI output is useful at a glance.
   writeFileSync(join(outDir, 'summary.txt'), renderSummary(agg));
@@ -1847,6 +1893,7 @@ async function main(args: string[]): Promise<number> {
   console.log(`  meta description:  ${report.counts.metaDescriptionFindings} (strict ${report.counts.metaDescriptionFindingsStrict})`);
   console.log(`  favicon:           ${report.counts.faviconFindings} (strict ${report.counts.faviconFindingsStrict})`);
   console.log(`  mixed content:     ${report.counts.mixedContentFindings} (strict ${report.counts.mixedContentFindingsStrict})`);
+  console.log(`  link underline:    ${report.counts.linkUnderlineFindings} (strict ${report.counts.linkUnderlineFindingsStrict})`);
   console.log(`  web vitals:        ${report.counts.webVitalsFindings} (strict ${report.counts.webVitalsFindingsStrict})`);
   console.log(`  csp violations:    ${report.counts.cspViolations}`);
   console.log(`  steps ok/failed:   ${report.counts.stepsOk}/${report.counts.stepsFailed}`);
@@ -1907,6 +1954,9 @@ async function main(args: string[]): Promise<number> {
     const newMixedStrict = diff.newMixedContentFindings.filter(e => e.severity === 'strict').length;
     const newMixedWarn = diff.newMixedContentFindings.length - newMixedStrict;
     console.log(`    NEW mixed content:    ${diff.newMixedContentFindings.length} (strict ${newMixedStrict}, warn ${newMixedWarn})`);
+    const newLinkUnderlineStrict = diff.newLinkUnderlineFindings.filter(e => e.severity === 'strict').length;
+    const newLinkUnderlineWarn = diff.newLinkUnderlineFindings.length - newLinkUnderlineStrict;
+    console.log(`    NEW link underline:   ${diff.newLinkUnderlineFindings.length} (strict ${newLinkUnderlineStrict}, warn ${newLinkUnderlineWarn})`);
     console.log(`    NEW csp violations:   ${diff.newCspViolations.length}`);
     console.log(`    newly broken steps:   ${diff.newlyBrokenSteps.length}`);
     console.log(`    fixed steps:          ${diff.fixedSteps.length}`);

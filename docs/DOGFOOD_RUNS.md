@@ -560,9 +560,103 @@ fixture routes) still PASS.
 
 - [ ] HTTPS fixture variant for mixedContent live integration.
 - [ ] login-flow fixture (still queued).
-- [ ] Pick from remaining roadmap: `linkUnderline`,
-      `fontLoading`, `hstsHeader`, `xFrameOptions`,
-      `mixedFormSubmission`, `crossPageTitleDup`.
+- [x] **DONE 2026-05-14**: linkUnderline detector landed. See
+      tenth entry below.
+- [ ] Pick from remaining roadmap: `fontLoading`, `hstsHeader`,
+      `xFrameOptions`, `crossPageTitleDup`. (`mixedFormSubmission`
+      already covered by `mixed-content.form-action`.)
+
+---
+
+## 2026-05-14 (tenth entry) — linkUnderline detector + sibling-side-effect lesson
+
+### What's new since last cycle (ninth entry)
+- `linkUnderline` detector landed in pipeline (warn-only).
+- Total active detector axes: 21 (was 20).
+- check-t76-detectors.sh now validates 32/32 routes (was 31/31).
+- main.ts: linkUnderline runs FIRST in the goto-step detector
+  chain. Comment in code documents why.
+
+### What this cycle taught us
+
+**Detector ordering matters.** When the new linkUnderline
+detector ran AFTER the other 20 detectors in the goto chain,
+its captured snapshot consistently showed 0 candidates on a
+fixture page that DEFINITELY had a color-only-distinction link.
+Direct standalone playwright invocation against the same URL
+captured the candidate correctly.
+
+Root cause: at least one prior detector (likely runtimeFocus
+calling `el.focus()`, OR runtimeContrast walking text nodes)
+transiently mutates computed styles. By the time linkUnderline
+read `outline-style` / `text-decoration` / `font-weight` for the
+test link, the post-mutation state masked the bug.
+
+Fix: linkUnderline now runs FIRST in the per-goto detector
+chain. Comment added to main.ts so future contributors don't
+re-order it back into the middle.
+
+This is a generalisable lesson — any detector that reads
+COMPUTED styles must run before any detector that mutates
+the page (focus, scroll, theme switch, axe injection). Future
+detectors in the same family should follow the same ordering
+discipline.
+
+### Detector design
+
+WCAG 1.4.1 (Use of Color, Level A). Single warn finding:
+
+  - link.color-only-distinction   warn   inline link inside
+                                         running text where the
+                                         only cue is colour.
+
+Out of scope: block-level links, links inside `<header>` /
+`<nav>` / `<footer>` / `<aside>` chrome (button-styled by
+convention), links with explicit visual distinction (underline,
+weight contrast ≥200, border, outline-with-style, background,
+box-shadow, italic, icon child).
+
+The non-color-distinction filter has 7 escape hatches; running
+the standalone debug surfaced an outline-width gotcha (browsers
+default outline-width to 3px even when outline-style is `none`)
+which would have been a false negative — fixed by also checking
+outline-style.
+
+### SkillShots dogfood
+
+Detector caught **6 real defects** on SkillShots: aside-panel
+links to user profiles and recent challenges have no underline.
+Examples:
+
+  body > div > aside:nth-of-type(2) > section > ul > li > a
+    '@court_dax · Basketball$1,840' → /u/court_dax
+  body > div > aside:nth-of-type(2) > section > ul > li > a
+    'Pool table clear — 12mVote' → /c/pool-clear-9lori
+
+These ARE real WCAG 1.4.1 fails — colour-only distinction in a
+list of links inside running-text-style markup. Fix is in
+Loom's `loom-card-feed-item__title-link` / equivalent panel-link
+CSS — add `text-decoration: underline` (or weight contrast,
+or another visual cue).
+
+### Re-audit result
+
+After Forge T70c (last cycle) wired the render phase:
+the 6 findings persist (Loom CSS not yet updated).
+Liveness gate (32/32) PASS. **27 silent axes vs 1 new
+linkUnderline warn axis = within budget.** Total active T76
+axes: 21.
+
+### Action items
+
+- [ ] Loom: extend `loom-card-feed-item__title-link` /
+      `loom-aside-link` CSS to add `text-decoration: underline`
+      OR `font-weight: 600` (closes the 6 SkillShots findings
+      at the source).
+- [ ] HTTPS fixture variant for mixedContent live integration.
+- [ ] login-flow fixture (still queued).
+- [ ] Remaining roadmap: `fontLoading`, `hstsHeader`,
+      `xFrameOptions`, `crossPageTitleDup`.
 
 ---
 
