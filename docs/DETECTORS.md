@@ -149,6 +149,15 @@ Source: `src/formLabels.ts` · Rust: `form_labels.rs`
 | `form.placeholder-only-label` | warn | Placeholder is the ONLY label. WCAG 3.3.2. |
 | `form.required-no-indicator` | warn | `required` / `aria-required="true"` set but no `*` or "required" in the visible label. |
 
+### `favicon` — page favicon link *(T76 — added 2026-05-14)*
+Source: `src/favicon.ts` · Rust: `favicon.rs`
+
+| Finding | Sev | Catches |
+|---|---|---|
+| `favicon.missing-link` | warn | No `<link rel="icon">` / `shortcut icon` / `apple-touch-icon` / `mask-icon` in head. Browsers fall back to fetching `/favicon.ico`; if that 404s, browser tabs show a generic glyph. |
+
+The companion finding "broken favicon URL" is intentionally NOT in this detector — the existing `failed-requests` axis catches any /favicon.ico 404 when the browser auto-fetches.
+
 ### `metaDescription` — page `<meta name="description">` *(T76 — added 2026-05-14)*
 Source: `src/metaDescription.ts` · Rust: `meta_description.rs`
 
@@ -381,7 +390,6 @@ Wire to CI: any pre-merge check or scheduled job can shell out to
 Detectors queued for future T76 firings — each is high-leverage,
 zero-overlap with existing axes:
 
-- **`favicon`** — missing favicon, broken favicon URL.
 - **`mixedContent`** — `https://` page loading `http://` resources.
   (Partial overlap with browser's built-in mixed-content blocker
   + CSP-violation events; need to design dedupe.)

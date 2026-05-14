@@ -65,9 +65,15 @@ import sys
 # A "clean" head — every page that doesn't deliberately break a
 # specific axis uses this so OTHER detectors stay silent and we
 # can isolate exactly one signal per fixture.
-CLEAN_HEAD = """<meta charset=utf-8>
+# A 1px inline SVG so the favicon detector sees a present <link>
+# without any network fetch. Used by every fixture page EXCEPT
+# the no-favicon route which deliberately omits it.
+FAVICON_TAG = '<link rel="icon" href="data:image/svg+xml,&lt;svg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 16 16\'&gt;&lt;circle cx=\'8\' cy=\'8\' r=\'6\' fill=\'%23333\'/&gt;&lt;/svg&gt;">'
+
+CLEAN_HEAD = f"""<meta charset=utf-8>
 <meta name=viewport content="width=device-width, initial-scale=1">
 <meta name=description content="A reasonable summary that fits in the search-result preview window.">
+{FAVICON_TAG}
 <title>T76 Fixture</title>"""
 
 # Used in routes that test viewport/title/lang/etc. specifically:
@@ -105,6 +111,10 @@ def head(*, viewport=None, title=None, meta_desc=None):
         parts.append('<title>T76 Fixture</title>')
     else:
         parts.append(f'<title>{title}</title>')
+    # Always include a favicon link so head()-built pages don't
+    # spuriously trip favicon.missing-link. The no-favicon route
+    # builds its head inline to deliberately omit this.
+    parts.append(FAVICON_TAG)
     return '\n'.join(parts)
 
 
@@ -146,7 +156,7 @@ def control():
 @route('/no-viewport/')
 def no_viewport():
     return page('<h1>No viewport meta</h1>',
-                head_override='<meta charset=utf-8><title>T76 Fixture</title><meta name=description content="A reasonable summary that fits the search-result preview window.">')
+                head_override=f'<meta charset=utf-8><title>T76 Fixture</title><meta name=description content="A reasonable summary that fits the search-result preview window.">{FAVICON_TAG}')
 
 
 @route('/viewport-no-device/')
@@ -305,6 +315,15 @@ def autocomplete_pii():
 @route('/autocomplete-bogus/')
 def autocomplete_bogus():
     return page('<h1>Invalid autocomplete token</h1><form><label for=q>Comment</label><input id=q name=comment type=text autocomplete=BOGUS></form>')
+
+
+# ----- favicon family -----
+@route('/no-favicon/')
+def no_favicon():
+    # Head identical to CLEAN_HEAD but with FAVICON_TAG omitted —
+    # this is the ONE route that should trigger favicon.missing-link.
+    no_icon_head = '<meta charset=utf-8>\n<meta name=viewport content="width=device-width, initial-scale=1">\n<meta name=description content="A reasonable summary that fits the search-result preview window.">\n<title>T76 Fixture</title>'
+    return page('<h1>No favicon link</h1>', head_override=no_icon_head)
 
 
 # ----- security: outbound links -----

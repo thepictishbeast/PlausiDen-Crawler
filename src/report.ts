@@ -35,7 +35,8 @@ export interface CapturedEvent {
     | 'skip-link'
     | 'outbound-links'
     | 'autocomplete'
-    | 'meta-description';
+    | 'meta-description'
+    | 'favicon';
   level?: string;
   text: string;
   url?: string;
@@ -88,6 +89,8 @@ export interface Report {
     autocompleteFindingsStrict: number;
     metaDescriptionFindings: number;
     metaDescriptionFindingsStrict: number;
+    faviconFindings: number;
+    faviconFindingsStrict: number;
     cspViolations: number;
     total: number;
     stepsOk: number;
@@ -238,6 +241,11 @@ export interface Diff {
    * Missing/empty/too-short/too-long. T76.
    */
   newMetaDescriptionFindings: CapturedEvent[];
+  /**
+   * favicon findings new in this run vs prior. warn-only —
+   * missing icon link in head. T76.
+   */
+  newFaviconFindings: CapturedEvent[];
   newlyBrokenSteps: StepResult[];
   fixedSteps: StepResult[];
 }
@@ -275,6 +283,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     newOutboundLinksFindings: [],
     newAutocompleteFindings: [],
     newMetaDescriptionFindings: [],
+    newFaviconFindings: [],
     newlyBrokenSteps: [],
     fixedSteps: [],
   };
@@ -303,6 +312,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     out.newOutboundLinksFindings = current.events.filter(e => e.kind === 'outbound-links');
     out.newAutocompleteFindings = current.events.filter(e => e.kind === 'autocomplete');
     out.newMetaDescriptionFindings = current.events.filter(e => e.kind === 'meta-description');
+    out.newFaviconFindings = current.events.filter(e => e.kind === 'favicon');
     return out;
   }
   const priorKeys = new Set(prior.events.map(key));
@@ -332,6 +342,7 @@ export function diffReports(current: Report, prior: Report | null): Diff {
     else if (e.kind === 'outbound-links') out.newOutboundLinksFindings.push(e);
     else if (e.kind === 'autocomplete') out.newAutocompleteFindings.push(e);
     else if (e.kind === 'meta-description') out.newMetaDescriptionFindings.push(e);
+    else if (e.kind === 'favicon') out.newFaviconFindings.push(e);
   }
   const priorStepLabels = new Map(
     prior.steps.map((s, i) => [s.step.label || `${s.step.kind}-${i}`, s])
@@ -509,6 +520,13 @@ export function renderPositiveSignal(report: Report, diff: Diff): string {
       total: report.events.filter((e) => e.kind === 'meta-description').length,
       news: diff.newMetaDescriptionFindings.length,
       strictNews: strict(diff.newMetaDescriptionFindings),
+    },
+    {
+      // T76 (Crawler): favicon — missing icon link in head (warn).
+      name: 'favicon',
+      total: report.events.filter((e) => e.kind === 'favicon').length,
+      news: diff.newFaviconFindings.length,
+      strictNews: strict(diff.newFaviconFindings),
     },
   ];
   const lines: string[] = [];

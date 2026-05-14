@@ -41,6 +41,7 @@ import { captureSkipLinkSnapshot, detectSkipLinkIssues, type SkipLinkFinding } f
 import { captureOutboundLinksSnapshot, detectOutboundLinkIssues, type OutboundLinkFinding } from './outboundLinks.js';
 import { captureAutocompleteSnapshot, detectAutocompleteIssues, type AutocompleteFinding } from './autocomplete.js';
 import { captureMetaDescriptionSnapshot, detectMetaDescriptionIssues, type MetaDescriptionFinding } from './metaDescription.js';
+import { captureFaviconSnapshot, detectFaviconIssues, type FaviconFinding } from './favicon.js';
 
 interface Budget {
   newConsoleErrors: number;
@@ -922,6 +923,36 @@ async function main(args: string[]): Promise<number> {
   };
 
   /**
+   * T76: favicon detector. warn-only — missing favicon doesn't
+   * break the page but ships a generic browser-tab glyph and
+   * reads as unfinished. Companion finding (broken icon URL)
+   * is already covered by the failed-requests axis.
+   */
+  const faviconFindingsByStep: Array<{ stepLabel: string; pageUrl: string; findings: FaviconFinding[] }> = [];
+  const checkFavicon = async (afterLabel: string) => {
+    try {
+      const snap = await captureFaviconSnapshot(page);
+      const findings = detectFaviconIssues(snap);
+      faviconFindingsByStep.push({ stepLabel: afterLabel, pageUrl: snap.pageUrl, findings });
+      for (const f of findings) {
+        log({
+          kind: 'favicon',
+          text: `[${f.kind}] ${f.detail}`,
+          url: snap.pageUrl,
+          severity: f.severity,
+          ruleId: f.kind,
+          impact: f.severity === 'strict' ? 'serious' : 'minor',
+        });
+      }
+    } catch (e) {
+      log({
+        kind: 'pageerror',
+        text: `[favicon] detector threw on step ${afterLabel}: ${(e as Error).message}`,
+      });
+    }
+  };
+
+  /**
    * T76: meta-description detector. SEO + social-share preview
    * quality. All warn — no strict because a missing description
    * doesn't break the page; it just suboptimizes discovery.
@@ -1479,6 +1510,7 @@ async function main(args: string[]): Promise<number> {
       await checkOutboundLinks(step.label || `goto-${i}`);
       await checkAutocomplete(step.label || `goto-${i}`);
       await checkMetaDescription(step.label || `goto-${i}`);
+      await checkFavicon(step.label || `goto-${i}`);
       await checkWebVitals(step.label || `goto-${i}`);
     }
     // Memory snapshot at end of each step so the report shows heap growth
@@ -1574,6 +1606,8 @@ async function main(args: string[]): Promise<number> {
       autocompleteFindingsStrict: events.filter(e => e.kind === 'autocomplete' && e.severity === 'strict').length,
       metaDescriptionFindings: events.filter(e => e.kind === 'meta-description').length,
       metaDescriptionFindingsStrict: events.filter(e => e.kind === 'meta-description' && e.severity === 'strict').length,
+      faviconFindings: events.filter(e => e.kind === 'favicon').length,
+      faviconFindingsStrict: events.filter(e => e.kind === 'favicon' && e.severity === 'strict').length,
       cspViolations: events.filter(e => e.kind === 'csp-violation').length,
       total: events.length,
       stepsOk: stepResults.filter(s => s.ok).length,
@@ -1677,6 +1711,12 @@ async function main(args: string[]): Promise<number> {
       JSON.stringify(metaDescriptionFindingsByStep, null, 2),
     );
   }
+  if (faviconFindingsByStep.length > 0) {
+    writeFileSync(
+      join(outDir, 'favicon.json'),
+      JSON.stringify(faviconFindingsByStep, null, 2),
+    );
+  }
   writeFileSync(join(outDir, 'report.json'), JSON.stringify(report, null, 2));
   // Write a terminal-friendly summary too so CI output is useful at a glance.
   writeFileSync(join(outDir, 'summary.txt'), renderSummary(agg));
@@ -1764,6 +1804,7 @@ async function main(args: string[]): Promise<number> {
   console.log(`  outbound links:    ${report.counts.outboundLinksFindings} (strict ${report.counts.outboundLinksFindingsStrict})`);
   console.log(`  autocomplete:      ${report.counts.autocompleteFindings} (strict ${report.counts.autocompleteFindingsStrict})`);
   console.log(`  meta description:  ${report.counts.metaDescriptionFindings} (strict ${report.counts.metaDescriptionFindingsStrict})`);
+  console.log(`  favicon:           ${report.counts.faviconFindings} (strict ${report.counts.faviconFindingsStrict})`);
   console.log(`  web vitals:        ${report.counts.webVitalsFindings} (strict ${report.counts.webVitalsFindingsStrict})`);
   console.log(`  csp violations:    ${report.counts.cspViolations}`);
   console.log(`  steps ok/failed:   ${report.counts.stepsOk}/${report.counts.stepsFailed}`);
@@ -1818,6 +1859,9 @@ async function main(args: string[]): Promise<number> {
     const newMetaDescStrict = diff.newMetaDescriptionFindings.filter(e => e.severity === 'strict').length;
     const newMetaDescWarn = diff.newMetaDescriptionFindings.length - newMetaDescStrict;
     console.log(`    NEW meta description: ${diff.newMetaDescriptionFindings.length} (strict ${newMetaDescStrict}, warn ${newMetaDescWarn})`);
+    const newFaviconStrict = diff.newFaviconFindings.filter(e => e.severity === 'strict').length;
+    const newFaviconWarn = diff.newFaviconFindings.length - newFaviconStrict;
+    console.log(`    NEW favicon:          ${diff.newFaviconFindings.length} (strict ${newFaviconStrict}, warn ${newFaviconWarn})`);
     console.log(`    NEW csp violations:   ${diff.newCspViolations.length}`);
     console.log(`    newly broken steps:   ${diff.newlyBrokenSteps.length}`);
     console.log(`    fixed steps:          ${diff.fixedSteps.length}`);

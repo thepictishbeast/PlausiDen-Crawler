@@ -368,8 +368,11 @@ metaDescription axis ALSO clean.
 
 ### Action items
 
-- [ ] Add `favicon` detector — next smallest from the roadmap,
+- [x] Add `favicon` detector — next smallest from the roadmap,
       will surface real bugs on sites that ship without one.
+      **DONE 2026-05-14** — see seventh entry below; immediately
+      caught 7 missing-favicon warns on SkillShots, fixed at the
+      source via Loom default favicon.
 - [ ] Add `mixedContent` detector — security defence-in-depth
       (HTTPS pages loading HTTP resources). Need to design
       around the browser's built-in mixed-content blocker
@@ -377,6 +380,60 @@ metaDescription axis ALSO clean.
 - [ ] Add a login-flow fixture so credential-class autocomplete
       checks fire on a real-shape surface (still queued from
       first dogfood entry).
+
+---
+
+## 2026-05-14 (seventh entry) — favicon detector + Loom default favicon
+
+### What's new since last cycle (sixth entry)
+- `favicon` detector landed in pipeline (warn-only).
+- `fixtures/t76-detectors/no-favicon` route added to the
+  regression-guard fixture; check-script now validates 31/31
+  routes (was 30/30).
+- Total active detector axes: 19 (was 18).
+
+### What it caught
+
+`favicon` axis fired 7 warns on the first SkillShots audit —
+one per page in the journey. Every SkillShots page was shipping
+without any `<link rel="icon">` in head, AND `/favicon.ico`
+returns 404 (verified via `curl -s -o /dev/null -w '%{http_code}'`).
+Browser tabs / bookmarks / PWA-install prompts were all rendering
+the generic globe glyph.
+
+### The fix
+
+Default favicon emitted by `loom_cms_render::page_shell_themed`.
+New constant `DEFAULT_FAVICON_LINK` in `loom-cms-render/src/lib.rs`
+holds an inline `data:image/svg+xml,…` URL — a 16×16 SVG of the
+Loom mark in the brand accent colour. No separate `/favicon.ico`
+file required to deploy; every Loom-generated page picks it up
+automatically on next render.
+
+CSP unchanged: `img-src 'self' data:` already covered the data
+URL form. Future variant could accept a per-site
+`favicon_override: Option<&str>` arg so brands can supply their
+own SVG/PNG without monkey-patching the shell.
+
+### Re-audit result
+
+After running `loom cms-render` over every cms/*.json (the
+Rust forge build hasn't yet wired in a render phase — that's
+itself a queued action item), the rebuilt static HTML carries
+the new favicon link. Re-audit shows `favicon: 0` and
+**ALL 26 DETECTION AXES SILENT** (was 25, +1 for the new
+favicon axis).
+
+### Action items
+
+- [ ] Wire a render phase into the Rust forge `build` command.
+      Currently you have to invoke `loom cms-render` per file
+      manually after a Loom or CMS edit. The Rust forge runs
+      every LINT phase but the bash forge.sh's per-page render
+      step wasn't ported. forge-phases/src/render.rs has the
+      logic via `loom_cms_render::page_shell_themed`; just needs
+      to be registered in forge-cli/src/main.rs's phase list.
+- [ ] Same as before: mixedContent detector + login-flow fixture.
 
 ---
 
