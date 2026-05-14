@@ -55,6 +55,7 @@ import { buildPermissionsPolicySnapshot, detectPermissionsPolicyIssues, type Per
 import { buildCspSnapshot, detectCspIssues, type CspFinding } from './contentSecurityPolicy.js';
 import { buildCoopSnapshot, detectCoopIssues, type CoopFinding } from './coop.js';
 import { buildCoepSnapshot, detectCoepIssues, type CoepFinding } from './coep.js';
+import { makeResponseHeaderCheck, type PerStepRecord } from './responseHeaderDetector.js';
 
 interface Budget {
   newConsoleErrors: number;
@@ -1046,208 +1047,124 @@ async function main(args: string[]): Promise<number> {
     }
   };
 
-  /**
-   * T76: Set-Cookie attribute audit. Fourth consumer of the
-   * shared `topLevelResponseHeaders` capture path. Reads any
-   * Set-Cookie header(s) on the navigation response and audits
-   * Secure / SameSite / HttpOnly / SameSite=None+Secure
-   * combinations.
-   */
-  /**
-   * T76: Cross-Origin-Opener-Policy detector. SEVENTH consumer
-   * of the shared `topLevelResponseHeaders` capture path.
-   * Audits the COOP header that controls window.opener
-   * scriptability + enables cross-origin isolation.
-   */
-  const coopFindingsByStep: Array<{ stepLabel: string; pageUrl: string; findings: CoopFinding[] }> = [];
-  const checkCoop = async (afterLabel: string) => {
-    try {
-      const pageUrl = page.url();
-      const headers = topLevelResponseHeaders.get(pageUrl);
-      const snap = buildCoopSnapshot(pageUrl, headers);
-      if (disableLocalhostExemption) snap.pageIsLocalhost = false;
-      const findings = detectCoopIssues(snap);
-      coopFindingsByStep.push({ stepLabel: afterLabel, pageUrl, findings });
-      for (const f of findings) {
-        log({
-          kind: 'coop',
-          text: `[${f.kind}] ${f.detail}`,
-          url: pageUrl,
-          severity: f.severity,
-          ruleId: f.kind,
-          impact: f.severity === 'strict' ? 'serious' : 'minor',
-        });
-      }
-    } catch (e) {
-      log({
-        kind: 'pageerror',
-        text: `[coop] detector threw on step ${afterLabel}: ${(e as Error).message}`,
-      });
-    }
-  };
+  // T76: env-var bypass for the localhost exemption — only set
+  // by the t76-detector-fixtures-https/serve.py wrapper so the
+  // detectors can fire end-to-end on a 127.0.0.1-bound test
+  // server. Production audits NEVER set this. Declared once
+  // here, threaded into every response-header detector below.
+  const disableLocalhostExemption = process.env.CRAWLER_DISABLE_LOCALHOST_EXEMPTION === '1';
+
+  // T76: response-header detector family. All eight detectors
+  // share the SAME wiring (URL lookup + header read + snapshot
+  // build + localhost opt-out + classify + per-step record +
+  // captured-event emission + pageerror swallow on throw). The
+  // shared boilerplate lives in `makeResponseHeaderCheck`. Each
+  // detector here is six lines of factory args.
+  //
+  // REGRESSION-GUARD: the helper is the ONLY place that builds
+  // captured events for these detectors — its output shape is
+  // verified by the HTTPS fixture gate (34 routes, exact
+  // ruleId match). Before changing the helper, run
+  // `bash scripts/check-t76-https-detectors.sh` and confirm 34/34.
 
   /**
-   * T76: Cross-Origin-Embedder-Policy detector. EIGHTH consumer
-   * of the shared `topLevelResponseHeaders` capture path.
-   * Pairs with COOP to enable crossOriginIsolated state, which
-   * gates SharedArrayBuffer + Spectre-mitigation primitives.
+   * T76: Cross-Origin-Opener-Policy detector. Audits the COOP
+   * header that controls window.opener scriptability + enables
+   * cross-origin isolation.
    */
-  const coepFindingsByStep: Array<{ stepLabel: string; pageUrl: string; findings: CoepFinding[] }> = [];
-  const checkCoep = async (afterLabel: string) => {
-    try {
-      const pageUrl = page.url();
-      const headers = topLevelResponseHeaders.get(pageUrl);
-      const snap = buildCoepSnapshot(pageUrl, headers);
-      if (disableLocalhostExemption) snap.pageIsLocalhost = false;
-      const findings = detectCoepIssues(snap);
-      coepFindingsByStep.push({ stepLabel: afterLabel, pageUrl, findings });
-      for (const f of findings) {
-        log({
-          kind: 'coep',
-          text: `[${f.kind}] ${f.detail}`,
-          url: pageUrl,
-          severity: f.severity,
-          ruleId: f.kind,
-          impact: f.severity === 'strict' ? 'serious' : 'minor',
-        });
-      }
-    } catch (e) {
-      log({
-        kind: 'pageerror',
-        text: `[coep] detector threw on step ${afterLabel}: ${(e as Error).message}`,
-      });
-    }
-  };
+  const coopFindingsByStep: Array<PerStepRecord<CoopFinding>> = [];
+  const checkCoop = makeResponseHeaderCheck({
+    detectorName: 'coop',
+    eventKind: 'coop',
+    page, topLevelResponseHeaders, disableLocalhostExemption,
+    findingsByStep: coopFindingsByStep,
+    log,
+    buildSnapshot: buildCoopSnapshot,
+    detectIssues: detectCoopIssues,
+  });
 
   /**
-   * T76: full Content-Security-Policy audit. SIXTH consumer
-   * of the shared `topLevelResponseHeaders` capture path.
-   * Surfaces missing CSP, script-src unsafe-inline /
-   * unsafe-eval / wildcard (all strict), and missing
-   * structural-baseline directives (object-src, base-uri,
-   * form-action, frame-ancestors, require-trusted-types-for).
+   * T76: Cross-Origin-Embedder-Policy detector. Pairs with COOP
+   * to enable crossOriginIsolated state, which gates
+   * SharedArrayBuffer + Spectre-mitigation primitives.
+   */
+  const coepFindingsByStep: Array<PerStepRecord<CoepFinding>> = [];
+  const checkCoep = makeResponseHeaderCheck({
+    detectorName: 'coep',
+    eventKind: 'coep',
+    page, topLevelResponseHeaders, disableLocalhostExemption,
+    findingsByStep: coepFindingsByStep,
+    log,
+    buildSnapshot: buildCoepSnapshot,
+    detectIssues: detectCoepIssues,
+  });
+
+  /**
+   * T76: full Content-Security-Policy audit. Surfaces missing
+   * CSP, script-src unsafe-inline / unsafe-eval / wildcard (all
+   * strict), and missing structural-baseline directives
+   * (object-src, base-uri, form-action, frame-ancestors,
+   * require-trusted-types-for). Localhost exempt.
+   */
+  const cspFindingsByStep: Array<PerStepRecord<CspFinding>> = [];
+  const checkCsp = makeResponseHeaderCheck({
+    detectorName: 'csp',
+    eventKind: 'csp-policy',
+    page, topLevelResponseHeaders, disableLocalhostExemption,
+    findingsByStep: cspFindingsByStep,
+    log,
+    buildSnapshot: buildCspSnapshot,
+    detectIssues: detectCspIssues,
+  });
+
+  /**
+   * T76: Permissions-Policy header audit. Reports missing
+   * header (warn), unparseable (warn), high-risk features
+   * explicitly allow-all'd (strict), and partial policies that
+   * leave high-risk features at the `*` default (warn).
    * Localhost exempt.
    */
-  const cspFindingsByStep: Array<{ stepLabel: string; pageUrl: string; findings: CspFinding[] }> = [];
-  const checkCsp = async (afterLabel: string) => {
-    try {
-      const pageUrl = page.url();
-      const headers = topLevelResponseHeaders.get(pageUrl);
-      const snap = buildCspSnapshot(pageUrl, headers);
-      if (disableLocalhostExemption) snap.pageIsLocalhost = false;
-      const findings = detectCspIssues(snap);
-      cspFindingsByStep.push({ stepLabel: afterLabel, pageUrl, findings });
-      for (const f of findings) {
-        log({
-          kind: 'csp-policy',
-          text: `[${f.kind}] ${f.detail}`,
-          url: pageUrl,
-          severity: f.severity,
-          ruleId: f.kind,
-          impact: f.severity === 'strict' ? 'serious' : 'minor',
-        });
-      }
-    } catch (e) {
-      log({
-        kind: 'pageerror',
-        text: `[csp] detector threw on step ${afterLabel}: ${(e as Error).message}`,
-      });
-    }
-  };
+  const permissionsPolicyFindingsByStep: Array<PerStepRecord<PermissionsPolicyFinding>> = [];
+  const checkPermissionsPolicy = makeResponseHeaderCheck({
+    detectorName: 'permissionsPolicy',
+    eventKind: 'permissions-policy',
+    page, topLevelResponseHeaders, disableLocalhostExemption,
+    findingsByStep: permissionsPolicyFindingsByStep,
+    log,
+    buildSnapshot: buildPermissionsPolicySnapshot,
+    detectIssues: detectPermissionsPolicyIssues,
+  });
 
   /**
-   * T76: Permissions-Policy header audit. FIFTH consumer of the
-   * shared `topLevelResponseHeaders` capture path. Reports
-   * missing header (warn), unparseable (warn), high-risk
-   * features explicitly allow-all'd (strict), and partial
-   * policies that leave high-risk features at the `*` default
-   * (warn). Localhost exempt.
+   * T76: Set-Cookie attribute audit. Reads any Set-Cookie
+   * header(s) on the navigation response and audits Secure /
+   * SameSite / HttpOnly / SameSite=None+Secure combinations.
    */
-  const permissionsPolicyFindingsByStep: Array<{ stepLabel: string; pageUrl: string; findings: PermissionsPolicyFinding[] }> = [];
-  const checkPermissionsPolicy = async (afterLabel: string) => {
-    try {
-      const pageUrl = page.url();
-      const headers = topLevelResponseHeaders.get(pageUrl);
-      const snap = buildPermissionsPolicySnapshot(pageUrl, headers);
-      if (disableLocalhostExemption) snap.pageIsLocalhost = false;
-      const findings = detectPermissionsPolicyIssues(snap);
-      permissionsPolicyFindingsByStep.push({ stepLabel: afterLabel, pageUrl, findings });
-      for (const f of findings) {
-        log({
-          kind: 'permissions-policy',
-          text: `[${f.kind}] ${f.detail}`,
-          url: pageUrl,
-          severity: f.severity,
-          ruleId: f.kind,
-          impact: f.severity === 'strict' ? 'serious' : 'minor',
-        });
-      }
-    } catch (e) {
-      log({
-        kind: 'pageerror',
-        text: `[permissionsPolicy] detector threw on step ${afterLabel}: ${(e as Error).message}`,
-      });
-    }
-  };
-
-  const cookieSecurityFindingsByStep: Array<{ stepLabel: string; pageUrl: string; findings: CookieSecurityFinding[] }> = [];
-  const checkCookieSecurity = async (afterLabel: string) => {
-    try {
-      const pageUrl = page.url();
-      const headers = topLevelResponseHeaders.get(pageUrl);
-      const snap = buildCookieSecuritySnapshot(pageUrl, headers);
-      if (disableLocalhostExemption) snap.pageIsLocalhost = false;
-      const findings = detectCookieSecurityIssues(snap);
-      cookieSecurityFindingsByStep.push({ stepLabel: afterLabel, pageUrl, findings });
-      for (const f of findings) {
-        log({
-          kind: 'cookie-security',
-          text: `[${f.kind}] ${f.detail}`,
-          url: pageUrl,
-          severity: f.severity,
-          ruleId: f.kind,
-          impact: f.severity === 'strict' ? 'serious' : 'minor',
-        });
-      }
-    } catch (e) {
-      log({
-        kind: 'pageerror',
-        text: `[cookieSecurity] detector threw on step ${afterLabel}: ${(e as Error).message}`,
-      });
-    }
-  };
-
+  const cookieSecurityFindingsByStep: Array<PerStepRecord<CookieSecurityFinding>> = [];
+  const checkCookieSecurity = makeResponseHeaderCheck({
+    detectorName: 'cookieSecurity',
+    eventKind: 'cookie-security',
+    page, topLevelResponseHeaders, disableLocalhostExemption,
+    findingsByStep: cookieSecurityFindingsByStep,
+    log,
+    buildSnapshot: buildCookieSecuritySnapshot,
+    detectIssues: detectCookieSecurityIssues,
+  });
   /**
    * T76: Referrer-Policy detector. Third consumer of the shared
    * `topLevelResponseHeaders` capture path. Reports pages with no
    * policy (warn) or an explicitly permissive policy (strict).
    */
-  const referrerPolicyFindingsByStep: Array<{ stepLabel: string; pageUrl: string; findings: ReferrerPolicyFinding[] }> = [];
-  const checkReferrerPolicy = async (afterLabel: string) => {
-    try {
-      const pageUrl = page.url();
-      const headers = topLevelResponseHeaders.get(pageUrl);
-      const snap = buildReferrerPolicySnapshot(pageUrl, headers);
-      if (disableLocalhostExemption) snap.pageIsLocalhost = false;
-      const findings = detectReferrerPolicyIssues(snap);
-      referrerPolicyFindingsByStep.push({ stepLabel: afterLabel, pageUrl, findings });
-      for (const f of findings) {
-        log({
-          kind: 'referrer-policy',
-          text: `[${f.kind}] ${f.detail}`,
-          url: pageUrl,
-          severity: f.severity,
-          ruleId: f.kind,
-          impact: f.severity === 'strict' ? 'serious' : 'minor',
-        });
-      }
-    } catch (e) {
-      log({
-        kind: 'pageerror',
-        text: `[referrerPolicy] detector threw on step ${afterLabel}: ${(e as Error).message}`,
-      });
-    }
-  };
+  const referrerPolicyFindingsByStep: Array<PerStepRecord<ReferrerPolicyFinding>> = [];
+  const checkReferrerPolicy = makeResponseHeaderCheck({
+    detectorName: 'referrerPolicy',
+    eventKind: 'referrer-policy',
+    page, topLevelResponseHeaders, disableLocalhostExemption,
+    findingsByStep: referrerPolicyFindingsByStep,
+    log,
+    buildSnapshot: buildReferrerPolicySnapshot,
+    detectIssues: detectReferrerPolicyIssues,
+  });
 
   /**
    * T76: clickjacking-defence detector. Second consumer of
@@ -1255,32 +1172,16 @@ async function main(args: string[]): Promise<number> {
    * Content-Security-Policy frame-ancestors and reports
    * pages with neither.
    */
-  const xFrameOptionsFindingsByStep: Array<{ stepLabel: string; pageUrl: string; findings: XFrameOptionsFinding[] }> = [];
-  const checkXFrameOptions = async (afterLabel: string) => {
-    try {
-      const pageUrl = page.url();
-      const headers = topLevelResponseHeaders.get(pageUrl);
-      const snap = buildXFrameOptionsSnapshot(pageUrl, headers);
-      if (disableLocalhostExemption) snap.pageIsLocalhost = false;
-      const findings = detectXFrameOptionsIssues(snap);
-      xFrameOptionsFindingsByStep.push({ stepLabel: afterLabel, pageUrl, findings });
-      for (const f of findings) {
-        log({
-          kind: 'x-frame-options',
-          text: `[${f.kind}] ${f.detail}`,
-          url: pageUrl,
-          severity: f.severity,
-          ruleId: f.kind,
-          impact: f.severity === 'strict' ? 'serious' : 'minor',
-        });
-      }
-    } catch (e) {
-      log({
-        kind: 'pageerror',
-        text: `[xFrameOptions] detector threw on step ${afterLabel}: ${(e as Error).message}`,
-      });
-    }
-  };
+  const xFrameOptionsFindingsByStep: Array<PerStepRecord<XFrameOptionsFinding>> = [];
+  const checkXFrameOptions = makeResponseHeaderCheck({
+    detectorName: 'xFrameOptions',
+    eventKind: 'x-frame-options',
+    page, topLevelResponseHeaders, disableLocalhostExemption,
+    findingsByStep: xFrameOptionsFindingsByStep,
+    log,
+    buildSnapshot: buildXFrameOptionsSnapshot,
+    detectIssues: detectXFrameOptionsIssues,
+  });
 
   /**
    * T76: HSTS response-header detector. SECURITY-flavoured.
@@ -1289,37 +1190,16 @@ async function main(args: string[]): Promise<number> {
    * `topLevelResponseHeaders`. Short-circuits on http pages
    * and localhost.
    */
-  const hstsFindingsByStep: Array<{ stepLabel: string; pageUrl: string; findings: HstsFinding[] }> = [];
-  // T76: env-var bypass for the localhost exemption — only set
-  // by the t76-detector-fixtures-https/serve.py wrapper so the
-  // detector can fire end-to-end on a 127.0.0.1-bound test
-  // server. Production audits NEVER set this.
-  const disableLocalhostExemption = process.env.CRAWLER_DISABLE_LOCALHOST_EXEMPTION === '1';
-  const checkHsts = async (afterLabel: string) => {
-    try {
-      const pageUrl = page.url();
-      const headers = topLevelResponseHeaders.get(pageUrl);
-      const snap = buildHstsSnapshot(pageUrl, headers);
-      if (disableLocalhostExemption) snap.pageIsLocalhost = false;
-      const findings = detectHstsIssues(snap);
-      hstsFindingsByStep.push({ stepLabel: afterLabel, pageUrl, findings });
-      for (const f of findings) {
-        log({
-          kind: 'hsts',
-          text: `[${f.kind}] ${f.detail}`,
-          url: pageUrl,
-          severity: f.severity,
-          ruleId: f.kind,
-          impact: f.severity === 'strict' ? 'serious' : 'minor',
-        });
-      }
-    } catch (e) {
-      log({
-        kind: 'pageerror',
-        text: `[hsts] detector threw on step ${afterLabel}: ${(e as Error).message}`,
-      });
-    }
-  };
+  const hstsFindingsByStep: Array<PerStepRecord<HstsFinding>> = [];
+  const checkHsts = makeResponseHeaderCheck({
+    detectorName: 'hsts',
+    eventKind: 'hsts',
+    page, topLevelResponseHeaders, disableLocalhostExemption,
+    findingsByStep: hstsFindingsByStep,
+    log,
+    buildSnapshot: buildHstsSnapshot,
+    detectIssues: detectHstsIssues,
+  });
 
   /**
    * T76: mixed-content detector. SECURITY-flavoured. Catches

@@ -1033,6 +1033,148 @@ surfaces (a real bug found, an audit gap noticed). The
 
 ---
 
+## 2026-05-14 (twenty-fourth entry) — responseHeaderDetector helper extraction
+
+### What's new since last cycle (twenty-third entry)
+- 1 new module: `src/responseHeaderDetector.ts` — generic
+  check-runner factory that wraps the wiring shared across
+  EVERY response-header detector (URL lookup + header read +
+  snapshot build + localhost opt-out + classify + per-step
+  record + captured-event emission + pageerror swallow).
+- 8 detectors migrated to the helper in main.ts — hsts,
+  xframeOptions, referrerPolicy, coop, coep, csp, permissions-
+  policy, cookieSecurity. Each detector's wiring went from
+  ~25 lines of inline boilerplate to 6 lines of factory args.
+- `disableLocalhostExemption` declaration moved from inside
+  the hsts block (where it lived for accidental reasons) to
+  the top of the response-header detector family. Single point
+  of audit for the env-var opt-out.
+- 1 new test: `src/responseHeaderDetector.test.ts` — 17 unit
+  scenarios, all passing. Covers the localhost short-circuit,
+  the env-var opt-out, the captured-event field shape (kind /
+  text / url / severity / ruleId / impact), strict→serious +
+  warn→minor mapping, multiple-findings + single-record
+  pairing, and the throw-swallow paths for both buildSnapshot
+  and detectIssues blowing up.
+- No new detector axes — pure refactor. Active-axis count
+  stays at 36 (39 with legacy event kinds).
+
+### Why now
+Per the cycle-22 verdict, the helper extraction was queued for
+the moment the SEVENTH single-value detector landed. Cycle 23
+shipped COOP + COEP, taking the single-value count to FIVE —
+and re-examining the wiring revealed something the cycle-22
+analysis missed: the boilerplate is identical across the
+single-value AND multi-value detectors. What differs is the
+classifier signature (which the helper delegates to a callback),
+not the wiring. So the helper applies to all EIGHT response-
+header detectors, not just the five single-value ones.
+
+### Why the boilerplate-extraction is safe
+Behavioural equivalence is verified at four levels:
+
+  1. The helper's own 17 unit tests prove the contract
+     (captured-event shape exactly matches the pre-extraction
+     inline form; throw paths route to pageerror correctly;
+     localhost opt-out flips the snapshot field as before).
+  2. Per-detector unit tests (102 scenarios across 8 modules)
+     keep passing — no detector module was touched, only the
+     surrounding wiring.
+  3. The HTTPS fixture gate validates 34 routes end-to-end with
+     ruleId-exact matching — any drift in the captured-event
+     shape would surface as a missing-finding failure here.
+  4. The SkillShots audit's positive-signal table proves the
+     detectors stay silent on a real-world site (localhost), so
+     the localhost short-circuit is correct.
+
+All four green after the migration.
+
+### Code-shape comparison
+Before extraction (one detector × 8 = ~200 lines of boilerplate):
+
+```ts
+const hstsFindingsByStep: Array<{ stepLabel: string; pageUrl: string; findings: HstsFinding[] }> = [];
+const checkHsts = async (afterLabel: string) => {
+  try {
+    const pageUrl = page.url();
+    const headers = topLevelResponseHeaders.get(pageUrl);
+    const snap = buildHstsSnapshot(pageUrl, headers);
+    if (disableLocalhostExemption) snap.pageIsLocalhost = false;
+    const findings = detectHstsIssues(snap);
+    hstsFindingsByStep.push({ stepLabel: afterLabel, pageUrl, findings });
+    for (const f of findings) {
+      log({
+        kind: 'hsts',
+        text: `[${f.kind}] ${f.detail}`,
+        url: pageUrl,
+        severity: f.severity,
+        ruleId: f.kind,
+        impact: f.severity === 'strict' ? 'serious' : 'minor',
+      });
+    }
+  } catch (e) {
+    log({
+      kind: 'pageerror',
+      text: `[hsts] detector threw on step ${afterLabel}: ${(e as Error).message}`,
+    });
+  }
+};
+```
+
+After extraction:
+
+```ts
+const hstsFindingsByStep: Array<PerStepRecord<HstsFinding>> = [];
+const checkHsts = makeResponseHeaderCheck({
+  detectorName: 'hsts',
+  eventKind: 'hsts',
+  page, topLevelResponseHeaders, disableLocalhostExemption,
+  findingsByStep: hstsFindingsByStep,
+  log,
+  buildSnapshot: buildHstsSnapshot,
+  detectIssues: detectHstsIssues,
+});
+```
+
+200 lines → 80 lines across the eight detectors. More importantly:
+
+  - The localhost-exemption opt-out is in ONE place. A future
+    refactor that wants to e.g. broaden the exemption to all
+    private-IP space can change one line, not eight.
+  - The captured-event shape is in ONE place. Adding a new
+    field (e.g. cycle for telemetry, or a wcag tag for the a11y
+    detectors) is a one-line change.
+  - The pageerror-on-throw is in ONE place. The detector tag in
+    the message stays correct because it's threaded through.
+
+### Verified
+- HTTP gate: 36/36 routes pass.
+- HTTPS gate: 34/34 routes pass.
+- SkillShots audit: 39 axes total, all silent vs prior — pure
+  refactor, no behavioural change.
+- TypeScript check: clean (only pre-existing aria.ts +
+  vendor/puppeteer issues remain, neither touched this cycle).
+
+### Action items
+- [ ] CORP detector — third member of the cross-origin-
+      isolation triad. Per-resource header (not per-page) so
+      needs a capture-layer expansion to see sub-resource
+      headers, not just top-level navigation. The
+      capture-layer change is the bigger half of the work.
+- [ ] Subresource Integrity (SRI) — per-element DOM walk; not
+      a response-header detector, so the helper doesn't apply.
+- [ ] Server header leak detector — single-value response
+      header (`Server: nginx/1.20.1` style). Slots cleanly
+      into the new helper pattern.
+- [ ] X-Powered-By leak — sister to Server header. Same
+      pattern.
+- [ ] Cache-Control hygiene — `no-store` required on
+      sensitive endpoints; `Pragma: no-cache` is a legacy
+      fallback. Moderate complexity classifier (depends on
+      response status + content-type), still single-value.
+
+---
+
 ## 2026-05-14 (twenty-third entry) — COOP + COEP cross-origin isolation pair
 
 ### What's new since last cycle (twenty-second entry)
