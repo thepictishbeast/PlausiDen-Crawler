@@ -78,7 +78,11 @@ export interface CapturedEvent {
     // T76 cycle 96 iter 3: var() resolution detector (axis 52).
     // Catches undefined CSS custom property references — the
     // bug class fixed in Loom cycle 95c.
-    | 'css-var';
+    | 'css-var'
+    // T33 cycle 2: per-step screenshot baseline-or-diff via dHash.
+    // text describes baseline-established / unchanged / changed
+    // / baseline-missing / error; impact escalates with distance.
+    | 'visual-diff';
   level?: string;
   text: string;
   url?: string;

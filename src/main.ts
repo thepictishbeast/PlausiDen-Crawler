@@ -16,6 +16,7 @@ import { mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync } from 
 import { join } from 'node:path';
 import { runStep, type Journey, type StepResult } from './journey.js';
 import { diffReports, findPriorRun, renderPositiveSignal, compareAriaTrees, type CapturedEvent, type Report } from './report.js';
+import { compareToBaseline as visualDiffCompare, defaultBaselineDir as visualDiffDefaultBaselineDir } from './visualDiff.js';
 import { captureAriaTree, ariaTreeToText, interactableNodes, scoreAriaTree } from './aria.js';
 import { installWebVitals, collectVitals } from './webVitals.js';
 import {
@@ -2327,6 +2328,24 @@ async function main(args: string[]): Promise<number> {
         screenshotAxe.push({ url: axeResult.url, result: axeResult, annotated });
         for (const ev of axeEventsFor(axeResult, startEpoch)) events.push(ev);
       } catch { /* axe is best-effort */ }
+      // T33 cycle 2 (closes #585): per-step visual diff vs baseline.
+      // First-time runs auto-establish (CRAWLER_VISUAL_BASELINE=1)
+      // or run in compare-only mode (default — CI-safe).
+      try {
+        const baselineDir = visualDiffDefaultBaselineDir(runsDir, journey.name);
+        const auto = process.env.CRAWLER_VISUAL_BASELINE === '1';
+        const vd = visualDiffCompare(imgPath, baselineDir, base, { autoEstablish: auto });
+        if (vd.status === 'changed') {
+          const dist = vd.comparison?.distance ?? 0;
+          const impact: 'minor' | 'moderate' | 'serious' = dist > 15 ? 'serious' : dist > 8 ? 'moderate' : 'minor';
+          log({ kind: 'visual-diff', text: vd.message, impact });
+        } else if (vd.status === 'baseline-established') {
+          log({ kind: 'visual-diff', text: vd.message, impact: 'minor' });
+        } else if (vd.status === 'error') {
+          log({ kind: 'visual-diff', text: vd.message, impact: 'minor' });
+        }
+        // baseline-missing + unchanged are silent (positive signal).
+      } catch { /* visual diff is best-effort; do not block the run */ }
       stepResults.push({ step, index: i, ok: true, durationMs: 0, screenshot: imgPath });
       stepClockWindows.push({ stepIndex: i, startedT: stepStartedT, endedT: Date.now() - startEpoch });
       continue;
