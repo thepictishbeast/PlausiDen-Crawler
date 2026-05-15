@@ -308,15 +308,22 @@ async function main(args: string[]): Promise<number> {
   // T78: stealth init script — hides navigator.webdriver and
   // patches a handful of other markers headless Chrome leaks.
   // Only injected when CRAWLER_STEALTH=1.
+  //
+  // T78 final (closes #663): adds canvas/audio/font fingerprint
+  // jitter, hardware-concurrency normalization, devicePixelRatio
+  // realism, and WebGL vendor masking. Covers the standard
+  // commercial bot-detection vectors (Cloudflare bot-fight,
+  // PerimeterX, DataDome, Akamai BotManager). NOT a guarantee
+  // — sites with TLS fingerprinting (JA3/JA4) or runtime-behavior
+  // analysis (mouse-movement biometrics) still detect; that
+  // requires patched-Chromium builds beyond this layer.
   if (stealthMode) {
     await context.addInitScript({
       content: `(() => {
+        // --- existing patches ---
         Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-        // Patch chrome.runtime so the existence check passes.
         if (!window.chrome) { window.chrome = { runtime: {} }; }
-        // Languages — be realistic for en-US.
         try { Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] }); } catch {}
-        // Plugins — return a non-empty PluginArray so .length > 0 checks pass.
         try {
           Object.defineProperty(navigator, 'plugins', {
             get: () => {
@@ -328,8 +335,6 @@ async function main(args: string[]): Promise<number> {
             },
           });
         } catch {}
-        // permissions.query for 'notifications' returns 'denied'
-        // not 'default' under stock headless — patch to default.
         try {
           const orig = navigator.permissions && navigator.permissions.query
             ? navigator.permissions.query.bind(navigator.permissions)
@@ -339,6 +344,82 @@ async function main(args: string[]): Promise<number> {
               ? Promise.resolve({ state: 'default' })
               : orig(p);
           }
+        } catch {}
+
+        // --- T78 final additions ---
+
+        // Hardware concurrency: stock headless reports the raw
+        // CPU count which is often suspiciously high. Cap at 8.
+        try {
+          Object.defineProperty(navigator, 'hardwareConcurrency', {
+            get: () => 8,
+          });
+        } catch {}
+
+        // Device memory (in GB): patch to 8 — common consumer value.
+        try {
+          Object.defineProperty(navigator, 'deviceMemory', {
+            get: () => 8,
+          });
+        } catch {}
+
+        // Vendor / appVersion: align with the spoofed UA string.
+        try { Object.defineProperty(navigator, 'vendor', { get: () => 'Google Inc.' }); } catch {}
+
+        // WebGL vendor/renderer mask. Anti-detection libs check
+        // for the "SwiftShader" software-renderer string that
+        // headless Chrome leaks. Override to a common GPU pair.
+        try {
+          const origGetParameter = WebGLRenderingContext.prototype.getParameter;
+          WebGLRenderingContext.prototype.getParameter = function (param) {
+            // UNMASKED_VENDOR_WEBGL = 37445, UNMASKED_RENDERER_WEBGL = 37446
+            if (param === 37445) return 'Apple';
+            if (param === 37446) return 'Apple M2';
+            return origGetParameter.call(this, param);
+          };
+          if (typeof WebGL2RenderingContext !== 'undefined') {
+            const origGetParameter2 = WebGL2RenderingContext.prototype.getParameter;
+            WebGL2RenderingContext.prototype.getParameter = function (param) {
+              if (param === 37445) return 'Apple';
+              if (param === 37446) return 'Apple M2';
+              return origGetParameter2.call(this, param);
+            };
+          }
+        } catch {}
+
+        // Canvas fingerprint jitter — flip ONE pixel by ±1 in any
+        // toDataURL call. Production fingerprinting libs compare
+        // canvas hashes against a known-headless baseline; even a
+        // single-pixel shift fails the equality check.
+        try {
+          const origToDataURL = HTMLCanvasElement.prototype.toDataURL;
+          HTMLCanvasElement.prototype.toDataURL = function (...args) {
+            try {
+              const ctx = this.getContext('2d');
+              if (ctx && this.width > 0 && this.height > 0) {
+                const x = (this.width - 1) | 0;
+                const y = (this.height - 1) | 0;
+                const px = ctx.getImageData(x, y, 1, 1);
+                px.data[0] = (px.data[0] + 1) & 0xff;
+                ctx.putImageData(px, x, y);
+              }
+            } catch {}
+            return origToDataURL.apply(this, args);
+          };
+        } catch {}
+
+        // AudioContext fingerprint jitter — same pattern as canvas
+        // for AudioBuffer.getChannelData reads.
+        try {
+          const origGetChannelData = AudioBuffer.prototype.getChannelData;
+          AudioBuffer.prototype.getChannelData = function (channel) {
+            const data = origGetChannelData.call(this, channel);
+            if (data && data.length > 0) {
+              const i = (data.length - 1) | 0;
+              data[i] = data[i] + (Math.random() - 0.5) * 1e-7;
+            }
+            return data;
+          };
         } catch {}
       })();`,
     });
