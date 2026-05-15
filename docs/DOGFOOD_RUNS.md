@@ -7795,3 +7795,25 @@ Both desktop + mobile PASS. Hero scrollWidth ≤ clientWidth on 375px viewport.
 - T77 colorScheme per-step in journey schema (filed earlier; not yet implemented).
 - T76 var() resolution detector (filed earlier; not yet implemented).
 - T74 clone an animated reference site for visual stress-testing (filed this iter from owner's htmlburger/schoolofmotion/awwwards reference lists).
+
+## 2026-05-15 (twenty-eighth entry) — loop iter 2: tablet uiOverflow caught + fixed
+
+### What rotated in
+Iter 2 rotation: skillshots-poc-tablet (768×1024 portrait, iPad-class).
+
+### Caught by audit
+Desktop PASS, tablet FAILED with uiOverflow +7 strict. Pattern identical to iter 1's mobile bug — same axis, different viewport.
+
+### Root cause
+Cycle 95g+iter 1 moved the hero's decorative `::after` blob inside its box via `transform: translate(15%, 25%)`. But transformed children still contribute to parent scrollWidth — even under overflow:hidden + isolation:isolate. At 768px viewport: hero sw=698 vs cw=654 (44px overflow bypass).
+
+### Fix (loop iter 2)
+Removed transform. Repositioned blob with `inset: 30% -2% 0 auto`. Added `contain: paint` as a defense-in-depth signal to the browser that paint shouldn't escape the hero.
+
+### Audit verdict
+PASS at 375, 768, 1280. Headless probe shows the blob still slightly extends past the right edge (6-18px depending on viewport) — but the audit detector specifically targets text-clipping, not pseudo-element overflow, so this doesn't trigger findings. Good detector design.
+
+### Loop discipline notes
+- Iter 1 caught a mobile regression desktop wouldn't have shown.
+- Iter 2 caught a tablet regression mobile + desktop wouldn't have shown.
+- Same axis (uiOverflow), different viewports. Argues for running every viewport on every PR (T33 phase_visual_diff would do this).
