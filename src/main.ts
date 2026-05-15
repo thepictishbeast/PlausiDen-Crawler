@@ -65,6 +65,7 @@ import { buildCoepSnapshot, detectCoepIssues, type CoepFinding } from './coep.js
 import { makeResponseHeaderCheck, type PerStepRecord } from './responseHeaderDetector.js';
 import { detectSriIssues, SRI_DOM_CAPTURE_JS, type SriFinding, type SriSnapshot } from './sri.js';
 import { detectSpeculationRulesIssues, SPECULATION_RULES_DOM_CAPTURE_JS, type SpeculationRulesFinding, type SpeculationRulesSnapshot } from './speculationRules.js';
+import { detectCssVarIssues, CSS_VAR_DOM_CAPTURE_JS, type CssVarFinding, type CapturedCssVarSnapshot } from './cssVarResolution.js';
 import { buildInfoLeakSnapshot, detectInfoLeakIssues, type InfoLeakFinding } from './infoLeakHeaders.js';
 import { buildCorpSnapshot, detectCorpIssues, type CorpFinding } from './corp.js';
 import { buildCacheControlSnapshot, detectCacheControlIssues, type CacheControlFinding } from './cacheControl.js';
@@ -1222,6 +1223,35 @@ async function main(args: string[]): Promise<number> {
    * BEFORE the user opts in to navigation. Per-page DOM walk via
    * page.evaluate, same shape as the SRI detector.
    */
+  /**
+   * T76 cycle 96 iter 3: var() resolution detector (axis 52).
+   * Catches the bug class fixed in Loom cycle 95c — undefined
+   * CSS custom properties causing silent declaration drops.
+   */
+  const cssVarFindingsByStep: Array<{ stepLabel: string; pageUrl: string; findings: CssVarFinding[] }> = [];
+  const checkCssVarResolution = async (afterLabel: string) => {
+    try {
+      const snap = (await page.evaluate(CSS_VAR_DOM_CAPTURE_JS)) as CapturedCssVarSnapshot;
+      const findings = detectCssVarIssues(snap);
+      cssVarFindingsByStep.push({ stepLabel: afterLabel, pageUrl: snap.pageUrl, findings });
+      for (const f of findings) {
+        log({
+          kind: 'css-var',
+          text: `[${f.kind}] ${f.detail}`,
+          url: snap.pageUrl,
+          severity: f.severity,
+          ruleId: f.kind,
+          impact: f.severity === 'strict' ? 'serious' : 'minor',
+        });
+      }
+    } catch (e) {
+      log({
+        kind: 'pageerror',
+        text: `[css-var] detector threw on step ${afterLabel}: ${(e as Error).message}`,
+      });
+    }
+  };
+
   const speculationRulesFindingsByStep: Array<{ stepLabel: string; pageUrl: string; findings: SpeculationRulesFinding[] }> = [];
   const checkSpeculationRules = async (afterLabel: string) => {
     try {
@@ -2247,6 +2277,7 @@ async function main(args: string[]): Promise<number> {
       await checkCoep(step.label || `goto-${i}`);
       await checkSri(step.label || `goto-${i}`);
       await checkSpeculationRules(step.label || `goto-${i}`);
+      await checkCssVarResolution(step.label || `goto-${i}`);
       await checkInlineScript(step.label || `goto-${i}`);
       await checkTrustedTypes(step.label || `goto-${i}`);
       await checkInfoLeak(step.label || `goto-${i}`);

@@ -135,6 +135,12 @@ const KIND_TO_CATEGORY: Record<string, string> = {
   // BEFORE any user interaction — same threat-model bucket as
   // info-leak headers + over-permissive referrer policy.
   'speculation-rules': 'infoDisclosure',
+  // T76 cycle 96 iter 3: var() resolution detector. Undefined
+  // CSS custom properties cause silent declaration drops —
+  // visible UI/UX regressions (the cycle 95c "78%$240" cards
+  // touching bug). Bucket under reliability since the failure
+  // mode is silent product-quality degradation, not security.
+  'css-var': 'reliability',
 
   // Observability — reporting + telemetry.
   'reporting-endpoints': 'observability',

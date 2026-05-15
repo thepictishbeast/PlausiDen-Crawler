@@ -74,7 +74,11 @@ export interface CapturedEvent {
     // T76 cycle 92: Speculation Rules API audit. Privacy + perf
     // (cross-origin prerender leaks IP + fingerprint; eager
     // eagerness burns mobile data).
-    | 'speculation-rules';
+    | 'speculation-rules'
+    // T76 cycle 96 iter 3: var() resolution detector (axis 52).
+    // Catches undefined CSS custom property references — the
+    // bug class fixed in Loom cycle 95c.
+    | 'css-var';
   level?: string;
   text: string;
   url?: string;
