@@ -7862,3 +7862,21 @@ Crawler T78 stealth mode — opt-in CRAWLER_STEALTH=1 context options for extern
 - T78 stays open — full bot-evasion needs canvas/audio fingerprint randomization, font enumeration patches.
 - T74 site clone still gated on owner pick. With stealth available, most candidate sites should probe cleanly.
 - Consider: should the loop rotation include CROSS-SITE audits like sacred-vote at all? Per directive they're informational. Maybe split: SkillShots audits enforce, external audits surface.
+
+## 2026-05-15 (thirty-first entry) — loop iter 16: rotation cycled back, audit clean
+
+### Rotation
+Iter 16: skillshots-poc-mobile (rotation cycled back to start; the full 15-journey rotation completed iters 1-15).
+
+### Audits
+Desktop PASS, mobile PASS. No regressions.
+
+### Status
+Owner-driven 22-task close-out push happened between iter 15 fire and iter 16 fire (out-of-band). 12 tasks closed: #619 T43d (full crypto+protocol), #641 T76 detector umbrella, #646 T64 backwards-compat (--url), #648 T65 animations, #649 T66 named palettes, #651 T68 stock photos, #653 T70 catalog umbrella, #654 T71 typography rhythm, #658 T70b carousels, #659 T70c focus indicators, #661 T77 colorScheme, #663 T78 stealth.
+
+### Remaining 11 backlog items
+- 8 multi-day epics (T12 dynamic frontend, T24 type-state pipeline, T33 visual diff, T45 multi-tenant, T46 SSH bridge, T62 GUI builder, T73 CrawlerCore split, T75 chromiumoxide port)
+- 2 gated on owner pick (T73 rebuild known sites, T74 animated clone)
+- 1 bounded UI work (T43d cycle 95e edit-serve hook)
+
+Loop continuing at standard cadence. SkillShots audit holds A 100/100.
