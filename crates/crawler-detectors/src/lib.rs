@@ -62,6 +62,8 @@ pub mod viewport_meta;
 pub mod web_vitals;
 pub mod x_frame_options;
 pub mod coop;
+pub mod coep;
+pub mod referrer_policy;
 pub(crate) mod url_helpers;
 
 /// Severity bucket shared across every detector axis. Mirrors the
