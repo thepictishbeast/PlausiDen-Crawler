@@ -234,10 +234,29 @@ async function main(args: string[]): Promise<number> {
   // browsers still receive the production CSP unchanged. Without this,
   // strict-CSP sites (script-src 'self') reject our axe-core injection
   // and every WCAG scan fails with an engine error.
+  // T78 (cycle 96 iter 11): bot-detection mitigation when fetching
+  // external sites for clone/migration analysis. Many production
+  // sites (marcodeluca.me, apple.com, etc) detect headless Chrome
+  // and serve an error page or block. Opt-in via CRAWLER_STEALTH=1
+  // — same-origin audits stay default (no stealth) so we don't
+  // mask real CSP / fingerprint issues on our own sites.
+  const stealthMode = process.env.CRAWLER_STEALTH === '1';
   const contextOpts: Parameters<typeof browser.newContext>[0] = {
     viewport: { width: viewport.w, height: viewport.h },
     bypassCSP: true,
   };
+  if (stealthMode) {
+    // Realistic UA + locale + tz pretend we're a desktop Chrome
+    // on macOS in en-US. None of these mask defensive controls on
+    // OUR sites because stealth is opt-in.
+    contextOpts.userAgent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
+    contextOpts.locale = 'en-US';
+    contextOpts.timezoneId = 'America/New_York';
+    contextOpts.deviceScaleFactor = 1;
+    contextOpts.hasTouch = false;
+    contextOpts.isMobile = false;
+    console.log('[crawler] CRAWLER_STEALTH=1 — headless markers hidden (external-site clone mode)');
+  }
   // T76 (2026-05-14): opt-in for HTTPS fixture testing. Real
   // audits should NEVER set this — silently ignoring cert errors
   // would mask production misconfiguration that the
@@ -277,6 +296,45 @@ async function main(args: string[]): Promise<number> {
     console.log(`[crawler] WARN state ${statePath} not found — continuing anonymous`);
   }
   const context = await browser.newContext(contextOpts);
+
+  // T78: stealth init script — hides navigator.webdriver and
+  // patches a handful of other markers headless Chrome leaks.
+  // Only injected when CRAWLER_STEALTH=1.
+  if (stealthMode) {
+    await context.addInitScript({
+      content: `(() => {
+        Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+        // Patch chrome.runtime so the existence check passes.
+        if (!window.chrome) { window.chrome = { runtime: {} }; }
+        // Languages — be realistic for en-US.
+        try { Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] }); } catch {}
+        // Plugins — return a non-empty PluginArray so .length > 0 checks pass.
+        try {
+          Object.defineProperty(navigator, 'plugins', {
+            get: () => {
+              const arr = [{ name: 'PDF Viewer' }, { name: 'Chrome PDF Viewer' }];
+              arr.item = (i) => arr[i];
+              arr.namedItem = (n) => arr.find(p => p.name === n) || null;
+              arr.refresh = () => {};
+              return arr;
+            },
+          });
+        } catch {}
+        // permissions.query for 'notifications' returns 'denied'
+        // not 'default' under stock headless — patch to default.
+        try {
+          const orig = navigator.permissions && navigator.permissions.query
+            ? navigator.permissions.query.bind(navigator.permissions)
+            : null;
+          if (orig) {
+            navigator.permissions.query = (p) => p && p.name === 'notifications'
+              ? Promise.resolve({ state: 'default' })
+              : orig(p);
+          }
+        } catch {}
+      })();`,
+    });
+  }
 
   // Seed sessionStorage on every page load. Runs before any of the SPA's
   // own JS, so the SPA boots already authenticated and never shows the
