@@ -60,6 +60,9 @@ pub mod tap_targets;
 pub mod ui_overflow;
 pub mod viewport_meta;
 pub mod web_vitals;
+pub mod x_frame_options;
+pub mod coop;
+pub(crate) mod url_helpers;
 
 /// Severity bucket shared across every detector axis. Mirrors the
 /// TS string-literal `'strict' | 'warn'` exactly (lowercase wire
