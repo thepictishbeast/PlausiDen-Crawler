@@ -7770,3 +7770,28 @@ defaults. The detector is alive end-to-end.
 should record what was new, what the site exposed in the crawler,
 and what gaps remain — turning the dogfood loop into a public
 record of detection coverage over time.*
+
+## 2026-05-15 (twenty-seventh entry) — loop iter 1: mobile uiOverflow regression caught + fixed
+
+### Loop firing
+First fire of the FORGE-IMPROVE loop (cycle 96, dynamic ScheduleWakeup mode, 1500–1800s cadence). Loop discipline rule #1: never proceed past a failing audit.
+
+### What the audit caught
+Desktop PASS A 100/100, MOBILE FAILED with uiOverflow +7 strict. Probed via headless Playwright at 375×812: `.loom-section-hero` reported scrollWidth=296 vs clientWidth=277 (19px overflow on the hero box).
+
+### Root cause
+Cycle 95g raised the hero title's clamp() floor to 1.5rem display-800. On a 375px-viewport mobile, the title "Half-court shot — single arc" computed to ~330px wide and the parent hero pad (clamp(6, 5vw, 10) ≈ 22.5px each side) only left 277px → overflow.
+
+### Fix
+loom-tokens/src/skin.css `.loom-section-hero__title`:
+- floor 1.5rem → 1.25rem
+- `overflow-wrap: anywhere` (long words can't break the box)
+- `min-width: 0` on hero + title (lets flex/grid items shrink below intrinsic content width)
+
+### Audit result post-fix
+Both desktop + mobile PASS. Hero scrollWidth ≤ clientWidth on 375px viewport.
+
+### Action items surfaced
+- T77 colorScheme per-step in journey schema (filed earlier; not yet implemented).
+- T76 var() resolution detector (filed earlier; not yet implemented).
+- T74 clone an animated reference site for visual stress-testing (filed this iter from owner's htmlburger/schoolofmotion/awwwards reference lists).
