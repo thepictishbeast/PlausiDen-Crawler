@@ -7817,3 +7817,28 @@ PASS at 375, 768, 1280. Headless probe shows the blob still slightly extends pas
 - Iter 1 caught a mobile regression desktop wouldn't have shown.
 - Iter 2 caught a tablet regression mobile + desktop wouldn't have shown.
 - Same axis (uiOverflow), different viewports. Argues for running every viewport on every PR (T33 phase_visual_diff would do this).
+
+## 2026-05-15 (twenty-ninth entry) — loop iter 5: var() detector caught its first real bug
+
+### Rotation
+Iter 5: skillshots-poc-screen-reader (a11y-focused, 1280×800, screenReader:true mode).
+
+### What the new detector caught
+The css-var resolution detector shipped iter 3 (cycle 96 axis 52) fired STRICT findings on the screen-reader journey on its first deployment:
+- `--loom-radius-full` referenced 7× but undefined
+- `--loom-radius-md` referenced 7× but undefined
+- `--loom-radius-xl` referenced 1× but undefined
+
+Plus 22 dead-definition warns (intentional future-use slots).
+
+### Why this was silent before
+The cycle 95c root-cause fix shipped --loom-space-N + --loom-font-N + --loom-pad-* tokens into critical-CSS but missed the radius scale. skin.css declarations using `var(--loom-radius-md)` silently dropped to 0px.
+
+### Significance
+First time the var() detector caught a bug in production deployment. Validates the entire bug class is now under audit-time defense.
+
+### Fix
+loom-cms-render BASE_THEME_CSS adds --loom-radius-md/lg/xl/full alongside existing component/sm.
+
+### Result
+Screen-reader + desktop both PASS post-fix.
