@@ -7842,3 +7842,23 @@ loom-cms-render BASE_THEME_CSS adds --loom-radius-md/lg/xl/full alongside existi
 
 ### Result
 Screen-reader + desktop both PASS post-fix.
+
+## 2026-05-15 (thirtieth entry) — loop iter 11: cross-site sacred-vote rotation + T78 stealth
+
+### Rotation
+Iter 11: sacred-vote.json — FIRST cross-site rotation (real deployed https://sacred.vote/, not local SkillShots).
+
+### Findings
+sacred-vote audit failed with 5 strict axes regressed (console-errors +1, failed-requests +4, axe-static-a11y +48, headingOrder +1, runtimeLandmarks +1) + 12 warn axes. CROSS-SITE finding — per loop NO-GO ("Never edit SkillShots / sacred-vote / plausiden.com site code") these are informational, NOT actionable from this loop. Sacred-vote has real a11y debt that needs to be addressed by its own maintenance cycle or via a Forge migration (T74).
+
+### Shipped this iter
+Crawler T78 stealth mode — opt-in CRAWLER_STEALTH=1 context options for external-site fetches. Hides navigator.webdriver, window.chrome.runtime, navigator.languages, plugins, Notification.permission patches. Realistic UA + locale + timezone. Default OFF so same-origin audits stay defensive.
+
+### What stealth fixes / doesn't fix
+- FIXES: sites that detect headless Chrome and gate content (most production sites do this).
+- DOESN'T FIX: sites that throw genuine JS errors in headless Chromium (marcodeluca.me's Next.js app errors regardless of stealth — separate bug class).
+
+### Action items
+- T78 stays open — full bot-evasion needs canvas/audio fingerprint randomization, font enumeration patches.
+- T74 site clone still gated on owner pick. With stealth available, most candidate sites should probe cleanly.
+- Consider: should the loop rotation include CROSS-SITE audits like sacred-vote at all? Per directive they're informational. Maybe split: SkillShots audits enforce, external audits surface.
