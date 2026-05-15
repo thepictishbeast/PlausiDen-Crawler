@@ -1,0 +1,15 @@
+{
+  "name": "skillshots-poc-darkmode",
+  "description": "Same SkillShots crawl as skillshots-poc.json but with browser colorScheme:dark. Catches theme-split bugs (the class fixed in cycle 95f where header stayed light while body components flipped to dark on dark-mode browsers). Default light pages should STILL render light even under colorScheme:dark — that's the cycle 95f contract.",
+  "baseUrl": "http://127.0.0.1:8123/",
+  "viewport": { "w": 1280, "h": 900 },
+  "colorScheme": "dark",
+  "steps": [
+    { "kind": "goto", "url": "http://127.0.0.1:8123/", "timeout": 10000, "label": "darkmode-feed" },
+    { "kind": "wait", "ms": 1500, "label": "settle" },
+    { "kind": "screenshot", "label": "01-darkmode-feed-top" },
+    { "kind": "goto", "url": "http://127.0.0.1:8123/leaderboard.html", "timeout": 10000, "label": "darkmode-leaderboard" },
+    { "kind": "wait", "ms": 1000 },
+    { "kind": "screenshot", "label": "02-darkmode-leaderboard" }
+  ]
+}

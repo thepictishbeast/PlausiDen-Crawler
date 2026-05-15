@@ -99,6 +99,21 @@ export interface Journey {
    * without ever inserting fake credentials into the prod database.
    */
   storageState?: string;
+  /**
+   * T77 (closes #661): colorScheme preference baked into the
+   * Playwright context. Drives `prefers-color-scheme` for every
+   * page in the journey. Default 'light' per Loom owner directive
+   * (cycle 95f). Use 'dark' to verify dark-theme styling on sites
+   * that respect prefers-color-scheme, 'no-preference' to test
+   * the no-pref fallback. Catches the theme-split bug class
+   * (cycle 95f) where header and body got out of sync.
+   *
+   * NOTE: this controls the BROWSER pref, not the in-page theme
+   * switcher choice. Sites using the T72 switcher with
+   * data-theme="auto" will flip with this; sites with explicit
+   * data-theme="light" stay light regardless.
+   */
+  colorScheme?: 'light' | 'dark' | 'no-preference';
 }
 
 export interface StepResult {

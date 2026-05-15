@@ -245,6 +245,14 @@ async function main(args: string[]): Promise<number> {
     viewport: { width: viewport.w, height: viewport.h },
     bypassCSP: true,
   };
+  // T77 (closes #661): journey.colorScheme drives the browser's
+  // prefers-color-scheme media query. Default 'light' per Loom
+  // owner directive (cycle 95f).
+  const journeyColorScheme = (journey as Journey).colorScheme;
+  if (journeyColorScheme === 'dark' || journeyColorScheme === 'light' || journeyColorScheme === 'no-preference') {
+    contextOpts.colorScheme = journeyColorScheme;
+    console.log(`[crawler] colorScheme=${journeyColorScheme} (per journey config)`);
+  }
   if (stealthMode) {
     // Realistic UA + locale + tz pretend we're a desktop Chrome
     // on macOS in en-US. None of these mask defensive controls on
