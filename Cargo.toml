@@ -23,6 +23,9 @@ members = [
     "crates/crawler-report",
     "crates/crawler-journey",
     "crates/crawler-runner",
+    # T58: typed debug-capture metadata + HAR shape. Runner does
+    # the IO; this crate is the cross-runner contract.
+    "crates/crawler-debug-capture",
 ]
 
 [workspace.package]

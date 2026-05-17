@@ -1,0 +1,19 @@
+[package]
+name = "crawler-debug-capture"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.78"
+license = "AGPL-3.0-or-later"
+description = "Typed debug-mode capture metadata — screen recordings + HAR + console + WebSocket frames per Crawler journey step. Runner does the IO; this crate holds the contract."
+
+[lints.rust]
+unsafe_code = "deny"
+missing_docs = "deny"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "1"
+
+[dev-dependencies]
+serde_json = "1"
