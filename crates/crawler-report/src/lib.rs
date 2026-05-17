@@ -152,6 +152,8 @@ pub enum EventKind {
     CrossPageMetaDescription,
     /// fontLoading detector — `@font-face` `font-display` declarations.
     FontLoading,
+    /// trustedTypesRuntime detector — DOM-sink monitor (Trusted Types).
+    TrustedTypes,
 }
 
 /// Severity of a finding-bucketed event (cssHealth / uiOverflow

@@ -57,6 +57,30 @@ pub struct TrustedTypesSnapshot {
     pub has_scripts: bool,
 }
 
+impl TrustedTypesSnapshot {
+    /// Construct a fresh snapshot. Mirror of the field set; exposed
+    /// so callers outside this crate (notably the crawler-runner
+    /// chromiumoxide adapter) can build snapshots without depending
+    /// on the `#[non_exhaustive]` field layout breaking on minor
+    /// version bumps.
+    #[must_use]
+    pub fn new(
+        page_url: String,
+        sinks: Vec<CapturedTrustedTypesSink>,
+        has_require_directive: bool,
+        trusted_types_directive: String,
+        has_scripts: bool,
+    ) -> Self {
+        Self {
+            page_url,
+            sinks,
+            has_require_directive,
+            trusted_types_directive,
+            has_scripts,
+        }
+    }
+}
+
 /// Pure classifier: snapshot → findings.
 pub fn detect_trusted_types_issues(snap: &TrustedTypesSnapshot) -> Vec<AxisFinding> {
     let mut out = Vec::new();

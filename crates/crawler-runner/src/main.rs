@@ -45,7 +45,9 @@ use chromiumoxide::cdp::browser_protocol::log::EnableParams as LogEnable;
 use chromiumoxide::cdp::browser_protocol::network::{
     EnableParams as NetworkEnable, EventLoadingFailed,
 };
-use chromiumoxide::cdp::browser_protocol::page::EnableParams as PageEnable;
+use chromiumoxide::cdp::browser_protocol::page::{
+    AddScriptToEvaluateOnNewDocumentParams, EnableParams as PageEnable,
+};
 use chromiumoxide::cdp::js_protocol::runtime::{
     EnableParams as RuntimeEnable, EventConsoleApiCalled, EventExceptionThrown,
 };
@@ -139,6 +141,7 @@ use crawler_detectors::sri::{detect_sri_issues, SriSnapshot, SRI_DOM_CAPTURE_JS}
 use crawler_detectors::tap_targets::{
     detect_tap_target_issues, TapTargetsSnapshot, TAP_TARGETS_JS,
 };
+use crawler_detectors::trusted_types_runtime::{detect_trusted_types_issues, TrustedTypesSnapshot};
 use crawler_detectors::ui_overflow::{
     detect_ui_overflow_issues, Severity as UiSeverity, UiOverflowSnapshot, UI_OVERFLOW_JS,
 };
@@ -290,6 +293,17 @@ async fn run() -> Result<ExitCode> {
         .new_page("about:blank")
         .await
         .context("creating page")?;
+
+    // T75 (2026-05-17): install the Trusted Types runtime probe via
+    // Page.addScriptToEvaluateOnNewDocument BEFORE any user script
+    // runs. The probe monkey-patches innerHTML / outerHTML /
+    // document.write / setTimeout(string) etc. to record every
+    // sink assignment into window.__loomTTSinks for later
+    // classification. Best-effort — failure logs at warn and the
+    // detector silently emits no findings for the affected page.
+    if let Err(e) = install_trusted_types_probe(&page).await {
+        warn!("trusted-types probe install failed: {e}");
+    }
 
     // T103.5: web-vitals capture. Inject the vendored
     // web-vitals.iife.js + WIRE_CALLBACKS_JS as an init script so
@@ -597,6 +611,11 @@ async fn run() -> Result<ExitCode> {
             }
             if let Err(e) = capture_font_loading(&page, &events, started_at).await {
                 tracing::debug!("font_loading snapshot failed: {e}");
+            }
+            if let Err(e) =
+                capture_trusted_types(&page, &network, &cur_url, &events, started_at).await
+            {
+                tracing::debug!("trusted_types snapshot failed: {e}");
             }
             // T75 cross-page accumulation (2026-05-17).
             if let Err(e) = record_cross_page_state(
@@ -1649,6 +1668,209 @@ async fn capture_font_loading(
         events,
         findings,
         EventKind::FontLoading,
+        started_at.elapsed().as_millis() as u64,
+    )
+    .await;
+    Ok(())
+}
+
+/// T75 (2026-05-17): Trusted Types runtime probe. Monkey-patches
+/// innerHTML / outerHTML / document.write / setTimeout(string) etc.
+/// to record every assignment into `window.__loomTTSinks`. Must be
+/// installed BEFORE any page script via CDP
+/// `Page.addScriptToEvaluateOnNewDocument` — otherwise the probe
+/// misses early sink writes.
+///
+/// Ported char-for-char from `src/trustedTypesRuntime.ts`
+/// `installTrustedTypesProbe`. Errors during install are swallowed
+/// per the doctrine that the probe must never break the page.
+const TRUSTED_TYPES_PROBE_JS: &str = r#"
+(function() {
+  if (window.__loomTTProbeInstalled) return;
+  window.__loomTTProbeInstalled = true;
+  var sinks = [];
+  var startedAt = performance.now();
+  window.__loomTTSinks = sinks;
+  function record(kind, value, trusted) {
+    try {
+      var preview = '';
+      if (typeof value === 'string') preview = value;
+      else if (value && typeof value.toString === 'function') preview = String(value);
+      if (preview.length > 200) preview = preview.slice(0, 200);
+      sinks.push({
+        kind: kind, preview: preview, trusted: !!trusted,
+        t: Math.round(performance.now() - startedAt),
+      });
+    } catch (e) { }
+  }
+  function isTrusted(v) {
+    try {
+      return !!(window.TrustedHTML && v instanceof window.TrustedHTML) ||
+             !!(window.TrustedScript && v instanceof window.TrustedScript) ||
+             !!(window.TrustedScriptURL && v instanceof window.TrustedScriptURL);
+    } catch (e) { return false; }
+  }
+  try {
+    var elProto = Element.prototype;
+    var ihDesc = Object.getOwnPropertyDescriptor(elProto, 'innerHTML');
+    if (ihDesc && ihDesc.set) {
+      var origIH = ihDesc.set;
+      Object.defineProperty(elProto, 'innerHTML', {
+        configurable: true, enumerable: ihDesc.enumerable, get: ihDesc.get,
+        set: function(v) {
+          record('innerHTML', v, isTrusted(v));
+          try { return origIH.call(this, v); } catch (e) { throw e; }
+        },
+      });
+    }
+    var ohDesc = Object.getOwnPropertyDescriptor(elProto, 'outerHTML');
+    if (ohDesc && ohDesc.set) {
+      var origOH = ohDesc.set;
+      Object.defineProperty(elProto, 'outerHTML', {
+        configurable: true, enumerable: ohDesc.enumerable, get: ohDesc.get,
+        set: function(v) {
+          record('outerHTML', v, isTrusted(v));
+          try { return origOH.call(this, v); } catch (e) { throw e; }
+        },
+      });
+    }
+    var origIAH = elProto.insertAdjacentHTML;
+    if (typeof origIAH === 'function') {
+      elProto.insertAdjacentHTML = function(pos, html) {
+        record('insertAdjacentHTML', html, isTrusted(html));
+        return origIAH.call(this, pos, html);
+      };
+    }
+  } catch (e) { }
+  try {
+    var origWrite = document.write;
+    document.write = function() {
+      for (var i = 0; i < arguments.length; i++)
+        record('document.write', arguments[i], isTrusted(arguments[i]));
+      return origWrite.apply(this, arguments);
+    };
+    var origWriteln = document.writeln;
+    document.writeln = function() {
+      for (var i = 0; i < arguments.length; i++)
+        record('document.writeln', arguments[i], isTrusted(arguments[i]));
+      return origWriteln.apply(this, arguments);
+    };
+  } catch (e) { }
+  try {
+    var origSetTimeout = window.setTimeout;
+    window.setTimeout = function(handler) {
+      if (typeof handler === 'string') record('setTimeout(string)', handler, isTrusted(handler));
+      return origSetTimeout.apply(this, arguments);
+    };
+    var origSetInterval = window.setInterval;
+    window.setInterval = function(handler) {
+      if (typeof handler === 'string') record('setInterval(string)', handler, isTrusted(handler));
+      return origSetInterval.apply(this, arguments);
+    };
+  } catch (e) { }
+  try {
+    if (typeof Range !== 'undefined' && Range.prototype.createContextualFragment) {
+      var origCCF = Range.prototype.createContextualFragment;
+      Range.prototype.createContextualFragment = function(html) {
+        record('createContextualFragment', html, isTrusted(html));
+        return origCCF.call(this, html);
+      };
+    }
+  } catch (e) { }
+})();
+"#;
+
+/// Install the Trusted Types probe on the page BEFORE its first
+/// script runs. Called once per page lifecycle.
+async fn install_trusted_types_probe(page: &chromiumoxide::Page) -> Result<()> {
+    let _ = page
+        .execute(AddScriptToEvaluateOnNewDocumentParams {
+            source: TRUSTED_TYPES_PROBE_JS.to_owned(),
+            world_name: None,
+            include_command_line_api: None,
+            run_immediately: Some(true),
+        })
+        .await
+        .context("install trusted-types probe")?;
+    Ok(())
+}
+
+/// T75 batch wiring (2026-05-17): trustedTypesRuntime. Reads the
+/// sink-monitor accumulator + CSP context from the page, classifies.
+/// Must be called AFTER install_trusted_types_probe and AFTER the
+/// page has had a chance to run user scripts.
+async fn capture_trusted_types(
+    page: &chromiumoxide::Page,
+    network: &crate::cdp_raw::NetworkObservations,
+    page_url: &str,
+    events: &Arc<Mutex<Vec<CapturedEvent>>>,
+    started_at: Instant,
+) -> Result<()> {
+    let csp_header = {
+        let net = network.lock().await;
+        net.get(page_url)
+            .and_then(|obs| obs.headers.get("content-security-policy").cloned())
+            .unwrap_or_default()
+    };
+    let v = page
+        .evaluate(
+            "(() => { \
+              var sinks = (window.__loomTTSinks || []); \
+              var hasScripts = document.querySelectorAll('script').length > 0; \
+              var metaCsp = ''; \
+              var metas = document.querySelectorAll('meta[http-equiv]'); \
+              for (var i = 0; i < metas.length; i++) { \
+                var equiv = (metas[i].getAttribute('http-equiv') || '').toLowerCase(); \
+                if (equiv === 'content-security-policy') { metaCsp = metas[i].getAttribute('content') || ''; break; } \
+              } \
+              return { sinks: sinks, hasScripts: hasScripts, metaCsp: metaCsp }; \
+            })()",
+        )
+        .await?;
+    #[derive(serde::Deserialize)]
+    struct Raw {
+        sinks: Vec<crawler_detectors::trusted_types_runtime::CapturedTrustedTypesSink>,
+        #[serde(rename = "hasScripts")]
+        has_scripts: bool,
+        #[serde(rename = "metaCsp")]
+        meta_csp: String,
+    }
+    let raw: Raw = v
+        .into_value()
+        .context("deserialize trusted-types raw snapshot")?;
+    let csp_text = if csp_header.is_empty() {
+        raw.meta_csp
+    } else {
+        csp_header
+    };
+    let mut has_require_directive = false;
+    let mut trusted_types_directive = String::new();
+    for seg in csp_text.split(';') {
+        let t = seg.trim();
+        let lower = t.to_ascii_lowercase();
+        if lower.starts_with("require-trusted-types-for") {
+            has_require_directive = true;
+        } else if let Some(rest) = lower.strip_prefix("trusted-types") {
+            if rest.is_empty() || rest.starts_with(' ') {
+                trusted_types_directive = t
+                    [lower.find("trusted-types").unwrap_or(0) + "trusted-types".len()..]
+                    .trim()
+                    .to_owned();
+            }
+        }
+    }
+    let snap = TrustedTypesSnapshot::new(
+        page_url.to_owned(),
+        raw.sinks,
+        has_require_directive,
+        trusted_types_directive,
+        raw.has_scripts,
+    );
+    let findings = detect_trusted_types_issues(&snap);
+    push_axis_findings(
+        events,
+        findings,
+        EventKind::TrustedTypes,
         started_at.elapsed().as_millis() as u64,
     )
     .await;
