@@ -58,6 +58,8 @@ pub mod form_labels;
 pub mod heading_order;
 pub mod hsts;
 pub mod html_lang;
+pub mod iframe_sandbox;
+pub mod image_dimensions;
 pub mod info_leak_headers;
 pub mod inline_script;
 pub mod link_target_blank_safety;
