@@ -82,7 +82,13 @@ export interface CapturedEvent {
     // T33 cycle 2: per-step screenshot baseline-or-diff via dHash.
     // text describes baseline-established / unchanged / changed
     // / baseline-missing / error; impact escalates with distance.
-    | 'visual-diff';
+    | 'visual-diff'
+    // origin/main carry-over (2026-05-16 merge): runtime audit kind
+    // emitted by src/d0Audit.ts (v0.5.0 D₀ runtime audit). Module
+    // is currently orphaned (not yet wired into the journey loop);
+    // adding the kind here makes d0Audit.ts compile so the file
+    // can be evaluated/integrated without blocking CI.
+    | 'd0-violation';
   level?: string;
   text: string;
   url?: string;
