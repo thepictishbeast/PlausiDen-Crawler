@@ -45,6 +45,7 @@ pub mod coep;
 pub mod coop;
 pub mod css_health;
 pub mod doc_title;
+pub mod document_policy;
 pub mod favicon;
 pub mod form_labels;
 pub mod heading_order;
