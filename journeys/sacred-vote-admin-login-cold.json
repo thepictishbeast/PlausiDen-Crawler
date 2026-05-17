@@ -1,0 +1,32 @@
+{
+  "name": "sacred-vote-admin-login-cold",
+  "description": "Cold-path admin login flow. NO sessionStorage seed — exercises the actual /admin login UI: passkey-first prompt, click 'Backup code login' to expand legacy form, fill ADMIN_CODE, submit, expect 2FA prompt. Asserts the form accepts the code and surfaces the 2FA stage; cannot complete 2FA because the crawler doesn't hold the TOTP secret (correct: contract is 'form accepts input and advances,' not 'we own all secrets'). Invoke prefixed with: SACRED_VOTE_ADMIN_CODE=\"$(sudo grep ^ADMIN_CODE /var/www/sacred.vote/.env | cut -d= -f2- | sed -E \"s/^['\\\"]//; s/['\\\"]$//\")\" — the strip-quotes pass is mandatory because dotenv-style values are wrapped in single quotes that would otherwise be sent as literal chars in the password field.",
+  "baseUrl": "https://sacred.vote",
+  "preflight": [
+    { "name": "main-app",            "url": "http://127.0.0.1:5000/health" },
+    { "name": "sacredvote-webauthn", "url": "http://127.0.0.1:3003/health" }
+  ],
+  "steps": [
+    { "kind": "goto", "url": "https://sacred.vote/admin", "timeout": 30000, "label": "admin-landing-cold" },
+    { "kind": "wait", "ms": 2000, "label": "spa-mount" },
+    { "kind": "screenshot", "label": "01-admin-login-passkey-first" },
+    { "kind": "waitForSelector", "selector": "[data-testid=\"disclosure-legacy-login\"] summary", "timeout": 15000, "label": "backup-disclosure-visible" },
+    { "kind": "click", "selector": "[data-testid=\"disclosure-legacy-login\"] summary", "label": "expand-backup-code-form" },
+    { "kind": "wait", "ms": 600, "label": "disclosure-expand" },
+    { "kind": "screenshot", "label": "02-backup-form-expanded" },
+    { "kind": "waitForSelector", "selector": "[data-testid=\"input-admin-code\"]", "timeout": 8000, "label": "admin-code-input-visible" },
+    { "kind": "fill", "selector": "[data-testid=\"input-admin-code\"]", "text": "${ENV.SACRED_VOTE_ADMIN_CODE}", "label": "fill-admin-code-from-env" },
+    { "kind": "screenshot", "label": "03-admin-code-filled" },
+    { "kind": "click", "selector": "[data-testid=\"button-admin-login\"]", "label": "submit-admin-code" },
+    { "kind": "wait", "ms": 3000, "label": "post-submit-settle" },
+    { "kind": "screenshot", "label": "04-post-submit" },
+    { "kind": "waitForSelector", "selector": "[data-testid=\"input-2fa-code\"], [data-testid=\"button-account-dropdown\"]", "timeout": 15000, "label": "2fa-prompt-or-dashboard" },
+    { "kind": "screenshot", "label": "05-2fa-or-dashboard" }
+  ],
+  "budget": {
+    "newConsoleErrors": 0,
+    "newPageErrors": 0,
+    "newFailedRequests": 0,
+    "newA11yViolations": 10
+  }
+}

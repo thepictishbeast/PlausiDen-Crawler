@@ -1,0 +1,35 @@
+{
+  "name": "sacred-vote-admin-passkey-register",
+  "description": "#314 regression journey — admin SecurityTab analogue of the voter passkey-register journey. Pre: count [data-testid^=passkey-row-] = N (admin uses bare prefix, voter uses voter-passkey-row-). Action: click handleRegisterPasskey trigger in SecurityTab. Post: count = N+1. BLOCKED on #304 (virtual authenticator). Activates once #304 lands.",
+  "baseUrl": "https://sacred.vote",
+  "storageState": "/home/admin/.secure/sacred-vote-admin-state.json",
+  "webauthn": {
+    "enabled": true,
+    "protocol": "ctap2",
+    "transport": "internal",
+    "hasResidentKey": true,
+    "hasUserVerification": true,
+    "automaticPresenceSimulation": true,
+    "isUserVerified": true
+  },
+  "steps": [
+    { "kind": "goto", "url": "https://sacred.vote/admin", "timeout": 30000, "label": "admin-landing" },
+    { "kind": "wait", "ms": 3000, "label": "admin-mount-settle" },
+    { "kind": "click", "selector": "[data-testid=tab-security]", "label": "open-security-tab" },
+    { "kind": "wait", "ms": 1500, "label": "tab-mount" },
+    { "kind": "screenshot", "label": "01-admin-security-pre" },
+    { "kind": "assertCount", "selector": "[data-testid^=passkey-row-]", "min": 0, "recordAs": "preCount", "label": "pre-count" },
+    { "kind": "fill", "selector": "[data-testid=admin-passkey-name-input]", "text": "crawler-#314-admin", "label": "name-fill" },
+    { "kind": "click", "selector": "[data-testid=button-register-passkey]", "label": "register-click" },
+    { "kind": "wait", "ms": 4500, "label": "ceremony-settle" },
+    { "kind": "assertCount", "selector": "[data-testid^=passkey-row-]", "count": "preCount+1", "label": "post-count-incremented" },
+    { "kind": "screenshot", "label": "02-admin-security-post" }
+  ],
+  "budget": {
+    "newConsoleErrors": 0,
+    "newPageErrors": 0,
+    "newFailedRequests": 0,
+    "newA11yViolations": 0,
+    "newlyBrokenSteps": 0
+  }
+}

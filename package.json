@@ -1,6 +1,6 @@
 {
   "name": "plausiden-crawler",
-  "version": "0.1.0",
+  "version": "0.5.0",
   "description": "Headless-browser audit: click through any web UI, capture console/network/CSP issues",
   "private": true,
   "type": "module",
@@ -28,6 +28,7 @@
   "dependencies": {
     "axe-core": "^4.11.4",
     "crawlee": "^3.16.0",
+    "jsqr": "^1.4.0",
     "puppeteer": "^24.41.0",
     "web-vitals": "^5.2.0"
   },

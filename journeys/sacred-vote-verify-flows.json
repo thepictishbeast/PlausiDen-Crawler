@@ -1,0 +1,58 @@
+{
+  "name": "sacred-vote-verify-flows",
+  "description": "/verify-identity stage walker. Three branches: (a) ?method=mdl deep-link → mDL QR (tests the SPA's new query-param consumer + #268 QR-decode regression), (b) cold flow → choose-method → mDL QR, (c) cold flow → choose-method → Voter Registration Lookup → Utah template. Functional UI now wears testids: input-voter-code, button-continue-code, card-method-mdl, card-method-registration, card-template-utah-voter-v1, input-first-name/last-name/dob, text-stage-result.",
+  "baseUrl": "https://sacred.vote",
+  "preflight": [
+    { "name": "main-app",            "url": "http://127.0.0.1:5000/health" },
+    { "name": "sacredvote-identity", "url": "http://127.0.0.1:3004/health" }
+  ],
+  "steps": [
+    { "kind": "goto", "url": "https://sacred.vote/verify-identity?method=mdl", "timeout": 30000, "label": "verify-identity-deeplink-mdl" },
+    { "kind": "wait", "ms": 2500, "label": "spa-mount" },
+    { "kind": "screenshot", "label": "01-deeplink-enter-code" },
+    { "kind": "assertText", "selector": "h1, h2, [data-testid=\"text-site-title\"]", "text": "SACRED VOTE", "label": "site-header-rendered" },
+    { "kind": "waitForSelector", "selector": "[data-testid=\"input-voter-code\"]", "timeout": 15000, "label": "voter-code-input-visible-deeplink" },
+    { "kind": "fill", "selector": "[data-testid=\"input-voter-code\"]", "text": "TEST", "label": "fill-voter-code-deeplink" },
+    { "kind": "screenshot", "label": "02-deeplink-code-filled" },
+    { "kind": "click", "selector": "[data-testid=\"button-continue-code\"]", "label": "submit-voter-code-deeplink" },
+    { "kind": "wait", "ms": 4500, "label": "deeplink-mdl-bootstrap" },
+    { "kind": "screenshot", "label": "03-deeplink-after-submit" },
+    { "kind": "waitForSelector", "selector": "svg[width=\"224\"][height=\"224\"]", "timeout": 20000, "label": "qr-svg-rendered-deeplink" },
+    { "kind": "screenshot", "label": "04-deeplink-qr-visible" },
+    { "kind": "assertQR", "selector": "svg[width=\"224\"][height=\"224\"]", "text": "^openid4vp://", "label": "deeplink-qr-decodes-openid4vp" },
+
+    { "kind": "goto", "url": "https://sacred.vote/verify-identity", "timeout": 30000, "label": "cold-flow-restart" },
+    { "kind": "wait", "ms": 2500, "label": "spa-remount" },
+    { "kind": "waitForSelector", "selector": "[data-testid=\"input-voter-code\"]", "timeout": 15000, "label": "voter-code-input-visible-cold" },
+    { "kind": "fill", "selector": "[data-testid=\"input-voter-code\"]", "text": "TEST", "label": "fill-voter-code-cold" },
+    { "kind": "click", "selector": "[data-testid=\"button-continue-code\"]", "label": "submit-voter-code-cold" },
+    { "kind": "wait", "ms": 4000, "label": "post-submit-cold" },
+    { "kind": "waitForSelector", "selector": "[data-testid=\"card-method-mdl\"]", "timeout": 15000, "label": "choose-method-mdl-card-visible" },
+    { "kind": "waitForSelector", "selector": "[data-testid=\"card-method-registration\"]", "timeout": 5000, "label": "choose-method-registration-card-visible" },
+    { "kind": "screenshot", "label": "05-choose-method-cold" },
+    { "kind": "click", "selector": "[data-testid=\"card-method-mdl\"]", "label": "click-mdl-card" },
+    { "kind": "wait", "ms": 4000, "label": "mdl-bootstrap-cold" },
+    { "kind": "waitForSelector", "selector": "svg[width=\"224\"][height=\"224\"]", "timeout": 20000, "label": "qr-svg-rendered-cold" },
+    { "kind": "screenshot", "label": "06-cold-mdl-qr" },
+    { "kind": "assertQR", "selector": "svg[width=\"224\"][height=\"224\"]", "text": "^openid4vp://", "label": "cold-qr-decodes-openid4vp" },
+
+    { "kind": "goto", "url": "https://sacred.vote/verify-identity", "timeout": 30000, "label": "registration-branch-restart" },
+    { "kind": "wait", "ms": 2500, "label": "spa-remount-2" },
+    { "kind": "waitForSelector", "selector": "[data-testid=\"input-voter-code\"]", "timeout": 15000, "label": "voter-code-input-visible-2" },
+    { "kind": "fill", "selector": "[data-testid=\"input-voter-code\"]", "text": "TEST", "label": "fill-voter-code-reg" },
+    { "kind": "click", "selector": "[data-testid=\"button-continue-code\"]", "label": "submit-voter-code-reg" },
+    { "kind": "wait", "ms": 4000, "label": "post-submit-reg" },
+    { "kind": "waitForSelector", "selector": "[data-testid=\"card-method-registration\"]", "timeout": 15000, "label": "choose-method-registration-visible" },
+    { "kind": "screenshot", "label": "07-choose-method-reg" },
+    { "kind": "click", "selector": "[data-testid=\"card-method-registration\"]", "label": "click-registration-card" },
+    { "kind": "wait", "ms": 2000, "label": "registration-form-mount" },
+    { "kind": "waitForSelector", "selector": "[data-testid=\"card-template-utah-voter-v1\"]", "timeout": 12000, "label": "select-state-utah-template-visible" },
+    { "kind": "screenshot", "label": "08-select-state-cards" }
+  ],
+  "budget": {
+    "newConsoleErrors": 0,
+    "newPageErrors": 0,
+    "newFailedRequests": 0,
+    "newA11yViolations": 50
+  }
+}

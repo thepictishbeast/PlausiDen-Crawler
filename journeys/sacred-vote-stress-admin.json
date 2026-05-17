@@ -1,0 +1,156 @@
+{
+  "name": "sacred-vote-stress-admin",
+  "description": "Aggressive UI-stress for the admin SPA — hammers /admin with random clicks, edge-case fuzz, keyboard chaos, viewport thrash, and rotation across every admin tab (Polls, Voters, Support, Analytics, Security, Audit, Announce, Settings, System, Guides, Hardening). Surfaces console errors, page errors, layout shift, focus-trap leaks, and any selector that breaks Playwright. avoidSelectors locks out destructive admin actions (delete poll, end-elections, revoke creds) so the crawl never touches prod state.",
+  "baseUrl": "https://sacred.vote",
+  "storageState": "/home/admin/.secure/sacred-vote-admin-state.json",
+  "preflight": [
+    { "name": "main", "url": "https://sacred.vote/api/health" }
+  ],
+  "expectedErrors": [
+    { "kind": "console", "level": "error", "urlIncludes": "/api/admin/", "status": 403, "reason": "fuzz click hit a feature-gated admin endpoint without entitlement" },
+    { "kind": "request-failed", "urlIncludes": "/api/stats", "reason": "occasional XHR drop during stress fuzz" }
+  ],
+  "steps": [
+    { "kind": "goto", "url": "https://sacred.vote/admin", "timeout": 30000, "label": "admin-landing" },
+    { "kind": "wait", "ms": 3000, "label": "admin-mount-settle" },
+    { "kind": "screenshot", "label": "00-admin-pre-stress" },
+    {
+      "kind": "stress",
+      "label": "admin-tabs-stress",
+      "stress": {
+        "intensity": "high",
+        "durationMs": 90000,
+        "clickCount": 150,
+        "fillCount": 50,
+        "keyboardCount": 60,
+        "resizeCount": 12,
+        "screenshotEveryN": 25,
+        "networkChaos": false,
+        "finalScreenshot": true,
+        "avoidSelectors": [
+          "Sign out",
+          "Logout",
+          "Delete",
+          "Revoke",
+          "End election",
+          "End poll",
+          "Reset",
+          "Wipe",
+          "Force",
+          "Suspend",
+          "Ban",
+          "/logout",
+          "data-testid=\"button-end",
+          "data-testid=\"button-delete",
+          "data-testid=\"button-revoke"
+        ],
+        "rotateTabs": [
+          "[data-testid='tab-polls']",
+          "[data-testid='tab-voters']",
+          "[data-testid='tab-support']",
+          "[data-testid='tab-analytics']",
+          "[data-testid='tab-security']",
+          "[data-testid='tab-audit-log']",
+          "[data-testid='tab-announcements']",
+          "[data-testid='tab-settings']",
+          "[data-testid='tab-system']",
+          "[data-testid='tab-guides']",
+          "[data-testid='tab-hardening']"
+        ],
+        "extraPayloads": [
+          "TEST",
+          "DEMO",
+          "admin-test-poll",
+          "Sample announcement \u2014 ignore",
+          "1234567890",
+          "../etc/passwd",
+          "\"><script>alert('admin-fuzz')</script>",
+          "<img src=x onerror=fetch('/api/admin/audit-log')>",
+          "'-- dump audit log",
+          "{\"override\":true}",
+          "🛡️🔐"
+        ]
+      }
+    },
+    { "kind": "screenshot", "label": "01-admin-post-tabs-stress" },
+
+    { "kind": "goto", "url": "https://sacred.vote/admin?tab=security", "label": "security-tab" },
+    { "kind": "wait", "ms": 2500, "label": "security-settle" },
+    { "kind": "screenshot", "label": "02-security-pre-stress" },
+    {
+      "kind": "stress",
+      "label": "security-tab-stress",
+      "stress": {
+        "intensity": "extreme",
+        "durationMs": 60000,
+        "clickCount": 100,
+        "fillCount": 60,
+        "keyboardCount": 50,
+        "resizeCount": 10,
+        "screenshotEveryN": 20,
+        "networkChaos": true,
+        "finalScreenshot": true,
+        "avoidSelectors": [
+          "Sign out",
+          "Logout",
+          "Delete passkey",
+          "Remove passkey",
+          "Revoke",
+          "Force logout",
+          "data-testid=\"button-revoke",
+          "data-testid=\"button-delete-passkey",
+          "data-testid=\"button-remove-credential"
+        ],
+        "extraPayloads": [
+          "TEST",
+          "DEMO",
+          "passkey-fuzz",
+          "AAAAAAAAAAAAAAAA",
+          "0000000000000000",
+          "<svg/onload=fetch('/api/admin/credentials')>",
+          "../../private/admin",
+          "%c0%ae%c0%ae/%c0%ae%c0%ae/etc/shadow"
+        ]
+      }
+    },
+    { "kind": "screenshot", "label": "03-security-post-stress" },
+
+    { "kind": "goto", "url": "https://sacred.vote/admin?tab=hardening", "label": "hardening-tab" },
+    { "kind": "wait", "ms": 2500, "label": "hardening-settle" },
+    { "kind": "screenshot", "label": "04-hardening-pre-stress" },
+    {
+      "kind": "stress",
+      "label": "hardening-tab-stress",
+      "stress": {
+        "intensity": "high",
+        "durationMs": 45000,
+        "clickCount": 80,
+        "fillCount": 30,
+        "keyboardCount": 40,
+        "resizeCount": 8,
+        "screenshotEveryN": 20,
+        "networkChaos": false,
+        "finalScreenshot": true,
+        "avoidSelectors": [
+          "Sign out",
+          "Logout",
+          "Reset",
+          "Wipe",
+          "Force",
+          "Apply",
+          "Disable"
+        ]
+      }
+    },
+    { "kind": "screenshot", "label": "05-hardening-post-stress" },
+
+    { "kind": "discover", "label": "admin-discover", "discover": { "maxPages": 25, "maxDepth": 3, "sameOrigin": true, "interactButtons": "safe-buttons", "includePatterns": ["/admin"], "settleMs": 1500 } }
+  ],
+  "budget": {
+    "newConsoleErrors": 0,
+    "newPageErrors": 0,
+    "newFailedRequests": 0,
+    "newA11yViolations": 0,
+    "newlyBrokenSteps": 0
+  }
+}

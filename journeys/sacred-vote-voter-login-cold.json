@@ -1,0 +1,41 @@
+{
+  "name": "sacred-vote-voter-login-cold",
+  "description": "Cold-path voter gatekeeper flow. NO auto-gatekeeper seed — exercises the actual voter-ID input on /: type the built-in TEST code (no DB write), click Continue, assert that the gatekeeper advances to poll-select. Catches the regression class where the gatekeeper accepts input but stalls at the legal-modal or first-time-popup gate (#266 territory). Also catches the dead-`/voting-app` regression class — the SPA is mounted at `/`, not `/voting-app`; nothing in the app should link to /voting-app.",
+  "baseUrl": "https://sacred.vote",
+  "preflight": [
+    { "name": "main-app", "url": "http://127.0.0.1:5000/health" }
+  ],
+  "seedStorage": {
+    "localStorage": {
+      "sacred-vote-mission-seen": "1",
+      "sv_walkthrough_voting_seen": "true",
+      "sv_walkthrough_voterbooth_seen": "true",
+      "sv_legal_accepted_TEST": "2026-04-30T00:00:00.000Z"
+    },
+    "sessionStorage": {
+      "sv_disclaimer_dismissed": "true"
+    }
+  },
+  "steps": [
+    { "kind": "goto", "url": "https://sacred.vote/", "timeout": 30000, "label": "voter-landing-cold" },
+    { "kind": "wait", "ms": 2500, "label": "spa-mount" },
+    { "kind": "screenshot", "label": "01-gatekeeper-cold" },
+    { "kind": "waitForSelector", "selector": "[data-testid=\"button-show-voter-code\"]", "timeout": 15000, "label": "passkey-first-ui-visible" },
+    { "kind": "click", "selector": "[data-testid=\"button-show-voter-code\"]", "label": "reveal-voter-code-form" },
+    { "kind": "wait", "ms": 800, "label": "voter-code-form-mount" },
+    { "kind": "screenshot", "label": "02-voter-code-form-revealed" },
+    { "kind": "waitForSelector", "selector": "[data-testid=\"input-voter-id\"]", "timeout": 8000, "label": "voter-id-input-visible" },
+    { "kind": "fill", "selector": "[data-testid=\"input-voter-id\"]", "text": "TEST", "label": "fill-voter-id" },
+    { "kind": "screenshot", "label": "03-voter-id-filled" },
+    { "kind": "click", "selector": "[data-testid=\"button-proceed\"]", "label": "submit-voter-id" },
+    { "kind": "wait", "ms": 3000, "label": "post-submit-settle" },
+    { "kind": "screenshot", "label": "04-post-gatekeeper" },
+    { "kind": "assertText", "selector": "[data-testid=\"text-poll-select-title\"]", "text": "Active Polls", "timeout": 8000, "label": "advanced-to-poll-select" }
+  ],
+  "budget": {
+    "newConsoleErrors": 0,
+    "newPageErrors": 0,
+    "newFailedRequests": 0,
+    "newA11yViolations": 50
+  }
+}
