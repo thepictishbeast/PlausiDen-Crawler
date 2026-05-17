@@ -1,0 +1,31 @@
+{
+  "name": "plausiden-smoke-tablet-dark",
+  "description": "Tablet dark-theme variant of plausiden-smoke. Same sequence at iPad-portrait viewport (810×1080) with prefers-color-scheme: dark. Catches tablet-specific layouts (mid-density grids, keyboard-detached interactions). Part of the 24-combo Forge test matrix.",
+  "baseUrl": "http://10.99.0.3:3000/",
+  "viewport": { "w": 810, "h": 1080 },
+  "colorScheme": "dark",
+  "theme": "dark",
+  "steps": [
+    { "kind": "goto", "url": "http://10.99.0.3:3000/", "timeout": 30000, "label": "landing" },
+    { "kind": "wait", "ms": 2000, "label": "settle" },
+    { "kind": "click", "selector": "button:has-text('I accept')", "timeout": 4000, "label": "accept-tos" },
+    { "kind": "wait", "ms": 300 },
+    { "kind": "click", "selector": "button:has-text('Get started')", "timeout": 3000, "label": "dismiss-welcome-click" },
+    { "kind": "wait", "ms": 300 },
+    { "kind": "press", "key": "Escape", "label": "dismiss-any-overlay" },
+    { "kind": "wait", "ms": 200 },
+    { "kind": "screenshot", "label": "01-landing-tablet-dark" },
+    { "kind": "press", "key": "Control+2", "label": "jump-classroom" },
+    { "kind": "wait", "ms": 1500 },
+    { "kind": "screenshot", "label": "02-classroom-tablet-dark" },
+    { "kind": "press", "key": "Control+4", "label": "jump-fleet" },
+    { "kind": "wait", "ms": 1500 },
+    { "kind": "screenshot", "label": "03-fleet-tablet-dark" },
+    { "kind": "press", "key": "Control+5", "label": "jump-library" },
+    { "kind": "wait", "ms": 1500 },
+    { "kind": "screenshot", "label": "04-library-tablet-dark" },
+    { "kind": "press", "key": "Control+1", "label": "back-to-chat" },
+    { "kind": "wait", "ms": 500 },
+    { "kind": "screenshot", "label": "05-final-tablet-dark" }
+  ]
+}

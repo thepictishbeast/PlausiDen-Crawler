@@ -249,8 +249,70 @@ pub struct Journey {
     /// Playwright storageState path (auth seed).
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub storage_state: Option<String>,
+    /// Browser `prefers-color-scheme` value to emulate.
+    /// Wire-compat with TS journeys that ship `colorScheme: "dark"`.
+    /// When set, the runner emits CDP `Emulation.setEmulatedMedia`
+    /// with `prefers-color-scheme` feature pre-navigation, so the
+    /// initial paint respects the value (not flash-flipped post-load).
+    /// Maps to ISO/IEC 40500 / WCAG 2.1 AA SC 1.4.12 indirectly —
+    /// rendering modes must be tested in both schemes to gate AA.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub color_scheme: Option<ColorScheme>,
+    /// Site-specific theme token-set name. Surface for test matrices
+    /// that need to distinguish dark variants beyond what CSS
+    /// `prefers-color-scheme` exposes — e.g. regular dark
+    /// (`#0d1117`-style backgrounds) vs AMOLED dark (`#000000` true
+    /// black so OLED pixels are off). Passed to the page as URL query
+    /// param `?_theme=<value>` for the SPA to read; sites that don't
+    /// honor the param ignore it harmlessly.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub theme: Option<String>,
+    /// Capture an MP4 video of the entire session.
+    /// Output: `runs/<name>-<ts>/video.mp4`.
+    /// Implementation: CDP `Page.startScreencast` frame stream
+    /// merged at end-of-run via the runner's `video_encode` helper.
+    /// Default off (recording costs ~5 MB/min + 5-10% CPU).
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub record_video: Option<bool>,
+    /// Debug mode: visible browser (`--no-headless`), DevTools open,
+    /// verbose `tracing::debug!` enabled, network captured to HAR,
+    /// console verbosity bumped from `Warning` to `Verbose`.
+    /// Per the 24-combo test matrix: every page is tested in both
+    /// `debug=false` (production parity) and `debug=true`
+    /// (developer-facing diagnostics) modes.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub debug: Option<bool>,
     /// Steps in run order.
     pub steps: Vec<Step>,
+}
+
+/// CSS `prefers-color-scheme` media query value for browser
+/// emulation. Wire-compat with the TS `Journey.colorScheme`
+/// field. Default (unset) = browser native, typically light.
+///
+/// Maps directly to CDP `Emulation.setEmulatedMedia` feature
+/// `prefers-color-scheme`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+#[serde(rename_all = "kebab-case")]
+pub enum ColorScheme {
+    /// Browser reports `prefers-color-scheme: light`.
+    Light,
+    /// Browser reports `prefers-color-scheme: dark`.
+    Dark,
+    /// Browser reports `prefers-color-scheme: no-preference`.
+    NoPreference,
+}
+
+impl ColorScheme {
+    /// CDP-protocol string for `Emulation.setEmulatedMedia`.
+    pub fn cdp_value(&self) -> &'static str {
+        match self {
+            Self::Light => "light",
+            Self::Dark => "dark",
+            Self::NoPreference => "no-preference",
+        }
+    }
 }
 
 /// Errors from journey-file parsing.
@@ -485,6 +547,10 @@ mod tests {
             first_time: Some(true),
             screen_reader: Some(false),
             storage_state: None,
+            color_scheme: Some(ColorScheme::Dark),
+            theme: Some("dark-amoled".into()),
+            record_video: Some(true),
+            debug: Some(false),
             steps: vec![Step::Goto {
                 url: "http://x/".into(),
                 timeout: Some(5000),
