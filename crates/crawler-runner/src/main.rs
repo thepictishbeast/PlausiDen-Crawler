@@ -2242,9 +2242,7 @@ async fn run_step(
             let _ = page.evaluate(js.as_str()).await?;
         }
         Step::WaitForSelector {
-            selector,
-            timeout,
-            ..
+            selector, timeout, ..
         } => {
             // T75 (2026-05-17): honor the per-step timeout. Previously
             // `find_element` was awaited indefinitely, which could
