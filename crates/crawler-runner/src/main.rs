@@ -2243,10 +2243,31 @@ async fn run_step(
         }
         Step::WaitForSelector {
             selector,
-            timeout: _,
+            timeout,
             ..
         } => {
-            page.find_element(selector).await?;
+            // T75 (2026-05-17): honor the per-step timeout. Previously
+            // `find_element` was awaited indefinitely, which could
+            // wedge a journey if the selector never resolved. Default
+            // 30s mirrors Playwright's locator timeout for parity
+            // with the TS port being replaced.
+            let wait_timeout = Duration::from_millis(timeout.map_or(30_000u64, u64::from));
+            let target_sel = selector.clone();
+            let find_fut = async {
+                page.find_element(target_sel).await?;
+                Ok::<(), anyhow::Error>(())
+            };
+            match tokio::time::timeout(wait_timeout, find_fut).await {
+                Ok(Ok(())) => {}
+                Ok(Err(e)) => return Err(e),
+                Err(_) => {
+                    return Err(anyhow::anyhow!(
+                        "waitForSelector({}) exceeded {}ms timeout",
+                        selector,
+                        wait_timeout.as_millis()
+                    ));
+                }
+            }
         }
         Step::Discover { .. } | Step::Probe { .. } => {
             // Runner-specific steps; MVP no-op.
