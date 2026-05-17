@@ -60,6 +60,7 @@ use crawler_detectors::cookie_security::{
     build_cookie_security_snapshot, detect_cookie_security_issues,
 };
 use crawler_detectors::coop::{build_coop_snapshot, detect_coop_issues};
+use crawler_detectors::corp::{build_corp_snapshot, detect_corp_issues};
 use crawler_detectors::css_health::{
     brace_counts_js, detect_css_health_issues, split_close_braces, BraceCountsRaw, ComputedBody,
     ComputedHtml, CssHealthSnapshot, StylesheetObservation, APPLIED_RULE_COUNT_JS,
@@ -125,6 +126,7 @@ use crawler_detectors::skip_link::{detect_skip_link_issues, SkipLinkSnapshot, SK
 use crawler_detectors::speculation_rules::{
     detect_speculation_rules_issues, SpeculationRulesSnapshot, SPECULATION_RULES_DOM_CAPTURE_JS,
 };
+use crawler_detectors::sri::{detect_sri_issues, SriSnapshot, SRI_DOM_CAPTURE_JS};
 use crawler_detectors::tap_targets::{
     detect_tap_target_issues, TapTargetsSnapshot, TAP_TARGETS_JS,
 };
@@ -571,6 +573,12 @@ async fn run() -> Result<ExitCode> {
             }
             if let Err(e) = capture_meta_description(&page, &events, started_at).await {
                 tracing::debug!("meta_description snapshot failed: {e}");
+            }
+            if let Err(e) = capture_corp(&cur_url, &network, &events, started_at).await {
+                tracing::debug!("corp snapshot failed: {e}");
+            }
+            if let Err(e) = capture_sri(&page, &events, started_at).await {
+                tracing::debug!("sri snapshot failed: {e}");
             }
             if let Err(e) = capture_css_health(&page, &events, &network, started_at).await {
                 tracing::debug!("css_health snapshot failed: {e}");
@@ -1470,6 +1478,62 @@ async fn capture_meta_description(
         events,
         findings,
         EventKind::MetaDescription,
+        started_at.elapsed().as_millis() as u64,
+    )
+    .await;
+    Ok(())
+}
+
+/// T75 batch wiring (2026-05-17): per-sub-resource helper. Walks
+/// every URL in the network observations and returns its
+/// lowercased-header BTreeMap. Used by `corp` (and future per-sub-
+/// resource detectors). Race-safe — clones under the lock.
+async fn all_headers_by_url(
+    network: &crate::cdp_raw::NetworkObservations,
+) -> std::collections::BTreeMap<String, std::collections::BTreeMap<String, String>> {
+    let net = network.lock().await;
+    net.iter()
+        .map(|(url, obs)| (url.clone(), obs.headers.clone()))
+        .collect()
+}
+
+/// T75 batch wiring (2026-05-17): corp — per-sub-resource
+/// Cross-Origin-Resource-Policy. First detector that consumes the
+/// full per-URL headers map (vs the page URL's headers).
+async fn capture_corp(
+    page_url: &str,
+    network: &crate::cdp_raw::NetworkObservations,
+    events: &Arc<Mutex<Vec<CapturedEvent>>>,
+    started_at: Instant,
+) -> Result<()> {
+    let page_headers = page_headers_btreemap(page_url, network).await;
+    let all_headers = all_headers_by_url(network).await;
+    let snap = build_corp_snapshot(page_url, &page_headers, &all_headers);
+    let findings = detect_corp_issues(&snap);
+    push_axis_findings(
+        events,
+        findings,
+        EventKind::Corp,
+        started_at.elapsed().as_millis() as u64,
+    )
+    .await;
+    Ok(())
+}
+
+/// T75 batch wiring (2026-05-17): sri — Subresource Integrity
+/// per-element DOM audit.
+async fn capture_sri(
+    page: &chromiumoxide::Page,
+    events: &Arc<Mutex<Vec<CapturedEvent>>>,
+    started_at: Instant,
+) -> Result<()> {
+    let result = page.evaluate(SRI_DOM_CAPTURE_JS).await?;
+    let snap: SriSnapshot = result.into_value().context("deserialize sri snapshot")?;
+    let findings = detect_sri_issues(&snap);
+    push_axis_findings(
+        events,
+        findings,
+        EventKind::Sri,
         started_at.elapsed().as_millis() as u64,
     )
     .await;

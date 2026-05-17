@@ -140,6 +140,10 @@ pub enum EventKind {
     OutboundLinks,
     /// metaDescription detector — `<meta name="description">` present + length.
     MetaDescription,
+    /// corp detector — Cross-Origin-Resource-Policy on sub-resources.
+    Corp,
+    /// sri detector — Subresource Integrity on cross-origin scripts/styles.
+    Sri,
 }
 
 /// Severity of a finding-bucketed event (cssHealth / uiOverflow
