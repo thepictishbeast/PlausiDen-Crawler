@@ -469,6 +469,11 @@ async fn run() -> Result<ExitCode> {
     // intended (the wait gives JS time to settle).
     let mut steps_ok = 0u32;
     let mut steps_failed = 0u32;
+    // T75 (2026-05-17): track per-step StepResult so Report.steps
+    // is no longer hard-coded empty. Wire-compat with the TS
+    // Crawler's report.json — the diff tooling already consumes
+    // this shape (newlyBrokenSteps / fixedSteps in Diff).
+    let mut step_results: Vec<crawler_report::StepResult> = Vec::with_capacity(journey.steps.len());
     for (i, step) in journey.steps.iter().enumerate() {
         let label = step.label().unwrap_or("");
         info!(
@@ -478,11 +483,31 @@ async fn run() -> Result<ExitCode> {
             step.kind(),
             label
         );
-        match run_step(&page, step, &run_dir).await {
-            Ok(()) => steps_ok += 1,
+        let step_started = Instant::now();
+        let outcome = run_step(&page, step, &run_dir).await;
+        let duration_ms = step_started.elapsed().as_millis() as u64;
+        let step_json = serde_json::to_value(step).unwrap_or(serde_json::Value::Null);
+        match &outcome {
+            Ok(()) => {
+                steps_ok += 1;
+                step_results.push(crawler_report::StepResult {
+                    index: i as u32,
+                    ok: true,
+                    duration_ms,
+                    step: step_json,
+                    error: None,
+                });
+            }
             Err(e) => {
                 warn!("step {} failed: {e}", i + 1);
                 steps_failed += 1;
+                step_results.push(crawler_report::StepResult {
+                    index: i as u32,
+                    ok: false,
+                    duration_ms,
+                    step: step_json,
+                    error: Some(format!("{e:#}")),
+                });
             }
         }
         // T103.2 + T103.3: run detector axes after every `wait`
@@ -698,7 +723,7 @@ async fn run() -> Result<ExitCode> {
         duration_ms,
         counts,
         events: captured,
-        steps: vec![], // Per-step result objects deferred to next tick.
+        steps: step_results,
     };
     let report_path = run_dir.join("report.json");
     tokio::fs::write(
