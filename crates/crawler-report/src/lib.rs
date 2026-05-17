@@ -74,6 +74,18 @@ pub enum EventKind {
     /// linkText detector — WCAG 2.4.4 link purpose: empty +
     /// generic link text.
     LinkText,
+    /// formLabels detector — every form control has an accessible
+    /// label (WCAG 1.3.1 + 3.3.2).
+    FormLabels,
+    /// skipLink detector — first focusable link is a same-page
+    /// jump to #main / #content.
+    SkipLink,
+    /// tapTargets detector — interactive elements meet the
+    /// 24×24 px AAA / 44×44 px iOS minimum size.
+    TapTargets,
+    /// docTitle detector — `<title>` present, non-empty, unique
+    /// across the journey.
+    DocTitle,
 }
 
 /// Severity of a finding-bucketed event (cssHealth / uiOverflow

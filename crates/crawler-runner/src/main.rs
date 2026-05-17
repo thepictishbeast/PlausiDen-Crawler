@@ -56,6 +56,10 @@ use crawler_detectors::css_health::{
     BODY_VISIBLE_TEXT_LENGTH_JS, COMPUTED_STYLES_JS, DECLARED_HREFS_JS,
     INLINE_STYLE_BLOCK_COUNT_JS,
 };
+use crawler_detectors::doc_title::{detect_doc_title_issues, DocTitleSnapshot, DOC_TITLE_JS};
+use crawler_detectors::form_labels::{
+    detect_form_label_issues, FormLabelsSnapshot, FORM_LABELS_JS,
+};
 use crawler_detectors::heading_order::{
     detect_heading_order_issues, HeadingOrderSnapshot, HEADING_ORDER_JS,
 };
@@ -71,6 +75,10 @@ use crawler_detectors::runtime_images::{
 };
 use crawler_detectors::runtime_landmarks::{
     detect_runtime_landmarks_issues, RuntimeLandmarksSnapshot, RUNTIME_LANDMARKS_JS,
+};
+use crawler_detectors::skip_link::{detect_skip_link_issues, SkipLinkSnapshot, SKIP_LINK_JS};
+use crawler_detectors::tap_targets::{
+    detect_tap_target_issues, TapTargetsSnapshot, TAP_TARGETS_JS,
 };
 use crawler_detectors::ui_overflow::{
     detect_ui_overflow_issues, Severity as UiSeverity, UiOverflowSnapshot, UI_OVERFLOW_JS,
@@ -409,6 +417,20 @@ async fn run() -> Result<ExitCode> {
             if let Err(e) = capture_link_text(&page, &events, started_at).await {
                 tracing::debug!("link_text snapshot failed: {e}");
             }
+            // T75 batch wiring 2026-05-17: 4 new detectors
+            // (form_labels, skip_link, tap_targets, doc_title)
+            if let Err(e) = capture_form_labels(&page, &events, started_at).await {
+                tracing::debug!("form_labels snapshot failed: {e}");
+            }
+            if let Err(e) = capture_skip_link(&page, &events, started_at).await {
+                tracing::debug!("skip_link snapshot failed: {e}");
+            }
+            if let Err(e) = capture_tap_targets(&page, &events, started_at).await {
+                tracing::debug!("tap_targets snapshot failed: {e}");
+            }
+            if let Err(e) = capture_doc_title(&page, &events, started_at).await {
+                tracing::debug!("doc_title snapshot failed: {e}");
+            }
             if let Err(e) = capture_css_health(&page, &events, &network, started_at).await {
                 tracing::debug!("css_health snapshot failed: {e}");
             }
@@ -683,6 +705,94 @@ async fn capture_runtime_focus(
         events,
         findings,
         EventKind::RuntimeFocus,
+        started_at.elapsed().as_millis() as u64,
+    )
+    .await;
+    Ok(())
+}
+
+/// T75 batch wiring (2026-05-17): formLabels detector — every form
+/// control has an accessible label (WCAG 1.3.1 + 3.3.2).
+async fn capture_form_labels(
+    page: &chromiumoxide::Page,
+    events: &Arc<Mutex<Vec<CapturedEvent>>>,
+    started_at: Instant,
+) -> Result<()> {
+    let result = page.evaluate(FORM_LABELS_JS).await?;
+    let snap: FormLabelsSnapshot = result
+        .into_value()
+        .context("deserialize formLabels snapshot")?;
+    let findings = detect_form_label_issues(&snap);
+    push_axis_findings(
+        events,
+        findings,
+        EventKind::FormLabels,
+        started_at.elapsed().as_millis() as u64,
+    )
+    .await;
+    Ok(())
+}
+
+/// T75 batch wiring (2026-05-17): skipLink detector — first focusable
+/// link is a same-page jump to #main / #content.
+async fn capture_skip_link(
+    page: &chromiumoxide::Page,
+    events: &Arc<Mutex<Vec<CapturedEvent>>>,
+    started_at: Instant,
+) -> Result<()> {
+    let result = page.evaluate(SKIP_LINK_JS).await?;
+    let snap: SkipLinkSnapshot = result
+        .into_value()
+        .context("deserialize skipLink snapshot")?;
+    let findings = detect_skip_link_issues(&snap);
+    push_axis_findings(
+        events,
+        findings,
+        EventKind::SkipLink,
+        started_at.elapsed().as_millis() as u64,
+    )
+    .await;
+    Ok(())
+}
+
+/// T75 batch wiring (2026-05-17): tapTargets detector — interactive
+/// elements meet the 24×24 px AAA / 44×44 px iOS minimum size.
+async fn capture_tap_targets(
+    page: &chromiumoxide::Page,
+    events: &Arc<Mutex<Vec<CapturedEvent>>>,
+    started_at: Instant,
+) -> Result<()> {
+    let result = page.evaluate(TAP_TARGETS_JS).await?;
+    let snap: TapTargetsSnapshot = result
+        .into_value()
+        .context("deserialize tapTargets snapshot")?;
+    let findings = detect_tap_target_issues(&snap);
+    push_axis_findings(
+        events,
+        findings,
+        EventKind::TapTargets,
+        started_at.elapsed().as_millis() as u64,
+    )
+    .await;
+    Ok(())
+}
+
+/// T75 batch wiring (2026-05-17): docTitle detector — `<title>`
+/// present, non-empty.
+async fn capture_doc_title(
+    page: &chromiumoxide::Page,
+    events: &Arc<Mutex<Vec<CapturedEvent>>>,
+    started_at: Instant,
+) -> Result<()> {
+    let result = page.evaluate(DOC_TITLE_JS).await?;
+    let snap: DocTitleSnapshot = result
+        .into_value()
+        .context("deserialize docTitle snapshot")?;
+    let findings = detect_doc_title_issues(&snap);
+    push_axis_findings(
+        events,
+        findings,
+        EventKind::DocTitle,
         started_at.elapsed().as_millis() as u64,
     )
     .await;
