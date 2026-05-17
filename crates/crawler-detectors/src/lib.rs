@@ -66,6 +66,7 @@ pub mod origin_agent_cluster;
 pub mod outbound_links;
 pub mod placeholder_text;
 pub mod referrer_policy;
+pub mod reporting_endpoints;
 pub mod runtime_contrast;
 pub mod runtime_focus;
 pub mod runtime_images;
