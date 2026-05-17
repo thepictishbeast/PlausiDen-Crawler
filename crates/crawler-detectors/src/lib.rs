@@ -67,6 +67,8 @@ pub mod inline_script;
 pub mod link_target_blank_safety;
 pub mod link_text;
 pub mod link_underline;
+pub mod local_storage_use;
+pub mod long_tasks;
 pub mod meta_description;
 pub mod mixed_content;
 pub mod network_error_logging;
