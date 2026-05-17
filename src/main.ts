@@ -2288,7 +2288,29 @@ async function main(args: string[]): Promise<number> {
     // Aria snapshots are the visionless-AI equivalent — a compact
     // semantic tree an LLM can reason about without pixel input.
     if (step.kind === 'screenshot') {
-      const base = `${String(i + 1).padStart(2, '0')}-${step.label || 'shot'}`;
+      // T75 cycle (#640 owner directive 2026-05-17): screenshot
+      // filenames encode the {viewport-class × color-scheme}
+      // matrix coordinates so multi-journey runs (mobile + tablet
+      // + desktop × light + dark) are side-by-side comparable in
+      // the artifact directory without sidecar lookup. Also makes
+      // the visual-diff baseline directory self-documenting:
+      //   01-hero.mobile.dark.png
+      //   01-hero.desktop.light.png
+      // share a stem so a `diff -r` over the runs/ tree groups
+      // them by step number naturally.
+      //
+      // viewport-class: < 600 → mobile, < 1024 → tablet, else desktop.
+      // color-scheme: from contextOpts.colorScheme (default 'light').
+      const vpClass =
+        viewport.w < 600 ? 'mobile'
+        : viewport.w < 1024 ? 'tablet'
+        : 'desktop';
+      const themeTag =
+        contextOpts.colorScheme === 'dark' ? 'dark'
+        : contextOpts.colorScheme === 'no-preference' ? 'no-pref'
+        : 'light';
+      const matrixTag = `${vpClass}.${themeTag}`;
+      const base = `${String(i + 1).padStart(2, '0')}-${step.label || 'shot'}.${matrixTag}`;
       const imgPath = join(outDir, `${base}.png`);
       const ariaPath = join(outDir, `${base}.aria.txt`);
       try { await page.screenshot({ path: imgPath, fullPage: true }); } catch { /* silent */ }
