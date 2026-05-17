@@ -47,6 +47,7 @@ pub mod css_health;
 pub mod doc_title;
 pub mod document_policy;
 pub mod favicon;
+pub mod font_loading;
 pub mod form_labels;
 pub mod heading_order;
 pub mod hsts;
