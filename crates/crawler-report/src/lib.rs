@@ -100,6 +100,16 @@ pub enum EventKind {
     /// hsts detector — Strict-Transport-Security response header.
     /// First detector in the response-header batch (cycle 2026-05-17).
     Hsts,
+    /// referrerPolicy detector — Referrer-Policy response header.
+    ReferrerPolicy,
+    /// xFrameOptions detector — X-Frame-Options response header.
+    XFrameOptions,
+    /// permissionsPolicy detector — Permissions-Policy response header.
+    PermissionsPolicy,
+    /// varyHeader detector — Vary response header correctness.
+    VaryHeader,
+    /// contentSecurityPolicy detector — full CSP audit.
+    ContentSecurityPolicy,
 }
 
 /// Severity of a finding-bucketed event (cssHealth / uiOverflow

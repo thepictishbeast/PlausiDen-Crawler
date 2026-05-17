@@ -50,6 +50,7 @@ use chromiumoxide::cdp::js_protocol::runtime::{
     EnableParams as RuntimeEnable, EventConsoleApiCalled, EventExceptionThrown,
 };
 use clap::Parser;
+use crawler_detectors::content_security_policy::{build_csp_snapshot, detect_csp_issues};
 use crawler_detectors::css_health::{
     brace_counts_js, detect_css_health_issues, split_close_braces, BraceCountsRaw, ComputedBody,
     ComputedHtml, CssHealthSnapshot, StylesheetObservation, APPLIED_RULE_COUNT_JS,
@@ -67,8 +68,14 @@ use crawler_detectors::heading_order::{
 use crawler_detectors::hsts::{build_hsts_snapshot, detect_hsts_issues};
 use crawler_detectors::html_lang::{detect_html_lang_issues, HtmlLangSnapshot, HTML_LANG_JS};
 use crawler_detectors::link_text::{detect_link_text_issues, LinkTextSnapshot, LINK_TEXT_JS};
+use crawler_detectors::permissions_policy::{
+    build_permissions_policy_snapshot, detect_permissions_policy_issues,
+};
 use crawler_detectors::placeholder_text::{
     detect_placeholder_text_issues, PlaceholderTextSnapshot, PLACEHOLDER_TEXT_DOM_CAPTURE_JS,
+};
+use crawler_detectors::referrer_policy::{
+    build_referrer_policy_snapshot, detect_referrer_policy_issues,
 };
 use crawler_detectors::runtime_contrast::{
     detect_runtime_contrast_issues, RuntimeContrastSnapshot, RUNTIME_CONTRAST_JS,
@@ -89,10 +96,14 @@ use crawler_detectors::tap_targets::{
 use crawler_detectors::ui_overflow::{
     detect_ui_overflow_issues, Severity as UiSeverity, UiOverflowSnapshot, UI_OVERFLOW_JS,
 };
+use crawler_detectors::vary_header::{build_vary_snapshot, detect_vary_issues};
 use crawler_detectors::viewport_meta::{
     detect_viewport_meta_issues, ViewportMetaSnapshot, VIEWPORT_META_JS,
 };
 use crawler_detectors::web_vitals::{classify, RawVitals, COLLECT_JS, WIRE_CALLBACKS_JS};
+use crawler_detectors::x_frame_options::{
+    build_x_frame_options_snapshot, detect_x_frame_options_issues,
+};
 use crawler_detectors::{AxisFinding, AxisSeverity};
 use crawler_journey::Step;
 use crawler_report::{
@@ -459,6 +470,23 @@ async fn run() -> Result<ExitCode> {
             let cur_url = page.url().await.ok().flatten().unwrap_or_default();
             if let Err(e) = capture_hsts(&cur_url, &network, &events, started_at).await {
                 tracing::debug!("hsts snapshot failed: {e}");
+            }
+            if let Err(e) = capture_referrer_policy(&cur_url, &network, &events, started_at).await {
+                tracing::debug!("referrer_policy snapshot failed: {e}");
+            }
+            if let Err(e) = capture_x_frame_options(&cur_url, &network, &events, started_at).await {
+                tracing::debug!("x_frame_options snapshot failed: {e}");
+            }
+            if let Err(e) =
+                capture_permissions_policy(&cur_url, &network, &events, started_at).await
+            {
+                tracing::debug!("permissions_policy snapshot failed: {e}");
+            }
+            if let Err(e) = capture_vary(&cur_url, &network, &events, started_at).await {
+                tracing::debug!("vary snapshot failed: {e}");
+            }
+            if let Err(e) = capture_csp(&cur_url, &network, &events, started_at).await {
+                tracing::debug!("csp snapshot failed: {e}");
             }
             if let Err(e) = capture_css_health(&page, &events, &network, started_at).await {
                 tracing::debug!("css_health snapshot failed: {e}");
@@ -923,23 +951,135 @@ async fn capture_hsts(
     events: &Arc<Mutex<Vec<CapturedEvent>>>,
     started_at: Instant,
 ) -> Result<()> {
-    let headers: Vec<(String, String)> = {
-        let net = network.lock().await;
-        net.get(page_url)
-            .map(|obs| {
-                obs.headers
-                    .iter()
-                    .map(|(k, v)| (k.clone(), v.clone()))
-                    .collect()
-            })
-            .unwrap_or_default()
-    };
-    let snap = build_hsts_snapshot(page_url, headers);
+    let headers = page_headers_btreemap(page_url, network).await;
+    let snap = build_hsts_snapshot(
+        page_url,
+        headers.iter().map(|(k, v)| (k.clone(), v.clone())),
+    );
     let findings = detect_hsts_issues(&snap);
     push_axis_findings(
         events,
         findings,
         EventKind::Hsts,
+        started_at.elapsed().as_millis() as u64,
+    )
+    .await;
+    Ok(())
+}
+
+/// T75 helper: fetch the lowercased-header BTreeMap for the top-level
+/// page URL. Empty map if the URL hasn't been observed by the CDP
+/// network listener yet (race-safe).
+async fn page_headers_btreemap(
+    page_url: &str,
+    network: &crate::cdp_raw::NetworkObservations,
+) -> std::collections::BTreeMap<String, String> {
+    let net = network.lock().await;
+    net.get(page_url)
+        .map(|obs| obs.headers.clone())
+        .unwrap_or_default()
+}
+
+/// T75 batch wiring (2026-05-17): referrerPolicy.
+async fn capture_referrer_policy(
+    page_url: &str,
+    network: &crate::cdp_raw::NetworkObservations,
+    events: &Arc<Mutex<Vec<CapturedEvent>>>,
+    started_at: Instant,
+) -> Result<()> {
+    let headers = page_headers_btreemap(page_url, network).await;
+    let snap = build_referrer_policy_snapshot(
+        page_url,
+        headers.iter().map(|(k, v)| (k.clone(), v.clone())),
+    );
+    let findings = detect_referrer_policy_issues(&snap);
+    push_axis_findings(
+        events,
+        findings,
+        EventKind::ReferrerPolicy,
+        started_at.elapsed().as_millis() as u64,
+    )
+    .await;
+    Ok(())
+}
+
+/// T75 batch wiring (2026-05-17): xFrameOptions.
+async fn capture_x_frame_options(
+    page_url: &str,
+    network: &crate::cdp_raw::NetworkObservations,
+    events: &Arc<Mutex<Vec<CapturedEvent>>>,
+    started_at: Instant,
+) -> Result<()> {
+    let headers = page_headers_btreemap(page_url, network).await;
+    let snap = build_x_frame_options_snapshot(
+        page_url,
+        headers.iter().map(|(k, v)| (k.clone(), v.clone())),
+    );
+    let findings = detect_x_frame_options_issues(&snap);
+    push_axis_findings(
+        events,
+        findings,
+        EventKind::XFrameOptions,
+        started_at.elapsed().as_millis() as u64,
+    )
+    .await;
+    Ok(())
+}
+
+/// T75 batch wiring (2026-05-17): permissionsPolicy.
+async fn capture_permissions_policy(
+    page_url: &str,
+    network: &crate::cdp_raw::NetworkObservations,
+    events: &Arc<Mutex<Vec<CapturedEvent>>>,
+    started_at: Instant,
+) -> Result<()> {
+    let headers = page_headers_btreemap(page_url, network).await;
+    let snap = build_permissions_policy_snapshot(page_url, &headers);
+    let findings = detect_permissions_policy_issues(&snap);
+    push_axis_findings(
+        events,
+        findings,
+        EventKind::PermissionsPolicy,
+        started_at.elapsed().as_millis() as u64,
+    )
+    .await;
+    Ok(())
+}
+
+/// T75 batch wiring (2026-05-17): varyHeader.
+async fn capture_vary(
+    page_url: &str,
+    network: &crate::cdp_raw::NetworkObservations,
+    events: &Arc<Mutex<Vec<CapturedEvent>>>,
+    started_at: Instant,
+) -> Result<()> {
+    let headers = page_headers_btreemap(page_url, network).await;
+    let snap = build_vary_snapshot(page_url, &headers);
+    let findings = detect_vary_issues(&snap);
+    push_axis_findings(
+        events,
+        findings,
+        EventKind::VaryHeader,
+        started_at.elapsed().as_millis() as u64,
+    )
+    .await;
+    Ok(())
+}
+
+/// T75 batch wiring (2026-05-17): contentSecurityPolicy.
+async fn capture_csp(
+    page_url: &str,
+    network: &crate::cdp_raw::NetworkObservations,
+    events: &Arc<Mutex<Vec<CapturedEvent>>>,
+    started_at: Instant,
+) -> Result<()> {
+    let headers = page_headers_btreemap(page_url, network).await;
+    let snap = build_csp_snapshot(page_url, &headers);
+    let findings = detect_csp_issues(&snap);
+    push_axis_findings(
+        events,
+        findings,
+        EventKind::ContentSecurityPolicy,
         started_at.elapsed().as_millis() as u64,
     )
     .await;
