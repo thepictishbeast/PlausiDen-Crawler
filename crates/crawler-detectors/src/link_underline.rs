@@ -148,6 +148,11 @@ pub struct LinkUnderlineSnapshot {
     pub candidates: Vec<CapturedColorOnlyLink>,
 }
 
+/// Pure detector: snapshot → findings. Flags inline `<a>` elements
+/// inside body text that have neither underline NOR a sufficient
+/// colour delta from surrounding text — they'd be indistinguishable
+/// from non-link copy for users who don't see hover state
+/// (WCAG 1.4.1 Use of Color).
 #[must_use]
 pub fn detect_link_underline_issues(snap: &LinkUnderlineSnapshot) -> Vec<crate::AxisFinding> {
     if snap.candidates.is_empty() {

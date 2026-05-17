@@ -77,6 +77,9 @@ fn looks_like_bcp47(value: &str) -> bool {
     true
 }
 
+/// Pure detector: snapshot → findings. Flags missing / empty /
+/// malformed `<html lang="…">` per WCAG 3.1.1 Language of Page.
+/// Screen readers need this to pick the right pronunciation engine.
 #[must_use]
 pub fn detect_html_lang_issues(snap: &HtmlLangSnapshot) -> Vec<crate::AxisFinding> {
     let mut out = Vec::<crate::AxisFinding>::new();

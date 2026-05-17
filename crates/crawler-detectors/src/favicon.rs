@@ -51,6 +51,9 @@ pub struct FaviconSnapshot {
     pub rel_values: Vec<String>,
 }
 
+/// Pure detector: snapshot → findings. Flags missing favicon
+/// declarations or favicons that fail to load (Network 404 /
+/// MIME mismatch) — small but operator-visible in browser tabs.
 #[must_use]
 pub fn detect_favicon_issues(snap: &FaviconSnapshot) -> Vec<crate::AxisFinding> {
     if snap.icon_link_count > 0 {

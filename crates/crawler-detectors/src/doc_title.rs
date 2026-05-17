@@ -52,6 +52,9 @@ const GENERIC_TITLES: &[&str] = &[
 const TITLE_TOO_SHORT_MAX: usize = 2;
 const TITLE_TOO_LONG_MIN: usize = 70;
 
+/// Pure detector: snapshot → findings. Flags missing / empty /
+/// duplicate `<title>` and titles that don't convey the page's
+/// purpose (WCAG 2.4.2 Page Titled).
 #[must_use]
 pub fn detect_doc_title_issues(snap: &DocTitleSnapshot) -> Vec<crate::AxisFinding> {
     let mut out = Vec::<crate::AxisFinding>::new();

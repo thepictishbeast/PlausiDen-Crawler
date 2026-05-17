@@ -86,6 +86,10 @@ pub struct SkipLinkSnapshot {
     pub permanently_hidden: bool,
 }
 
+/// Pure detector: snapshot → findings. Flags pages missing a
+/// "Skip to main content" link (WCAG 2.4.1 Bypass Blocks). The
+/// first focusable element in the tab order should let keyboard
+/// users jump past repeated nav.
 #[must_use]
 pub fn detect_skip_link_issues(snap: &SkipLinkSnapshot) -> Vec<crate::AxisFinding> {
     let mut out = Vec::<crate::AxisFinding>::new();

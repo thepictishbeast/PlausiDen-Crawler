@@ -125,6 +125,10 @@ pub struct MixedContentSnapshot {
     pub assets: Vec<CapturedMixedAsset>,
 }
 
+/// Pure detector: snapshot → findings. Flags HTTPS pages loading
+/// HTTP subresources (active or passive). Browsers block active
+/// mixed content; passive surfaces a warning. Either is a
+/// SECURITY regression.
 #[must_use]
 pub fn detect_mixed_content_issues(snap: &MixedContentSnapshot) -> Vec<crate::AxisFinding> {
     if !snap.page_is_https {

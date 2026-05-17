@@ -241,6 +241,9 @@ fn classify_field(field: &CapturedAutocompleteField) -> &'static str {
     "other"
 }
 
+/// Pure detector: snapshot → findings. Flags form inputs missing
+/// `autocomplete` attributes (or carrying the wrong values for
+/// the input type) per WCAG 2.1 Input Purposes.
 #[must_use]
 pub fn detect_autocomplete_issues(snap: &AutocompleteSnapshot) -> Vec<crate::AxisFinding> {
     let mut missing_cred = Vec::<&CapturedAutocompleteField>::new();

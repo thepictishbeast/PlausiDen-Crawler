@@ -93,6 +93,10 @@ pub struct OutboundLinksSnapshot {
     pub links: Vec<CapturedOutboundLink>,
 }
 
+/// Pure detector: snapshot → findings. Flags cross-origin `<a
+/// target="_blank">` without `rel="noopener noreferrer"` — the
+/// classic tab-nabbing + referer-leak SECURITY issue (covered by
+/// MDN's "secure-by-default" guidance + OWASP A04 Insecure Design).
 #[must_use]
 pub fn detect_outbound_link_issues(snap: &OutboundLinksSnapshot) -> Vec<crate::AxisFinding> {
     let mut tabnab = Vec::<&CapturedOutboundLink>::new();

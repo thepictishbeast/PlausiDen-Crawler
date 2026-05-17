@@ -37,6 +37,10 @@ pub struct MetaDescriptionSnapshot {
 const TOO_SHORT_MAX: usize = 50;
 const TOO_LONG_MIN: usize = 160;
 
+/// Pure detector: snapshot → findings. Flags missing / empty /
+/// over-long `<meta name="description">` — search engines and
+/// social previews truncate around 155–160 chars, so longer
+/// descriptions get awkwardly cut.
 #[must_use]
 pub fn detect_meta_description_issues(snap: &MetaDescriptionSnapshot) -> Vec<crate::AxisFinding> {
     let mut out = Vec::<crate::AxisFinding>::new();
