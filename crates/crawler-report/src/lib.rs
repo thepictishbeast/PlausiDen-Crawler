@@ -150,6 +150,8 @@ pub enum EventKind {
     /// crossPageMetaDescription detector — duplicate meta descriptions
     /// across pages (fires at journey end).
     CrossPageMetaDescription,
+    /// fontLoading detector — `@font-face` `font-display` declarations.
+    FontLoading,
 }
 
 /// Severity of a finding-bucketed event (cssHealth / uiOverflow

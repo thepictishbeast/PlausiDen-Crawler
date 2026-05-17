@@ -80,6 +80,7 @@ use crawler_detectors::document_policy::{
     build_document_policy_snapshot, detect_document_policy_issues,
 };
 use crawler_detectors::favicon::{detect_favicon_issues, FaviconSnapshot, FAVICON_JS};
+use crawler_detectors::font_loading::{detect_font_loading_issues, FontLoadingSnapshot};
 use crawler_detectors::form_labels::{
     detect_form_label_issues, FormLabelsSnapshot, FORM_LABELS_JS,
 };
@@ -593,6 +594,9 @@ async fn run() -> Result<ExitCode> {
             }
             if let Err(e) = capture_sri(&page, &events, started_at).await {
                 tracing::debug!("sri snapshot failed: {e}");
+            }
+            if let Err(e) = capture_font_loading(&page, &events, started_at).await {
+                tracing::debug!("font_loading snapshot failed: {e}");
             }
             // T75 cross-page accumulation (2026-05-17).
             if let Err(e) = record_cross_page_state(
@@ -1585,6 +1589,66 @@ async fn capture_sri(
         events,
         findings,
         EventKind::Sri,
+        started_at.elapsed().as_millis() as u64,
+    )
+    .await;
+    Ok(())
+}
+
+/// T75 wiring (2026-05-17): fontLoading. Walks document.styleSheets
+/// in the browser, filters to CSSFontFaceRule, extracts family +
+/// font-display + sheet href. cross-origin sheets that throw on
+/// cssRules access are counted as `inaccessibleSheetCount` so a
+/// detector with low `faces` count can distinguish "genuinely clean"
+/// from "we couldn't see".
+///
+/// The DOM-capture JS lives here (not in the detector module)
+/// because font_loading.rs predates the per-detector JS-const
+/// convention. Migrating it into the detector module is queued —
+/// for now the JS is verified by hand and the test surface in the
+/// detector unit-tests covers the classifier with stub snapshots.
+const FONT_LOADING_DOM_CAPTURE_JS: &str = r#"
+(() => {
+  const faces = [];
+  let inaccessibleSheetCount = 0;
+  const sheets = Array.from(document.styleSheets);
+  for (const sheet of sheets) {
+    const sheetHref = sheet.href || '';
+    let rules = null;
+    try {
+      rules = sheet.cssRules;
+    } catch (_) {
+      inaccessibleSheetCount += 1;
+      continue;
+    }
+    if (!rules) continue;
+    for (const rule of Array.from(rules)) {
+      // CSSRule.FONT_FACE_RULE === 5
+      if (rule.type !== 5) continue;
+      const style = rule.style || {};
+      const family = (style.fontFamily || '').replace(/^["']|["']$/g, '').trim();
+      const fontDisplay = (style.fontDisplay || '').trim().toLowerCase();
+      faces.push({ family, fontDisplay, sheetHref });
+    }
+  }
+  return { pageUrl: window.location.href, inaccessibleSheetCount, faces };
+})()
+"#;
+
+async fn capture_font_loading(
+    page: &chromiumoxide::Page,
+    events: &Arc<Mutex<Vec<CapturedEvent>>>,
+    started_at: Instant,
+) -> Result<()> {
+    let result = page.evaluate(FONT_LOADING_DOM_CAPTURE_JS).await?;
+    let snap: FontLoadingSnapshot = result
+        .into_value()
+        .context("deserialize fontLoading snapshot")?;
+    let findings = detect_font_loading_issues(&snap);
+    push_axis_findings(
+        events,
+        findings,
+        EventKind::FontLoading,
         started_at.elapsed().as_millis() as u64,
     )
     .await;
