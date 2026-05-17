@@ -243,11 +243,18 @@ async fn run() -> Result<ExitCode> {
     // and this binary is run from claude-code as root. Future
     // hardening: detect uid != 0 and only set when needed (or
     // require an explicit `--allow-no-sandbox` flag).
-    let config = BrowserConfig::builder()
-        .no_sandbox()
+    //
+    // T75 (2026-05-17): honor --no-headless. When the operator
+    // passes `--no-headless` the crawler now opens a real browser
+    // window for visual debug. Default remains headless (matches
+    // the chromiumoxide 0.9 default of HeadlessMode::True).
+    let mut builder = BrowserConfig::builder().no_sandbox();
+    if !args.headless {
+        builder = builder.with_head();
+    }
+    let config = builder
         .build()
         .map_err(|e| anyhow::anyhow!("BrowserConfig: {e}"))?;
-    let _ = args.headless; // 0.9 is headless by default; --no-headless TBD next tick
 
     let (mut browser, mut handler) = Browser::launch(config)
         .await
