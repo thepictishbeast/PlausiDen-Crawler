@@ -50,6 +50,9 @@ use chromiumoxide::cdp::js_protocol::runtime::{
     EnableParams as RuntimeEnable, EventConsoleApiCalled, EventExceptionThrown,
 };
 use clap::Parser;
+use crawler_detectors::autocomplete::{
+    detect_autocomplete_issues, AutocompleteSnapshot, AUTOCOMPLETE_JS,
+};
 use crawler_detectors::cache_control::{build_cache_control_snapshot, detect_cache_control_issues};
 use crawler_detectors::coep::{build_coep_snapshot, detect_coep_issues};
 use crawler_detectors::content_security_policy::{build_csp_snapshot, detect_csp_issues};
@@ -78,9 +81,21 @@ use crawler_detectors::hsts::{build_hsts_snapshot, detect_hsts_issues};
 use crawler_detectors::html_lang::{detect_html_lang_issues, HtmlLangSnapshot, HTML_LANG_JS};
 use crawler_detectors::info_leak_headers::{build_info_leak_snapshot, detect_info_leak_issues};
 use crawler_detectors::link_text::{detect_link_text_issues, LinkTextSnapshot, LINK_TEXT_JS};
+use crawler_detectors::link_underline::{
+    detect_link_underline_issues, LinkUnderlineSnapshot, LINK_UNDERLINE_JS,
+};
+use crawler_detectors::meta_description::{
+    detect_meta_description_issues, MetaDescriptionSnapshot, META_DESCRIPTION_JS,
+};
+use crawler_detectors::mixed_content::{
+    detect_mixed_content_issues, MixedContentSnapshot, MIXED_CONTENT_JS,
+};
 use crawler_detectors::network_error_logging::{build_nel_snapshot, detect_nel_issues};
 use crawler_detectors::origin_agent_cluster::{
     build_origin_agent_cluster_snapshot, detect_origin_agent_cluster_issues,
+};
+use crawler_detectors::outbound_links::{
+    detect_outbound_link_issues, OutboundLinksSnapshot, OUTBOUND_LINKS_JS,
 };
 use crawler_detectors::permissions_policy::{
     build_permissions_policy_snapshot, detect_permissions_policy_issues,
@@ -541,6 +556,21 @@ async fn run() -> Result<ExitCode> {
             }
             if let Err(e) = capture_speculation_rules(&page, &events, started_at).await {
                 tracing::debug!("speculation_rules snapshot failed: {e}");
+            }
+            if let Err(e) = capture_autocomplete(&page, &events, started_at).await {
+                tracing::debug!("autocomplete snapshot failed: {e}");
+            }
+            if let Err(e) = capture_link_underline(&page, &events, started_at).await {
+                tracing::debug!("link_underline snapshot failed: {e}");
+            }
+            if let Err(e) = capture_mixed_content(&page, &events, started_at).await {
+                tracing::debug!("mixed_content snapshot failed: {e}");
+            }
+            if let Err(e) = capture_outbound_links(&page, &events, started_at).await {
+                tracing::debug!("outbound_links snapshot failed: {e}");
+            }
+            if let Err(e) = capture_meta_description(&page, &events, started_at).await {
+                tracing::debug!("meta_description snapshot failed: {e}");
             }
             if let Err(e) = capture_css_health(&page, &events, &network, started_at).await {
                 tracing::debug!("css_health snapshot failed: {e}");
@@ -1337,6 +1367,109 @@ async fn capture_speculation_rules(
         events,
         findings,
         EventKind::SpeculationRules,
+        started_at.elapsed().as_millis() as u64,
+    )
+    .await;
+    Ok(())
+}
+
+/// T75 batch wiring: autocomplete / link_underline / mixed_content /
+/// outbound_links / meta_description — all DOM-walk detectors using
+/// the standard page.evaluate(JS_CONST) → deserialise → detect pattern.
+async fn capture_autocomplete(
+    page: &chromiumoxide::Page,
+    events: &Arc<Mutex<Vec<CapturedEvent>>>,
+    started_at: Instant,
+) -> Result<()> {
+    let result = page.evaluate(AUTOCOMPLETE_JS).await?;
+    let snap: AutocompleteSnapshot = result
+        .into_value()
+        .context("deserialize autocomplete snapshot")?;
+    let findings = detect_autocomplete_issues(&snap);
+    push_axis_findings(
+        events,
+        findings,
+        EventKind::Autocomplete,
+        started_at.elapsed().as_millis() as u64,
+    )
+    .await;
+    Ok(())
+}
+
+async fn capture_link_underline(
+    page: &chromiumoxide::Page,
+    events: &Arc<Mutex<Vec<CapturedEvent>>>,
+    started_at: Instant,
+) -> Result<()> {
+    let result = page.evaluate(LINK_UNDERLINE_JS).await?;
+    let snap: LinkUnderlineSnapshot = result
+        .into_value()
+        .context("deserialize linkUnderline snapshot")?;
+    let findings = detect_link_underline_issues(&snap);
+    push_axis_findings(
+        events,
+        findings,
+        EventKind::LinkUnderline,
+        started_at.elapsed().as_millis() as u64,
+    )
+    .await;
+    Ok(())
+}
+
+async fn capture_mixed_content(
+    page: &chromiumoxide::Page,
+    events: &Arc<Mutex<Vec<CapturedEvent>>>,
+    started_at: Instant,
+) -> Result<()> {
+    let result = page.evaluate(MIXED_CONTENT_JS).await?;
+    let snap: MixedContentSnapshot = result
+        .into_value()
+        .context("deserialize mixedContent snapshot")?;
+    let findings = detect_mixed_content_issues(&snap);
+    push_axis_findings(
+        events,
+        findings,
+        EventKind::MixedContent,
+        started_at.elapsed().as_millis() as u64,
+    )
+    .await;
+    Ok(())
+}
+
+async fn capture_outbound_links(
+    page: &chromiumoxide::Page,
+    events: &Arc<Mutex<Vec<CapturedEvent>>>,
+    started_at: Instant,
+) -> Result<()> {
+    let result = page.evaluate(OUTBOUND_LINKS_JS).await?;
+    let snap: OutboundLinksSnapshot = result
+        .into_value()
+        .context("deserialize outboundLinks snapshot")?;
+    let findings = detect_outbound_link_issues(&snap);
+    push_axis_findings(
+        events,
+        findings,
+        EventKind::OutboundLinks,
+        started_at.elapsed().as_millis() as u64,
+    )
+    .await;
+    Ok(())
+}
+
+async fn capture_meta_description(
+    page: &chromiumoxide::Page,
+    events: &Arc<Mutex<Vec<CapturedEvent>>>,
+    started_at: Instant,
+) -> Result<()> {
+    let result = page.evaluate(META_DESCRIPTION_JS).await?;
+    let snap: MetaDescriptionSnapshot = result
+        .into_value()
+        .context("deserialize metaDescription snapshot")?;
+    let findings = detect_meta_description_issues(&snap);
+    push_axis_findings(
+        events,
+        findings,
+        EventKind::MetaDescription,
         started_at.elapsed().as_millis() as u64,
     )
     .await;

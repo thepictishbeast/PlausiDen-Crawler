@@ -130,6 +130,16 @@ pub enum EventKind {
     ReportingEndpoints,
     /// speculationRules detector — speculation-rules script blocks.
     SpeculationRules,
+    /// autocomplete detector — `<input autocomplete>` quality.
+    Autocomplete,
+    /// linkUnderline detector — visible affordance for link recognition.
+    LinkUnderline,
+    /// mixedContent detector — http resources on an https page.
+    MixedContent,
+    /// outboundLinks detector — target=_blank rel=noopener integrity.
+    OutboundLinks,
+    /// metaDescription detector — `<meta name="description">` present + length.
+    MetaDescription,
 }
 
 /// Severity of a finding-bucketed event (cssHealth / uiOverflow
