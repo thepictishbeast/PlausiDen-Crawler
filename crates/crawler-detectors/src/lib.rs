@@ -42,6 +42,7 @@ use serde::{Deserialize, Serialize};
 pub mod autocomplete;
 pub mod cache_control;
 pub mod coep;
+pub mod cookie_security;
 pub mod coop;
 pub mod css_health;
 pub mod doc_title;
