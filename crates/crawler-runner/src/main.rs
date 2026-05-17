@@ -61,6 +61,14 @@ use crawler_detectors::cookie_security::{
 };
 use crawler_detectors::coop::{build_coop_snapshot, detect_coop_issues};
 use crawler_detectors::corp::{build_corp_snapshot, detect_corp_issues};
+use crawler_detectors::cross_page_meta_description::{
+    detect_cross_page_meta_description_duplicates, new_cross_page_meta_description_accumulator,
+    record_page_meta_description, CrossPageMetaDescriptionAccumulator,
+};
+use crawler_detectors::cross_page_title::{
+    detect_cross_page_title_duplicates, new_cross_page_title_accumulator, record_page_title,
+    CrossPageTitleAccumulator,
+};
 use crawler_detectors::css_health::{
     brace_counts_js, detect_css_health_issues, split_close_braces, BraceCountsRaw, ComputedBody,
     ComputedHtml, CssHealthSnapshot, StylesheetObservation, APPLIED_RULE_COUNT_JS,
@@ -261,6 +269,12 @@ async fn run() -> Result<ExitCode> {
     // error-text. T103.4.
     let network: cdp_raw::NetworkObservations =
         Arc::new(Mutex::new(std::collections::HashMap::new()));
+    // T75 (2026-05-17): per-journey cross-page accumulators. Detector
+    // calls fire at journey end (after all steps), not per-step.
+    let cross_page_title_acc: Arc<Mutex<CrossPageTitleAccumulator>> =
+        Arc::new(Mutex::new(new_cross_page_title_accumulator()));
+    let cross_page_desc_acc: Arc<Mutex<CrossPageMetaDescriptionAccumulator>> =
+        Arc::new(Mutex::new(new_cross_page_meta_description_accumulator()));
     let started_at = Instant::now();
 
     // T102.4: spawn raw-CDP capture BEFORE creating the page so
@@ -580,6 +594,17 @@ async fn run() -> Result<ExitCode> {
             if let Err(e) = capture_sri(&page, &events, started_at).await {
                 tracing::debug!("sri snapshot failed: {e}");
             }
+            // T75 cross-page accumulation (2026-05-17).
+            if let Err(e) = record_cross_page_state(
+                &page,
+                &cur_url,
+                &cross_page_title_acc,
+                &cross_page_desc_acc,
+            )
+            .await
+            {
+                tracing::debug!("cross_page_state record failed: {e}");
+            }
             if let Err(e) = capture_css_health(&page, &events, &network, started_at).await {
                 tracing::debug!("css_health snapshot failed: {e}");
             }
@@ -592,6 +617,32 @@ async fn run() -> Result<ExitCode> {
     // failure here doesn't fail the run.
     if let Err(e) = capture_web_vitals(&page, &events, started_at).await {
         tracing::debug!("web_vitals collect failed: {e}");
+    }
+
+    // T75 cross-page detector fire (2026-05-17). Per-journey: walks
+    // the accumulators across all steps and emits any duplicate-
+    // title / duplicate-description findings.
+    {
+        let title_acc = cross_page_title_acc.lock().await;
+        let findings = detect_cross_page_title_duplicates(&title_acc);
+        push_axis_findings(
+            &events,
+            findings,
+            EventKind::CrossPageTitle,
+            started_at.elapsed().as_millis() as u64,
+        )
+        .await;
+    }
+    {
+        let desc_acc = cross_page_desc_acc.lock().await;
+        let findings = detect_cross_page_meta_description_duplicates(&desc_acc);
+        push_axis_findings(
+            &events,
+            findings,
+            EventKind::CrossPageMetaDescription,
+            started_at.elapsed().as_millis() as u64,
+        )
+        .await;
     }
 
     let duration_ms = run_start.elapsed().as_millis() as u64;
@@ -1537,6 +1588,43 @@ async fn capture_sri(
         started_at.elapsed().as_millis() as u64,
     )
     .await;
+    Ok(())
+}
+
+/// T75 batch wiring (2026-05-17): cross-page state accumulation.
+/// One page.evaluate that captures `document.title` + the
+/// `<meta name="description">` content, then records BOTH into
+/// their respective journey-level accumulators. The
+/// `detect_cross_page_*_duplicates` calls fire at journey end (in
+/// `run()`), not per-step.
+async fn record_cross_page_state(
+    page: &chromiumoxide::Page,
+    page_url: &str,
+    title_acc: &Arc<Mutex<CrossPageTitleAccumulator>>,
+    desc_acc: &Arc<Mutex<CrossPageMetaDescriptionAccumulator>>,
+) -> Result<()> {
+    let v = page
+        .evaluate(
+            "(() => ({ title: document.title || '', \
+              description: (document.querySelector('meta[name=\"description\"]') || {}).content || '' }))()",
+        )
+        .await?;
+    #[derive(serde::Deserialize)]
+    struct Pair {
+        title: String,
+        description: String,
+    }
+    let pair: Pair = v
+        .into_value()
+        .context("deserialize cross-page title+description pair")?;
+    {
+        let mut acc = title_acc.lock().await;
+        record_page_title(&mut acc, page_url, &pair.title);
+    }
+    {
+        let mut acc = desc_acc.lock().await;
+        record_page_meta_description(&mut acc, page_url, &pair.description);
+    }
     Ok(())
 }
 

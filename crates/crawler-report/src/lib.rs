@@ -144,6 +144,12 @@ pub enum EventKind {
     Corp,
     /// sri detector — Subresource Integrity on cross-origin scripts/styles.
     Sri,
+    /// crossPageTitle detector — duplicate `<title>` across pages in
+    /// the same journey (fires at journey end).
+    CrossPageTitle,
+    /// crossPageMetaDescription detector — duplicate meta descriptions
+    /// across pages (fires at journey end).
+    CrossPageMetaDescription,
 }
 
 /// Severity of a finding-bucketed event (cssHealth / uiOverflow
