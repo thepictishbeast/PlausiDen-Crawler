@@ -76,6 +76,7 @@ pub mod sri;
 pub mod tap_targets;
 pub mod ui_overflow;
 pub(crate) mod url_helpers;
+pub mod vary_header;
 pub mod viewport_meta;
 pub mod web_vitals;
 pub mod x_frame_options;
