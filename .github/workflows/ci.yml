@@ -20,7 +20,7 @@ concurrency:
 jobs:
   typescript:
     name: bun install + test + tsc
-    runs-on: [self-hosted, linux, x64, plausiden]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: install
@@ -45,7 +45,7 @@ jobs:
 
   rust:
     name: cargo fmt + clippy + test
-    runs-on: [self-hosted, linux, x64, plausiden]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -57,7 +57,7 @@ jobs:
 
   doc:
     name: cargo doc (strict)
-    runs-on: [self-hosted, linux, x64, plausiden]
+    runs-on: ubuntu-latest
     env:
       RUSTDOCFLAGS: "-D warnings"
     steps:
