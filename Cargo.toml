@@ -26,6 +26,10 @@ members = [
     # T58: typed debug-capture metadata + HAR shape. Runner does
     # the IO; this crate is the cross-runner contract.
     "crates/crawler-debug-capture",
+    # T59: typed cross-browser × device matrix config + result
+    # grid. Runner instantiates the real engines; this crate is
+    # the cross-runner contract.
+    "crates/crawler-browser-matrix",
 ]
 
 [workspace.package]
