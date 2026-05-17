@@ -2206,19 +2206,23 @@ async fn run_step(
             page.find_element(selector).await?.click().await?;
         }
         Step::Press { key, selector, .. } => {
-            // chromiumoxide: simulate via keyboard input on the
-            // selected element (fall back to the page if no
-            // selector is given). This is a partial impl; full
-            // key dispatch matrix lands in next tick.
-            let _ = selector;
-            // The chromiumoxide Page exposes keyboard helpers
-            // through CDP `Input.dispatchKeyEvent`. Wrap in a
-            // simple call for now.
-            let key_text = key.clone();
-            let _ = page.evaluate(format!(
-                "document.activeElement && document.activeElement.dispatchEvent(new KeyboardEvent('keydown', {{ key: '{}', bubbles: true }}))",
-                escape_js_string(&key_text)
-            ).as_str()).await?;
+            // T75 (2026-05-17): replaced the synthetic-JS
+            // KeyboardEvent dispatch with chromiumoxide's
+            // `press_key`, which routes through CDP's real
+            // `Input.dispatchKeyEvent`. The synthetic-event hack
+            // didn't trigger browser default actions (End scrolled
+            // nothing, Tab didn't change focus, Enter didn't submit
+            // forms); the real dispatch does.
+            //
+            // Press the key against an element (Element::press_key
+            // routes through DispatchKeyEvent). If a selector is
+            // supplied, focus that element; otherwise fall back to
+            // `body` so the key still dispatches into the document.
+            let target = match selector {
+                Some(sel) => page.find_element(sel.as_str()).await?,
+                None => page.find_element("body").await?,
+            };
+            target.press_key(key.as_str()).await?;
         }
         Step::Scroll {
             selector, position, ..
