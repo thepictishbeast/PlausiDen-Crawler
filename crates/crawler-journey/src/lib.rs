@@ -180,6 +180,34 @@ pub enum Step {
         #[serde(skip_serializing_if = "Option::is_none", default)]
         label: Option<String>,
     },
+    /// Emit an annotation into the Annotator session output (#63).
+    ///
+    /// Used by hand-authored "click here to flag this UI bug"
+    /// journeys + by the Annotator desktop shell when an operator
+    /// marks a region of a page for review. The runner captures
+    /// the screenshot + DOM-snapshot at this point and writes the
+    /// annotation alongside.
+    Annotate {
+        /// One-line summary of what the operator is flagging.
+        note: String,
+        /// Operator-tagged severity (`"info"` / `"warn"` /
+        /// `"strict"`). Severity is a free-form string at the wire
+        /// layer because every site uses its own taxonomy; the
+        /// Annotator + Forge bridge maps to typed severity.
+        #[serde(skip_serializing_if = "Option::is_none", default)]
+        severity: Option<String>,
+        /// Free-form tags (e.g. `["a11y", "contrast"]`).
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        tags: Vec<String>,
+        /// Optional CSS selector pointing at the target element.
+        /// When None, the annotation targets the whole page at
+        /// this step.
+        #[serde(skip_serializing_if = "Option::is_none", default)]
+        target: Option<String>,
+        /// Optional label.
+        #[serde(skip_serializing_if = "Option::is_none", default)]
+        label: Option<String>,
+    },
 }
 
 impl Step {
@@ -197,6 +225,7 @@ impl Step {
             Self::WaitForSelector { .. } => "waitForSelector",
             Self::Discover { .. } => "discover",
             Self::Probe { .. } => "probe",
+            Self::Annotate { .. } => "annotate",
         }
     }
 
@@ -211,7 +240,8 @@ impl Step {
             | Self::Scroll { label, .. }
             | Self::WaitForSelector { label, .. }
             | Self::Discover { label, .. }
-            | Self::Probe { label, .. } => label.as_deref(),
+            | Self::Probe { label, .. }
+            | Self::Annotate { label, .. } => label.as_deref(),
             Self::Screenshot { label } => Some(label.as_str()),
         }
     }
@@ -495,6 +525,16 @@ mod tests {
             ),
             ("discover", Step::Discover { label: None }),
             ("probe", Step::Probe { label: None }),
+            (
+                "annotate",
+                Step::Annotate {
+                    note: "found a thing".into(),
+                    severity: Some("warn".into()),
+                    tags: vec!["a11y".into()],
+                    target: Some(".loom-cta".into()),
+                    label: None,
+                },
+            ),
         ];
         for (expected_kind, step) in cases {
             assert_eq!(step.kind(), *expected_kind);
@@ -505,6 +545,57 @@ mod tests {
             );
             let back: Step = serde_json::from_str(&json).expect("de");
             assert_eq!(step, &back, "round-trip mismatch for {expected_kind}");
+        }
+    }
+
+    #[test]
+    fn parse_annotate_step() {
+        let json = r##"{
+            "kind": "annotate",
+            "note": "low contrast on CTA button",
+            "severity": "strict",
+            "tags": ["a11y", "contrast"],
+            "target": ".loom-cta",
+            "label": "cta-bug"
+        }"##;
+        let s: Step = serde_json::from_str(json).expect("parse");
+        match s {
+            Step::Annotate {
+                note,
+                severity,
+                tags,
+                target,
+                label,
+            } => {
+                assert_eq!(note, "low contrast on CTA button");
+                assert_eq!(severity.as_deref(), Some("strict"));
+                assert_eq!(tags, vec!["a11y".to_string(), "contrast".to_string()]);
+                assert_eq!(target.as_deref(), Some(".loom-cta"));
+                assert_eq!(label.as_deref(), Some("cta-bug"));
+            }
+            other => unreachable!("wrong variant: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn annotate_minimal_shape_only_requires_note() {
+        let json = r#"{ "kind": "annotate", "note": "just a flag" }"#;
+        let s: Step = serde_json::from_str(json).expect("parse");
+        match s {
+            Step::Annotate {
+                note,
+                severity,
+                tags,
+                target,
+                label,
+            } => {
+                assert_eq!(note, "just a flag");
+                assert!(severity.is_none());
+                assert!(tags.is_empty());
+                assert!(target.is_none());
+                assert!(label.is_none());
+            }
+            other => unreachable!("wrong variant: {other:?}"),
         }
     }
 
