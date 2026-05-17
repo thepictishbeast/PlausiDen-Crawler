@@ -58,6 +58,7 @@ pub mod heading_order;
 pub mod hsts;
 pub mod html_lang;
 pub mod info_leak_headers;
+pub mod inline_script;
 pub mod link_text;
 pub mod link_underline;
 pub mod meta_description;
