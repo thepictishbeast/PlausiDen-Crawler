@@ -21,6 +21,11 @@ jobs:
   typescript:
     name: bun install + test + tsc
     runs-on: ubuntu-latest
+
+    env:
+      RUST_BACKTRACE: 1
+      RUST_LOG: info
+      CARGO_TERM_COLOR: always
     steps:
       - uses: actions/checkout@v4
       - name: install
@@ -46,19 +51,29 @@ jobs:
   rust:
     name: cargo fmt + clippy + test
     runs-on: ubuntu-latest
+
+    env:
+      RUST_BACKTRACE: 1
+      RUST_LOG: info
+      CARGO_TERM_COLOR: always
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - run: cargo fmt --all -- --check
-      - run: cargo clippy --workspace --all-targets --locked
-      - run: cargo test --workspace --locked
+      - run: cargo fmt --all -- --check --verbose
+      - run: cargo clippy --workspace --all-targets --locked --verbose
+      - run: cargo test --workspace --locked --verbose -- --nocapture
 
   doc:
     name: cargo doc (strict)
     runs-on: ubuntu-latest
+
+    env:
+      RUST_BACKTRACE: 1
+      RUST_LOG: info
+      CARGO_TERM_COLOR: always
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo doc --workspace --no-deps --locked
+      - run: cargo doc --workspace --no-deps --locked --verbose
