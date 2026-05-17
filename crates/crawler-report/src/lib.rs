@@ -110,6 +110,20 @@ pub enum EventKind {
     VaryHeader,
     /// contentSecurityPolicy detector — full CSP audit.
     ContentSecurityPolicy,
+    /// cookieSecurity detector — Secure / HttpOnly / SameSite.
+    CookieSecurity,
+    /// coep detector — Cross-Origin-Embedder-Policy.
+    Coep,
+    /// coop detector — Cross-Origin-Opener-Policy.
+    Coop,
+    /// documentPolicy detector — Document-Policy header.
+    DocumentPolicy,
+    /// infoLeakHeaders detector — Server / X-Powered-By etc.
+    InfoLeakHeaders,
+    /// originAgentCluster detector — Origin-Agent-Cluster header.
+    OriginAgentCluster,
+    /// cacheControl detector — Cache-Control directive sanity.
+    CacheControl,
 }
 
 /// Severity of a finding-bucketed event (cssHealth / uiOverflow

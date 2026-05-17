@@ -50,7 +50,13 @@ use chromiumoxide::cdp::js_protocol::runtime::{
     EnableParams as RuntimeEnable, EventConsoleApiCalled, EventExceptionThrown,
 };
 use clap::Parser;
+use crawler_detectors::cache_control::{build_cache_control_snapshot, detect_cache_control_issues};
+use crawler_detectors::coep::{build_coep_snapshot, detect_coep_issues};
 use crawler_detectors::content_security_policy::{build_csp_snapshot, detect_csp_issues};
+use crawler_detectors::cookie_security::{
+    build_cookie_security_snapshot, detect_cookie_security_issues,
+};
+use crawler_detectors::coop::{build_coop_snapshot, detect_coop_issues};
 use crawler_detectors::css_health::{
     brace_counts_js, detect_css_health_issues, split_close_braces, BraceCountsRaw, ComputedBody,
     ComputedHtml, CssHealthSnapshot, StylesheetObservation, APPLIED_RULE_COUNT_JS,
@@ -58,6 +64,9 @@ use crawler_detectors::css_health::{
     INLINE_STYLE_BLOCK_COUNT_JS,
 };
 use crawler_detectors::doc_title::{detect_doc_title_issues, DocTitleSnapshot, DOC_TITLE_JS};
+use crawler_detectors::document_policy::{
+    build_document_policy_snapshot, detect_document_policy_issues,
+};
 use crawler_detectors::favicon::{detect_favicon_issues, FaviconSnapshot, FAVICON_JS};
 use crawler_detectors::form_labels::{
     detect_form_label_issues, FormLabelsSnapshot, FORM_LABELS_JS,
@@ -67,7 +76,11 @@ use crawler_detectors::heading_order::{
 };
 use crawler_detectors::hsts::{build_hsts_snapshot, detect_hsts_issues};
 use crawler_detectors::html_lang::{detect_html_lang_issues, HtmlLangSnapshot, HTML_LANG_JS};
+use crawler_detectors::info_leak_headers::{build_info_leak_snapshot, detect_info_leak_issues};
 use crawler_detectors::link_text::{detect_link_text_issues, LinkTextSnapshot, LINK_TEXT_JS};
+use crawler_detectors::origin_agent_cluster::{
+    build_origin_agent_cluster_snapshot, detect_origin_agent_cluster_issues,
+};
 use crawler_detectors::permissions_policy::{
     build_permissions_policy_snapshot, detect_permissions_policy_issues,
 };
@@ -487,6 +500,29 @@ async fn run() -> Result<ExitCode> {
             }
             if let Err(e) = capture_csp(&cur_url, &network, &events, started_at).await {
                 tracing::debug!("csp snapshot failed: {e}");
+            }
+            if let Err(e) = capture_cookie_security(&cur_url, &network, &events, started_at).await {
+                tracing::debug!("cookie_security snapshot failed: {e}");
+            }
+            if let Err(e) = capture_coep(&cur_url, &network, &events, started_at).await {
+                tracing::debug!("coep snapshot failed: {e}");
+            }
+            if let Err(e) = capture_coop(&cur_url, &network, &events, started_at).await {
+                tracing::debug!("coop snapshot failed: {e}");
+            }
+            if let Err(e) = capture_document_policy(&cur_url, &network, &events, started_at).await {
+                tracing::debug!("document_policy snapshot failed: {e}");
+            }
+            if let Err(e) = capture_info_leak(&cur_url, &network, &events, started_at).await {
+                tracing::debug!("info_leak snapshot failed: {e}");
+            }
+            if let Err(e) =
+                capture_origin_agent_cluster(&cur_url, &network, &events, started_at).await
+            {
+                tracing::debug!("origin_agent_cluster snapshot failed: {e}");
+            }
+            if let Err(e) = capture_cache_control(&cur_url, &network, &events, started_at).await {
+                tracing::debug!("cache_control snapshot failed: {e}");
             }
             if let Err(e) = capture_css_health(&page, &events, &network, started_at).await {
                 tracing::debug!("css_health snapshot failed: {e}");
@@ -1080,6 +1116,167 @@ async fn capture_csp(
         events,
         findings,
         EventKind::ContentSecurityPolicy,
+        started_at.elapsed().as_millis() as u64,
+    )
+    .await;
+    Ok(())
+}
+
+/// T75 batch wiring (2026-05-17): cookieSecurity.
+async fn capture_cookie_security(
+    page_url: &str,
+    network: &crate::cdp_raw::NetworkObservations,
+    events: &Arc<Mutex<Vec<CapturedEvent>>>,
+    started_at: Instant,
+) -> Result<()> {
+    let headers = page_headers_btreemap(page_url, network).await;
+    let snap = build_cookie_security_snapshot(
+        page_url,
+        headers.iter().map(|(k, v)| (k.clone(), v.clone())),
+    );
+    let findings = detect_cookie_security_issues(&snap);
+    push_axis_findings(
+        events,
+        findings,
+        EventKind::CookieSecurity,
+        started_at.elapsed().as_millis() as u64,
+    )
+    .await;
+    Ok(())
+}
+
+/// T75 batch wiring (2026-05-17): coep.
+async fn capture_coep(
+    page_url: &str,
+    network: &crate::cdp_raw::NetworkObservations,
+    events: &Arc<Mutex<Vec<CapturedEvent>>>,
+    started_at: Instant,
+) -> Result<()> {
+    let headers = page_headers_btreemap(page_url, network).await;
+    let snap = build_coep_snapshot(
+        page_url,
+        headers.iter().map(|(k, v)| (k.clone(), v.clone())),
+    );
+    let findings = detect_coep_issues(&snap);
+    push_axis_findings(
+        events,
+        findings,
+        EventKind::Coep,
+        started_at.elapsed().as_millis() as u64,
+    )
+    .await;
+    Ok(())
+}
+
+/// T75 batch wiring (2026-05-17): coop.
+async fn capture_coop(
+    page_url: &str,
+    network: &crate::cdp_raw::NetworkObservations,
+    events: &Arc<Mutex<Vec<CapturedEvent>>>,
+    started_at: Instant,
+) -> Result<()> {
+    let headers = page_headers_btreemap(page_url, network).await;
+    let snap = build_coop_snapshot(
+        page_url,
+        headers.iter().map(|(k, v)| (k.clone(), v.clone())),
+    );
+    let findings = detect_coop_issues(&snap);
+    push_axis_findings(
+        events,
+        findings,
+        EventKind::Coop,
+        started_at.elapsed().as_millis() as u64,
+    )
+    .await;
+    Ok(())
+}
+
+/// T75 batch wiring (2026-05-17): documentPolicy.
+async fn capture_document_policy(
+    page_url: &str,
+    network: &crate::cdp_raw::NetworkObservations,
+    events: &Arc<Mutex<Vec<CapturedEvent>>>,
+    started_at: Instant,
+) -> Result<()> {
+    let headers = page_headers_btreemap(page_url, network).await;
+    let snap = build_document_policy_snapshot(
+        page_url,
+        headers.iter().map(|(k, v)| (k.clone(), v.clone())),
+    );
+    let findings = detect_document_policy_issues(&snap);
+    push_axis_findings(
+        events,
+        findings,
+        EventKind::DocumentPolicy,
+        started_at.elapsed().as_millis() as u64,
+    )
+    .await;
+    Ok(())
+}
+
+/// T75 batch wiring (2026-05-17): infoLeakHeaders.
+async fn capture_info_leak(
+    page_url: &str,
+    network: &crate::cdp_raw::NetworkObservations,
+    events: &Arc<Mutex<Vec<CapturedEvent>>>,
+    started_at: Instant,
+) -> Result<()> {
+    let headers = page_headers_btreemap(page_url, network).await;
+    let snap = build_info_leak_snapshot(
+        page_url,
+        headers.iter().map(|(k, v)| (k.clone(), v.clone())),
+    );
+    let findings = detect_info_leak_issues(&snap);
+    push_axis_findings(
+        events,
+        findings,
+        EventKind::InfoLeakHeaders,
+        started_at.elapsed().as_millis() as u64,
+    )
+    .await;
+    Ok(())
+}
+
+/// T75 batch wiring (2026-05-17): originAgentCluster.
+async fn capture_origin_agent_cluster(
+    page_url: &str,
+    network: &crate::cdp_raw::NetworkObservations,
+    events: &Arc<Mutex<Vec<CapturedEvent>>>,
+    started_at: Instant,
+) -> Result<()> {
+    let headers = page_headers_btreemap(page_url, network).await;
+    let snap = build_origin_agent_cluster_snapshot(
+        page_url,
+        headers.iter().map(|(k, v)| (k.clone(), v.clone())),
+    );
+    let findings = detect_origin_agent_cluster_issues(&snap);
+    push_axis_findings(
+        events,
+        findings,
+        EventKind::OriginAgentCluster,
+        started_at.elapsed().as_millis() as u64,
+    )
+    .await;
+    Ok(())
+}
+
+/// T75 batch wiring (2026-05-17): cacheControl.
+async fn capture_cache_control(
+    page_url: &str,
+    network: &crate::cdp_raw::NetworkObservations,
+    events: &Arc<Mutex<Vec<CapturedEvent>>>,
+    started_at: Instant,
+) -> Result<()> {
+    let headers = page_headers_btreemap(page_url, network).await;
+    let snap = build_cache_control_snapshot(
+        page_url,
+        headers.iter().map(|(k, v)| (k.clone(), v.clone())),
+    );
+    let findings = detect_cache_control_issues(&snap);
+    push_axis_findings(
+        events,
+        findings,
+        EventKind::CacheControl,
         started_at.elapsed().as_millis() as u64,
     )
     .await;
