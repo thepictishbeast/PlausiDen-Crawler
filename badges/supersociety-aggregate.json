@@ -1,12 +1,17 @@
 {
-  "composite": 100,
-  "grade": "A",
-  "journeyCount": 16,
+  "composite": 75,
+  "grade": "C",
+  "journeyCount": 22,
   "perJourney": [
     {
       "name": "forge-skillshots-build",
       "composite": 100,
       "grade": "A"
+    },
+    {
+      "name": "lfi-landing-smoke",
+      "composite": 82,
+      "grade": "B"
     },
     {
       "name": "loom-edit-server",
@@ -19,18 +24,38 @@
       "grade": "A"
     },
     {
+      "name": "plausiden-smoke-mobile",
+      "composite": 81,
+      "grade": "B"
+    },
+    {
+      "name": "plausiden-smoke-tablet",
+      "composite": 81,
+      "grade": "B"
+    },
+    {
+      "name": "sacred-vote",
+      "composite": 75,
+      "grade": "C"
+    },
+    {
       "name": "sentinel-gui",
       "composite": 100,
       "grade": "A"
     },
     {
       "name": "skillshots-poc",
-      "composite": 100,
+      "composite": 90,
+      "grade": "A"
+    },
+    {
+      "name": "skillshots-poc-darkmode",
+      "composite": 98,
       "grade": "A"
     },
     {
       "name": "skillshots-poc-densities",
-      "composite": 100,
+      "composite": 99,
       "grade": "A"
     },
     {
@@ -40,37 +65,42 @@
     },
     {
       "name": "skillshots-poc-fonts",
-      "composite": 100,
+      "composite": 98,
       "grade": "A"
     },
     {
       "name": "skillshots-poc-keyboard",
-      "composite": 100,
+      "composite": 90,
       "grade": "A"
     },
     {
       "name": "skillshots-poc-mobile",
-      "composite": 100,
+      "composite": 90,
       "grade": "A"
     },
     {
       "name": "skillshots-poc-rtl",
-      "composite": 100,
+      "composite": 99,
+      "grade": "A"
+    },
+    {
+      "name": "skillshots-poc-screen-reader",
+      "composite": 90,
       "grade": "A"
     },
     {
       "name": "skillshots-poc-tablet",
-      "composite": 100,
+      "composite": 90,
       "grade": "A"
     },
     {
       "name": "skillshots-poc-themes",
-      "composite": 100,
+      "composite": 90,
       "grade": "A"
     },
     {
       "name": "skillshots-poc-throttled",
-      "composite": 100,
+      "composite": 91,
       "grade": "A"
     },
     {
@@ -80,8 +110,8 @@
     },
     {
       "name": "skillshots-poc-zoom-200",
-      "composite": 100,
-      "grade": "A"
+      "composite": 84,
+      "grade": "B"
     }
   ]
 }

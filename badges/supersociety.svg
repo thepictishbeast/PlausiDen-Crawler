@@ -1,20 +1,26 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 20" width="200" height="20" role="img" aria-label="Supersociety aggregate: grade A, 100 out of 100, across 16 journey(s) — worst-of-N">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 20" width="200" height="20" role="img" aria-label="Supersociety aggregate: grade C, 75 out of 100, across 22 journey(s) — worst-of-N">
   <title>forge-skillshots-build: A 100
+lfi-landing-smoke: B 82
 loom-edit-server: A 100
 loom-state-matrix: A 100
+plausiden-smoke-mobile: B 81
+plausiden-smoke-tablet: B 81
+sacred-vote: C 75
 sentinel-gui: A 100
-skillshots-poc: A 100
-skillshots-poc-densities: A 100
+skillshots-poc: A 90
+skillshots-poc-darkmode: A 98
+skillshots-poc-densities: A 99
 skillshots-poc-first-time: A 100
-skillshots-poc-fonts: A 100
-skillshots-poc-keyboard: A 100
-skillshots-poc-mobile: A 100
-skillshots-poc-rtl: A 100
-skillshots-poc-tablet: A 100
-skillshots-poc-themes: A 100
-skillshots-poc-throttled: A 100
+skillshots-poc-fonts: A 98
+skillshots-poc-keyboard: A 90
+skillshots-poc-mobile: A 90
+skillshots-poc-rtl: A 99
+skillshots-poc-screen-reader: A 90
+skillshots-poc-tablet: A 90
+skillshots-poc-themes: A 90
+skillshots-poc-throttled: A 91
 skillshots-poc-ultrawide: A 100
-skillshots-poc-zoom-200: A 100</title>
+skillshots-poc-zoom-200: B 84</title>
   <linearGradient id="b" x2="0" y2="100%">
     <stop offset="0" stop-color="#bbb" stop-opacity=".1"/>
     <stop offset="1" stop-opacity=".1"/>
@@ -24,13 +30,13 @@ skillshots-poc-zoom-200: A 100</title>
   </clipPath>
   <g clip-path="url(#r)">
     <rect width="80" height="20" fill="#555"/>
-    <rect x="80" width="120" height="20" fill="#22c55e"/>
+    <rect x="80" width="120" height="20" fill="#facc15"/>
     <rect width="200" height="20" fill="url(#b)"/>
   </g>
   <g fill="#fff" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="11">
     <text x="40" y="15" fill="#010101" fill-opacity=".3">supersociety</text>
     <text x="40" y="14">supersociety</text>
-    <text x="140" y="15" fill="#010101" fill-opacity=".3">A 100/100 (16)</text>
-    <text x="140" y="14" fill="#0a1a0a">A 100/100 (16)</text>
+    <text x="140" y="15" fill="#010101" fill-opacity=".3">C 75/100 (22)</text>
+    <text x="140" y="14" fill="#1a1500">C 75/100 (22)</text>
   </g>
 </svg>
