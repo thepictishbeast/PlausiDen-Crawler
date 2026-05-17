@@ -66,8 +66,8 @@ where
     K: AsRef<str>,
     V: AsRef<str>,
 {
-    let raw = lookup_header(headers, "cross-origin-opener-policy")
-        .map(|s| s.trim().to_ascii_lowercase());
+    let raw =
+        lookup_header(headers, "cross-origin-opener-policy").map(|s| s.trim().to_ascii_lowercase());
     CoopSnapshot {
         page_url: page_url.to_owned(),
         page_is_localhost: is_localhost(page_url),
@@ -158,7 +158,10 @@ mod tests {
 
     #[test]
     fn same_origin_allow_popups_no_finding() {
-        let f = detect_coop_issues(&snap("https://example.com/", Some("same-origin-allow-popups")));
+        let f = detect_coop_issues(&snap(
+            "https://example.com/",
+            Some("same-origin-allow-popups"),
+        ));
         assert!(f.is_empty());
     }
 

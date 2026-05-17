@@ -319,16 +319,18 @@ mod tests {
     fn below_24_strict() {
         let s = snap(vec![target("a", 16, 16, false)]);
         let f = detect_tap_target_issues(&s);
-        assert!(f.iter().any(|x| x.kind == "tap.too-small"
-            && x.severity == crate::AxisSeverity::Strict));
+        assert!(f
+            .iter()
+            .any(|x| x.kind == "tap.too-small" && x.severity == crate::AxisSeverity::Strict));
     }
 
     #[test]
     fn between_24_and_44_warn() {
         let s = snap(vec![target("a", 32, 32, false)]);
         let f = detect_tap_target_issues(&s);
-        assert!(f.iter().any(|x| x.kind == "tap.below-recommended"
-            && x.severity == crate::AxisSeverity::Warn));
+        assert!(f
+            .iter()
+            .any(|x| x.kind == "tap.below-recommended" && x.severity == crate::AxisSeverity::Warn));
     }
 
     #[test]
@@ -374,7 +376,10 @@ mod tests {
         }
         let s = snap(targets);
         let f = detect_tap_target_issues(&s);
-        let strict = f.iter().find(|x| x.kind == "tap.too-small").expect("strict");
+        let strict = f
+            .iter()
+            .find(|x| x.kind == "tap.too-small")
+            .expect("strict");
         // 5 example entries → 4 separators in the joined string.
         assert_eq!(strict.detail.matches("; ").count(), 4);
     }

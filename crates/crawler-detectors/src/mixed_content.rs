@@ -126,9 +126,7 @@ pub struct MixedContentSnapshot {
 }
 
 #[must_use]
-pub fn detect_mixed_content_issues(
-    snap: &MixedContentSnapshot,
-) -> Vec<crate::AxisFinding> {
+pub fn detect_mixed_content_issues(snap: &MixedContentSnapshot) -> Vec<crate::AxisFinding> {
     if !snap.page_is_https {
         return Vec::new();
     }
@@ -192,7 +190,11 @@ mod tests {
 
     fn snap(is_https: bool, assets: Vec<CapturedMixedAsset>) -> MixedContentSnapshot {
         MixedContentSnapshot {
-            page_url: if is_https { "https://t/".to_owned() } else { "http://t/".to_owned() },
+            page_url: if is_https {
+                "https://t/".to_owned()
+            } else {
+                "http://t/".to_owned()
+            },
             page_is_https: is_https,
             assets,
         }
@@ -210,8 +212,14 @@ mod tests {
 
     #[test]
     fn js_brackets_balanced() {
-        assert_eq!(MIXED_CONTENT_JS.matches('(').count(), MIXED_CONTENT_JS.matches(')').count());
-        assert_eq!(MIXED_CONTENT_JS.matches('{').count(), MIXED_CONTENT_JS.matches('}').count());
+        assert_eq!(
+            MIXED_CONTENT_JS.matches('(').count(),
+            MIXED_CONTENT_JS.matches(')').count()
+        );
+        assert_eq!(
+            MIXED_CONTENT_JS.matches('{').count(),
+            MIXED_CONTENT_JS.matches('}').count()
+        );
     }
 
     #[test]
@@ -228,31 +236,40 @@ mod tests {
     #[test]
     fn active_strict() {
         let f = detect_mixed_content_issues(&snap(true, vec![asset("active", "script")]));
-        assert!(f.iter().any(|x| x.kind == "mixed-content.active"
-            && x.severity == crate::AxisSeverity::Strict));
+        assert!(
+            f.iter()
+                .any(|x| x.kind == "mixed-content.active"
+                    && x.severity == crate::AxisSeverity::Strict)
+        );
     }
 
     #[test]
     fn passive_warn() {
         let f = detect_mixed_content_issues(&snap(true, vec![asset("passive", "img")]));
-        assert!(f.iter().any(|x| x.kind == "mixed-content.passive"
-            && x.severity == crate::AxisSeverity::Warn));
+        assert!(f
+            .iter()
+            .any(|x| x.kind == "mixed-content.passive" && x.severity == crate::AxisSeverity::Warn));
     }
 
     #[test]
     fn form_strict() {
         let f = detect_mixed_content_issues(&snap(true, vec![asset("form", "form")]));
-        assert!(f.iter().any(|x| x.kind == "mixed-content.form-action"
-            && x.severity == crate::AxisSeverity::Strict));
+        assert!(f
+            .iter()
+            .any(|x| x.kind == "mixed-content.form-action"
+                && x.severity == crate::AxisSeverity::Strict));
     }
 
     #[test]
     fn three_classes_three_findings() {
-        let f = detect_mixed_content_issues(&snap(true, vec![
-            asset("active", "script"),
-            asset("passive", "img"),
-            asset("form", "form"),
-        ]));
+        let f = detect_mixed_content_issues(&snap(
+            true,
+            vec![
+                asset("active", "script"),
+                asset("passive", "img"),
+                asset("form", "form"),
+            ],
+        ));
         assert_eq!(f.len(), 3, "{:?}", f);
     }
 
@@ -263,7 +280,10 @@ mod tests {
             assets.push(asset("active", "script"));
         }
         let f = detect_mixed_content_issues(&snap(true, assets));
-        let active = f.iter().find(|x| x.kind == "mixed-content.active").expect("found");
+        let active = f
+            .iter()
+            .find(|x| x.kind == "mixed-content.active")
+            .expect("found");
         assert!(active.detail.starts_with("6 active"), "{}", active.detail);
     }
 
@@ -274,7 +294,10 @@ mod tests {
             assets.push(asset("passive", "img"));
         }
         let f = detect_mixed_content_issues(&snap(true, assets));
-        let passive = f.iter().find(|x| x.kind == "mixed-content.passive").expect("found");
+        let passive = f
+            .iter()
+            .find(|x| x.kind == "mixed-content.passive")
+            .expect("found");
         assert_eq!(passive.detail.matches("; ").count(), 4);
     }
 }

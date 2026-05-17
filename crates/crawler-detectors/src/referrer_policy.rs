@@ -53,10 +53,7 @@ const PERMISSIVE_TOKENS: &[&str] = &[
 ];
 
 /// Build a snapshot from a page URL + a header map.
-pub fn build_referrer_policy_snapshot<I, K, V>(
-    page_url: &str,
-    headers: I,
-) -> ReferrerPolicySnapshot
+pub fn build_referrer_policy_snapshot<I, K, V>(page_url: &str, headers: I) -> ReferrerPolicySnapshot
 where
     I: IntoIterator<Item = (K, V)>,
     K: AsRef<str>,
@@ -267,10 +264,7 @@ mod tests {
     #[test]
     fn multi_token_skips_unknown_picks_known() {
         // Unknown last, then a real safe token — last recognised wins.
-        let f = detect_referrer_policy_issues(&snap(
-            "https://example.com/",
-            "no-referrer, BANANA",
-        ));
+        let f = detect_referrer_policy_issues(&snap("https://example.com/", "no-referrer, BANANA"));
         // BANANA is unknown → walk left → no-referrer is safe.
         assert!(f.is_empty(), "got {f:?}");
     }
@@ -286,10 +280,7 @@ mod tests {
 
     #[test]
     fn whitespace_around_tokens_trimmed() {
-        let f = detect_referrer_policy_issues(&snap(
-            "https://example.com/",
-            "  no-referrer  ",
-        ));
+        let f = detect_referrer_policy_issues(&snap("https://example.com/", "  no-referrer  "));
         assert!(f.is_empty(), "got {f:?}");
     }
 

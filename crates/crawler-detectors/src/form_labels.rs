@@ -205,8 +205,7 @@ pub struct FormLabelsSnapshot {
 /// `detectFormLabelIssues` in `src/formLabels.ts`.
 #[must_use]
 pub fn detect_form_label_issues(snap: &FormLabelsSnapshot) -> Vec<crate::AxisFinding> {
-    let non_labelled =
-        ["hidden", "submit", "reset", "button", "image"];
+    let non_labelled = ["hidden", "submit", "reset", "button", "image"];
 
     let mut no_label = Vec::<&CapturedFormControl>::new();
     let mut placeholder_only = Vec::<&CapturedFormControl>::new();
@@ -231,7 +230,11 @@ pub fn detect_form_label_issues(snap: &FormLabelsSnapshot) -> Vec<crate::AxisFin
     let mut out = Vec::<crate::AxisFinding>::new();
     let render_target = |c: &&CapturedFormControl| -> String {
         let t = if c.tag == "input" {
-            let ty = if c.r#type.is_empty() { "text" } else { c.r#type.as_str() };
+            let ty = if c.r#type.is_empty() {
+                "text"
+            } else {
+                c.r#type.as_str()
+            };
             format!("{}[type={ty}]", c.tag)
         } else {
             c.tag.clone()
@@ -258,7 +261,11 @@ pub fn detect_form_label_issues(snap: &FormLabelsSnapshot) -> Vec<crate::AxisFin
             .take(5)
             .map(|c| {
                 let t = if c.tag == "input" {
-                    let ty = if c.r#type.is_empty() { "text" } else { c.r#type.as_str() };
+                    let ty = if c.r#type.is_empty() {
+                        "text"
+                    } else {
+                        c.r#type.as_str()
+                    };
                     format!("{}[type={ty}]", c.tag)
                 } else {
                     c.tag.clone()
@@ -283,7 +290,11 @@ pub fn detect_form_label_issues(snap: &FormLabelsSnapshot) -> Vec<crate::AxisFin
             .take(5)
             .map(|c| {
                 let t = if c.tag == "input" {
-                    let ty = if c.r#type.is_empty() { "text" } else { c.r#type.as_str() };
+                    let ty = if c.r#type.is_empty() {
+                        "text"
+                    } else {
+                        c.r#type.as_str()
+                    };
                     format!("{}[type={ty}]", c.tag)
                 } else {
                     c.tag.clone()
@@ -352,7 +363,15 @@ mod tests {
 
     #[test]
     fn clean_labelled_no_findings() {
-        let s = snap(vec![ctrl("a", "input", "text", "Email", "label-for", false, false)]);
+        let s = snap(vec![ctrl(
+            "a",
+            "input",
+            "text",
+            "Email",
+            "label-for",
+            false,
+            false,
+        )]);
         assert!(detect_form_label_issues(&s).is_empty());
     }
 
@@ -366,7 +385,15 @@ mod tests {
 
     #[test]
     fn placeholder_only_warn_not_no_label() {
-        let s = snap(vec![ctrl("a", "input", "text", "Your email", "placeholder", false, false)]);
+        let s = snap(vec![ctrl(
+            "a",
+            "input",
+            "text",
+            "Your email",
+            "placeholder",
+            false,
+            false,
+        )]);
         let f = detect_form_label_issues(&s);
         assert!(f.iter().any(|x| x.kind == "form.placeholder-only-label"));
         assert!(!f.iter().any(|x| x.kind == "form.no-label"));
@@ -374,7 +401,15 @@ mod tests {
 
     #[test]
     fn required_no_indicator_warn() {
-        let s = snap(vec![ctrl("a", "input", "text", "Email", "label-for", true, false)]);
+        let s = snap(vec![ctrl(
+            "a",
+            "input",
+            "text",
+            "Email",
+            "label-for",
+            true,
+            false,
+        )]);
         assert!(detect_form_label_issues(&s)
             .iter()
             .any(|f| f.kind == "form.required-no-indicator"
@@ -383,7 +418,15 @@ mod tests {
 
     #[test]
     fn required_with_star_passes() {
-        let s = snap(vec![ctrl("a", "input", "text", "Email *", "label-for", true, true)]);
+        let s = snap(vec![ctrl(
+            "a",
+            "input",
+            "text",
+            "Email *",
+            "label-for",
+            true,
+            true,
+        )]);
         assert!(!detect_form_label_issues(&s)
             .iter()
             .any(|f| f.kind == "form.required-no-indicator"));
@@ -418,13 +461,20 @@ mod tests {
         for i in 0..10 {
             controls.push(ctrl(
                 &format!("a:nth-of-type({i})"),
-                "input", "text", "",
-                "none", false, false,
+                "input",
+                "text",
+                "",
+                "none",
+                false,
+                false,
             ));
         }
         let s = snap(controls);
         let f = detect_form_label_issues(&s);
-        let no_label = f.iter().find(|x| x.kind == "form.no-label").expect("no-label");
+        let no_label = f
+            .iter()
+            .find(|x| x.kind == "form.no-label")
+            .expect("no-label");
         // 5 examples → 4 separators.
         assert_eq!(no_label.detail.matches("; ").count(), 4);
     }

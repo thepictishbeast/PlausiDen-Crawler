@@ -154,8 +154,14 @@ mod tests {
 
     #[test]
     fn js_brackets_balanced() {
-        assert_eq!(SKIP_LINK_JS.matches('(').count(), SKIP_LINK_JS.matches(')').count());
-        assert_eq!(SKIP_LINK_JS.matches('{').count(), SKIP_LINK_JS.matches('}').count());
+        assert_eq!(
+            SKIP_LINK_JS.matches('(').count(),
+            SKIP_LINK_JS.matches(')').count()
+        );
+        assert_eq!(
+            SKIP_LINK_JS.matches('{').count(),
+            SKIP_LINK_JS.matches('}').count()
+        );
     }
 
     #[test]
@@ -182,8 +188,9 @@ mod tests {
         let mut s = good();
         s.target_exists = false;
         let f = detect_skip_link_issues(&s);
-        assert!(f.iter().any(|x| x.kind == "skip.broken-target"
-            && x.severity == crate::AxisSeverity::Strict));
+        assert!(f
+            .iter()
+            .any(|x| x.kind == "skip.broken-target" && x.severity == crate::AxisSeverity::Strict));
     }
 
     #[test]
@@ -191,8 +198,9 @@ mod tests {
         let mut s = good();
         s.first_focusable = false;
         let f = detect_skip_link_issues(&s);
-        assert!(f.iter().any(|x| x.kind == "skip.not-first-focusable"
-            && x.severity == crate::AxisSeverity::Warn));
+        assert!(f.iter().any(
+            |x| x.kind == "skip.not-first-focusable" && x.severity == crate::AxisSeverity::Warn
+        ));
     }
 
     #[test]
@@ -200,8 +208,10 @@ mod tests {
         let mut s = good();
         s.permanently_hidden = true;
         let f = detect_skip_link_issues(&s);
-        assert!(f.iter().any(|x| x.kind == "skip.permanently-hidden"
-            && x.severity == crate::AxisSeverity::Strict));
+        assert!(f
+            .iter()
+            .any(|x| x.kind == "skip.permanently-hidden"
+                && x.severity == crate::AxisSeverity::Strict));
     }
 
     #[test]

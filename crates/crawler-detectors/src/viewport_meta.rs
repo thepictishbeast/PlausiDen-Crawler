@@ -102,7 +102,10 @@ pub fn detect_viewport_meta_issues(snap: &ViewportMetaSnapshot) -> Vec<crate::Ax
         });
     }
 
-    let user_scalable = parts.get("user-scalable").map(|s| s.to_lowercase()).unwrap_or_default();
+    let user_scalable = parts
+        .get("user-scalable")
+        .map(|s| s.to_lowercase())
+        .unwrap_or_default();
     let max_scale_str = parts.get("maximum-scale").cloned().unwrap_or_default();
     let max_scale: Option<f64> = max_scale_str.parse().ok();
     let zoom_disabled = user_scalable == "no"
@@ -144,8 +147,14 @@ mod tests {
 
     #[test]
     fn js_brackets_balanced() {
-        assert_eq!(VIEWPORT_META_JS.matches('(').count(), VIEWPORT_META_JS.matches(')').count());
-        assert_eq!(VIEWPORT_META_JS.matches('{').count(), VIEWPORT_META_JS.matches('}').count());
+        assert_eq!(
+            VIEWPORT_META_JS.matches('(').count(),
+            VIEWPORT_META_JS.matches(')').count()
+        );
+        assert_eq!(
+            VIEWPORT_META_JS.matches('{').count(),
+            VIEWPORT_META_JS.matches('}').count()
+        );
     }
 
     #[test]
@@ -170,41 +179,31 @@ mod tests {
 
     #[test]
     fn user_scalable_no_strict() {
-        let f = detect_viewport_meta_issues(&snap_with(
-            "width=device-width, user-scalable=no",
-        ));
+        let f = detect_viewport_meta_issues(&snap_with("width=device-width, user-scalable=no"));
         assert!(f.iter().any(|x| x.kind == "viewport.zoom-disabled"));
     }
 
     #[test]
     fn user_scalable_zero_strict() {
-        let f = detect_viewport_meta_issues(&snap_with(
-            "width=device-width, user-scalable=0",
-        ));
+        let f = detect_viewport_meta_issues(&snap_with("width=device-width, user-scalable=0"));
         assert!(f.iter().any(|x| x.kind == "viewport.zoom-disabled"));
     }
 
     #[test]
     fn max_scale_one_strict() {
-        let f = detect_viewport_meta_issues(&snap_with(
-            "width=device-width, maximum-scale=1",
-        ));
+        let f = detect_viewport_meta_issues(&snap_with("width=device-width, maximum-scale=1"));
         assert!(f.iter().any(|x| x.kind == "viewport.zoom-disabled"));
     }
 
     #[test]
     fn max_scale_below_one_strict() {
-        let f = detect_viewport_meta_issues(&snap_with(
-            "width=device-width, maximum-scale=0.9",
-        ));
+        let f = detect_viewport_meta_issues(&snap_with("width=device-width, maximum-scale=0.9"));
         assert!(f.iter().any(|x| x.kind == "viewport.zoom-disabled"));
     }
 
     #[test]
     fn max_scale_two_passes() {
-        let f = detect_viewport_meta_issues(&snap_with(
-            "width=device-width, maximum-scale=2",
-        ));
+        let f = detect_viewport_meta_issues(&snap_with("width=device-width, maximum-scale=2"));
         assert!(!f.iter().any(|x| x.kind == "viewport.zoom-disabled"));
     }
 
@@ -231,9 +230,7 @@ mod tests {
 
     #[test]
     fn combined_breakage_two_findings() {
-        let f = detect_viewport_meta_issues(&snap_with(
-            "initial-scale=1, user-scalable=no",
-        ));
+        let f = detect_viewport_meta_issues(&snap_with("initial-scale=1, user-scalable=no"));
         assert!(f.iter().any(|x| x.kind == "viewport.no-device-width"));
         assert!(f.iter().any(|x| x.kind == "viewport.zoom-disabled"));
     }

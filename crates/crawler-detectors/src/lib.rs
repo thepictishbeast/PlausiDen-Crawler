@@ -40,17 +40,22 @@
 use serde::{Deserialize, Serialize};
 
 pub mod autocomplete;
+pub mod cache_control;
+pub mod coep;
+pub mod coop;
 pub mod css_health;
 pub mod doc_title;
 pub mod favicon;
 pub mod form_labels;
 pub mod heading_order;
+pub mod hsts;
 pub mod html_lang;
 pub mod link_text;
 pub mod link_underline;
 pub mod meta_description;
 pub mod mixed_content;
 pub mod outbound_links;
+pub mod referrer_policy;
 pub mod runtime_contrast;
 pub mod runtime_focus;
 pub mod runtime_images;
@@ -58,15 +63,10 @@ pub mod runtime_landmarks;
 pub mod skip_link;
 pub mod tap_targets;
 pub mod ui_overflow;
+pub(crate) mod url_helpers;
 pub mod viewport_meta;
 pub mod web_vitals;
 pub mod x_frame_options;
-pub mod coop;
-pub mod coep;
-pub mod referrer_policy;
-pub mod hsts;
-pub mod cache_control;
-pub(crate) mod url_helpers;
 
 /// Severity bucket shared across every detector axis. Mirrors the
 /// TS string-literal `'strict' | 'warn'` exactly (lowercase wire

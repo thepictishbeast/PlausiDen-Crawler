@@ -43,10 +43,7 @@ use crate::url_helpers::is_localhost;
 
 /// Build a snapshot from a page URL + a header map. Header keys
 /// are looked up case-insensitively (per RFC 9110).
-pub fn build_x_frame_options_snapshot<I, K, V>(
-    page_url: &str,
-    headers: I,
-) -> XFrameOptionsSnapshot
+pub fn build_x_frame_options_snapshot<I, K, V>(page_url: &str, headers: I) -> XFrameOptionsSnapshot
 where
     I: IntoIterator<Item = (K, V)>,
     K: AsRef<str>,
@@ -263,7 +260,11 @@ mod tests {
 
     #[test]
     fn xfo_allow_from_with_uri_is_valid() {
-        let s = snap("https://example.com/", "ALLOW-FROM https://parent.example", "");
+        let s = snap(
+            "https://example.com/",
+            "ALLOW-FROM https://parent.example",
+            "",
+        );
         assert_eq!(detect_x_frame_options_issues(&s).len(), 0);
     }
 
@@ -324,10 +325,8 @@ mod tests {
 
     #[test]
     fn header_lookup_is_case_insensitive() {
-        let s = build_x_frame_options_snapshot(
-            "https://example.com/",
-            [("X-Frame-Options", "DENY")],
-        );
+        let s =
+            build_x_frame_options_snapshot("https://example.com/", [("X-Frame-Options", "DENY")]);
         assert_eq!(detect_x_frame_options_issues(&s).len(), 0);
     }
 

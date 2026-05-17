@@ -37,7 +37,9 @@ pub(crate) fn url_host(url: &str) -> Option<String> {
 /// Detect a localhost / loopback URL: `127.0.0.1`, `::1`,
 /// `localhost`, and `*.localhost`.
 pub(crate) fn is_localhost(url: &str) -> bool {
-    let Some(host) = url_host(url) else { return false };
+    let Some(host) = url_host(url) else {
+        return false;
+    };
     matches!(host.as_str(), "localhost" | "127.0.0.1" | "::1") || host.ends_with(".localhost")
 }
 
@@ -47,8 +49,14 @@ mod tests {
 
     #[test]
     fn url_host_strips_scheme_port_path() {
-        assert_eq!(url_host("https://example.com:443/foo"), Some("example.com".into()));
-        assert_eq!(url_host("http://acme.test/x?y=1#z"), Some("acme.test".into()));
+        assert_eq!(
+            url_host("https://example.com:443/foo"),
+            Some("example.com".into())
+        );
+        assert_eq!(
+            url_host("http://acme.test/x?y=1#z"),
+            Some("acme.test".into())
+        );
     }
 
     #[test]

@@ -92,16 +92,17 @@ fn parse_cache_control(raw: &str) -> ParsedCacheControl {
         }
     }
     let unparseable = !raw.trim().is_empty() && directives.is_empty();
-    ParsedCacheControl { directives, values, unparseable }
+    ParsedCacheControl {
+        directives,
+        values,
+        unparseable,
+    }
 }
 
 /// Build a snapshot from a page URL + a header map. The map must
 /// expose every relevant header — Cache-Control + Set-Cookie at
 /// minimum. Headers are looked up case-insensitively.
-pub fn build_cache_control_snapshot<I, K, V>(
-    page_url: &str,
-    headers: I,
-) -> CacheControlSnapshot
+pub fn build_cache_control_snapshot<I, K, V>(page_url: &str, headers: I) -> CacheControlSnapshot
 where
     I: IntoIterator<Item = (K, V)>,
     K: AsRef<str>,
@@ -112,7 +113,10 @@ where
         .into_iter()
         .map(|(k, v)| (k.as_ref().to_owned(), v.as_ref().to_owned()))
         .collect();
-    let raw = lookup_header(collected.iter().map(|(k, v)| (k.as_str(), v.as_str())), "cache-control");
+    let raw = lookup_header(
+        collected.iter().map(|(k, v)| (k.as_str(), v.as_str())),
+        "cache-control",
+    );
     let parsed = match &raw {
         None => ParsedCacheControl::default(),
         Some(r) => parse_cache_control(r),
@@ -186,10 +190,7 @@ pub fn detect_cache_control_issues(snap: &CacheControlSnapshot) -> Vec<AxisFindi
                 snap.parsed.directives
             ),
         });
-    } else if snap.has_set_cookie
-        && !dset.contains("no-store")
-        && !dset.contains("private")
-    {
+    } else if snap.has_set_cookie && !dset.contains("no-store") && !dset.contains("private") {
         out.push(AxisFinding {
             severity: AxisSeverity::Warn,
             kind: "cache-control.no-private-with-cookie".into(),
@@ -242,16 +243,12 @@ pub fn detect_cache_control_issues(snap: &CacheControlSnapshot) -> Vec<AxisFindi
     }
 
     let mut contradictions: Vec<String> = Vec::new();
-    if dset.contains("no-store")
-        && (dset.contains("max-age") || dset.contains("s-maxage"))
-    {
-        contradictions
-            .push("'no-store' + 'max-age': no-store wins, max-age is dead".into());
+    if dset.contains("no-store") && (dset.contains("max-age") || dset.contains("s-maxage")) {
+        contradictions.push("'no-store' + 'max-age': no-store wins, max-age is dead".into());
     }
     if dset.contains("public") && dset.contains("private") {
         contradictions.push(
-            "'public' + 'private': spec ambiguous, most implementations honour 'private'"
-                .into(),
+            "'public' + 'private': spec ambiguous, most implementations honour 'private'".into(),
         );
     }
     if dset.contains("no-cache") && dset.contains("immutable") {
@@ -262,8 +259,7 @@ pub fn detect_cache_control_issues(snap: &CacheControlSnapshot) -> Vec<AxisFindi
     }
     if dset.contains("no-store") && dset.contains("immutable") {
         contradictions.push(
-            "'no-store' + 'immutable': no-store forbids any cache, immutable assumes one"
-                .into(),
+            "'no-store' + 'immutable': no-store forbids any cache, immutable assumes one".into(),
         );
     }
     if !contradictions.is_empty() {
@@ -316,18 +312,19 @@ mod tests {
             Some("public, max-age=600"),
             true,
         ));
-        assert!(f.iter().any(|x| x.kind == "cache-control.public-with-cookie"
-            && x.severity == AxisSeverity::Strict));
+        assert!(f
+            .iter()
+            .any(|x| x.kind == "cache-control.public-with-cookie"
+                && x.severity == AxisSeverity::Strict));
     }
 
     #[test]
     fn cookie_without_private_or_no_store_warn() {
-        let f = detect_cache_control_issues(&snap(
-            "https://example.com/",
-            Some("max-age=600"),
-            true,
-        ));
-        assert!(f.iter().any(|x| x.kind == "cache-control.no-private-with-cookie"));
+        let f =
+            detect_cache_control_issues(&snap("https://example.com/", Some("max-age=600"), true));
+        assert!(f
+            .iter()
+            .any(|x| x.kind == "cache-control.no-private-with-cookie"));
     }
 
     #[test]
@@ -342,11 +339,7 @@ mod tests {
 
     #[test]
     fn no_store_with_set_cookie_clean() {
-        let f = detect_cache_control_issues(&snap(
-            "https://example.com/",
-            Some("no-store"),
-            true,
-        ));
+        let f = detect_cache_control_issues(&snap("https://example.com/", Some("no-store"), true));
         assert!(f.is_empty(), "got {f:?}");
     }
 
@@ -357,7 +350,9 @@ mod tests {
             Some("public, max-age=99999999"),
             false,
         ));
-        assert!(f.iter().any(|x| x.kind == "cache-control.unrealistic-maxage"));
+        assert!(f
+            .iter()
+            .any(|x| x.kind == "cache-control.unrealistic-maxage"));
     }
 
     #[test]
@@ -422,11 +417,7 @@ mod tests {
 
     #[test]
     fn unparseable_value_invalid_warn() {
-        let f = detect_cache_control_issues(&snap(
-            "https://example.com/",
-            Some(",,,,,"),
-            false,
-        ));
+        let f = detect_cache_control_issues(&snap("https://example.com/", Some(",,,,,"), false));
         assert!(f.iter().any(|x| x.kind == "cache-control.invalid"));
     }
 
@@ -438,7 +429,9 @@ mod tests {
             true,
         ));
         // Public + cookie still triggers strict — case-insensitive parse.
-        assert!(f.iter().any(|x| x.kind == "cache-control.public-with-cookie"));
+        assert!(f
+            .iter()
+            .any(|x| x.kind == "cache-control.public-with-cookie"));
     }
 
     #[test]

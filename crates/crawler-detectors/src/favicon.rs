@@ -77,8 +77,14 @@ mod tests {
 
     #[test]
     fn js_brackets_balanced() {
-        assert_eq!(FAVICON_JS.matches('(').count(), FAVICON_JS.matches(')').count());
-        assert_eq!(FAVICON_JS.matches('{').count(), FAVICON_JS.matches('}').count());
+        assert_eq!(
+            FAVICON_JS.matches('(').count(),
+            FAVICON_JS.matches(')').count()
+        );
+        assert_eq!(
+            FAVICON_JS.matches('{').count(),
+            FAVICON_JS.matches('}').count()
+        );
     }
 
     #[test]

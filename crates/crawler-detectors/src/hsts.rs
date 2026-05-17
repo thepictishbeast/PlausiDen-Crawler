@@ -62,9 +62,13 @@ fn parse_max_age(header_value: &str) -> Option<u64> {
     for part in header_value.split(';') {
         let t = part.trim();
         let lower = t.to_ascii_lowercase();
-        let Some(rest) = lower.strip_prefix("max-age") else { continue };
+        let Some(rest) = lower.strip_prefix("max-age") else {
+            continue;
+        };
         let rest = rest.trim_start();
-        let Some(rest) = rest.strip_prefix('=') else { continue };
+        let Some(rest) = rest.strip_prefix('=') else {
+            continue;
+        };
         let mut digits = rest.trim();
         digits = digits.trim_matches('"').trim();
         if digits.is_empty() {
@@ -238,7 +242,10 @@ mod tests {
 
     #[test]
     fn quoted_max_age_value_accepted() {
-        let f = detect_hsts_issues(&snap("https://example.com/", "max-age=\"31536000\"; includeSubDomains"));
+        let f = detect_hsts_issues(&snap(
+            "https://example.com/",
+            "max-age=\"31536000\"; includeSubDomains",
+        ));
         assert!(f.is_empty(), "got {f:?}");
     }
 
@@ -255,7 +262,10 @@ mod tests {
     fn header_lookup_case_insensitive() {
         let s = build_hsts_snapshot(
             "https://example.com/",
-            [("Strict-Transport-Security", "max-age=31536000; includeSubDomains")],
+            [(
+                "Strict-Transport-Security",
+                "max-age=31536000; includeSubDomains",
+            )],
         );
         assert!(detect_hsts_issues(&s).is_empty());
     }

@@ -133,8 +133,14 @@ mod tests {
 
     #[test]
     fn js_brackets_balanced() {
-        assert_eq!(DOC_TITLE_JS.matches('(').count(), DOC_TITLE_JS.matches(')').count());
-        assert_eq!(DOC_TITLE_JS.matches('{').count(), DOC_TITLE_JS.matches('}').count());
+        assert_eq!(
+            DOC_TITLE_JS.matches('(').count(),
+            DOC_TITLE_JS.matches(')').count()
+        );
+        assert_eq!(
+            DOC_TITLE_JS.matches('{').count(),
+            DOC_TITLE_JS.matches('}').count()
+        );
     }
 
     #[test]

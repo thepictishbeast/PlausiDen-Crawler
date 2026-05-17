@@ -34,33 +34,15 @@ pub struct HtmlLangSnapshot {
 
 /// Common ISO 639-1 codes (subset — covers ~99% of real web).
 const COMMON_ISO_639_1: &[&str] = &[
-    "aa","ab","af","am","ar","as","az",
-    "ba","be","bg","bh","bm","bn","bo","br","bs",
-    "ca","ce","co","cs","cy",
-    "da","de","dv","dz",
-    "el","en","eo","es","et","eu",
-    "fa","fi","fj","fo","fr","fy",
-    "ga","gd","gl","gn","gu","gv",
-    "ha","he","hi","hr","ht","hu","hy",
-    "ia","id","ie","ig","is","it","iu",
-    "ja","jv",
-    "ka","kk","kl","km","kn","ko","ku","kw","ky",
-    "la","lb","lo","lt","lv",
-    "mg","mk","ml","mn","mr","ms","mt","my",
-    "na","nb","ne","nl","nn","no",
-    "oc","or",
-    "pa","pl","ps","pt",
-    "qu",
-    "rm","ro","ru","rw",
-    "sa","sd","se","sg","si","sk","sl","sm","sn","so","sq",
-    "sr","ss","st","su","sv","sw",
-    "ta","te","tg","th","ti","tk","tl","tn","to","tr","ts","tt","tw",
-    "ug","uk","ur","uz",
-    "vi",
-    "wa","wo",
-    "xh",
-    "yi","yo",
-    "zh","zu",
+    "aa", "ab", "af", "am", "ar", "as", "az", "ba", "be", "bg", "bh", "bm", "bn", "bo", "br", "bs",
+    "ca", "ce", "co", "cs", "cy", "da", "de", "dv", "dz", "el", "en", "eo", "es", "et", "eu", "fa",
+    "fi", "fj", "fo", "fr", "fy", "ga", "gd", "gl", "gn", "gu", "gv", "ha", "he", "hi", "hr", "ht",
+    "hu", "hy", "ia", "id", "ie", "ig", "is", "it", "iu", "ja", "jv", "ka", "kk", "kl", "km", "kn",
+    "ko", "ku", "kw", "ky", "la", "lb", "lo", "lt", "lv", "mg", "mk", "ml", "mn", "mr", "ms", "mt",
+    "my", "na", "nb", "ne", "nl", "nn", "no", "oc", "or", "pa", "pl", "ps", "pt", "qu", "rm", "ro",
+    "ru", "rw", "sa", "sd", "se", "sg", "si", "sk", "sl", "sm", "sn", "so", "sq", "sr", "ss", "st",
+    "su", "sv", "sw", "ta", "te", "tg", "th", "ti", "tk", "tl", "tn", "to", "tr", "ts", "tt", "tw",
+    "ug", "uk", "ur", "uz", "vi", "wa", "wo", "xh", "yi", "yo", "zh", "zu",
 ];
 
 /// Loose BCP-47 structural validator. Mirror of `looksLikeBcp47`
@@ -78,10 +60,7 @@ fn looks_like_bcp47(value: &str) -> bool {
     if value.starts_with(|c: char| c.is_ascii_digit()) {
         return false;
     }
-    if !value
-        .chars()
-        .all(|c| c.is_ascii_alphanumeric() || c == '-')
-    {
+    if !value.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
         return false;
     }
     if value.starts_with('-') || value.ends_with('-') {
@@ -133,11 +112,7 @@ pub fn detect_html_lang_issues(snap: &HtmlLangSnapshot) -> Vec<crate::AxisFindin
         return out;
     }
 
-    let primary = value
-        .split('-')
-        .next()
-        .unwrap_or("")
-        .to_lowercase();
+    let primary = value.split('-').next().unwrap_or("").to_lowercase();
     if !COMMON_ISO_639_1.contains(&primary.as_str()) {
         out.push(crate::AxisFinding {
             severity: crate::AxisSeverity::Warn,
@@ -173,8 +148,14 @@ mod tests {
 
     #[test]
     fn js_brackets_balanced() {
-        assert_eq!(HTML_LANG_JS.matches('(').count(), HTML_LANG_JS.matches(')').count());
-        assert_eq!(HTML_LANG_JS.matches('{').count(), HTML_LANG_JS.matches('}').count());
+        assert_eq!(
+            HTML_LANG_JS.matches('(').count(),
+            HTML_LANG_JS.matches(')').count()
+        );
+        assert_eq!(
+            HTML_LANG_JS.matches('{').count(),
+            HTML_LANG_JS.matches('}').count()
+        );
     }
 
     #[test]

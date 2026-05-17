@@ -199,15 +199,22 @@ mod tests {
 
     #[test]
     fn js_brackets_balanced() {
-        assert_eq!(OUTBOUND_LINKS_JS.matches('(').count(), OUTBOUND_LINKS_JS.matches(')').count());
-        assert_eq!(OUTBOUND_LINKS_JS.matches('{').count(), OUTBOUND_LINKS_JS.matches('}').count());
+        assert_eq!(
+            OUTBOUND_LINKS_JS.matches('(').count(),
+            OUTBOUND_LINKS_JS.matches(')').count()
+        );
+        assert_eq!(
+            OUTBOUND_LINKS_JS.matches('{').count(),
+            OUTBOUND_LINKS_JS.matches('}').count()
+        );
     }
 
     #[test]
     fn blank_no_rel_strict_tabnab_and_warn_noreferrer() {
         let f = detect_outbound_link_issues(&snap(vec![link("_blank", &[])]));
-        assert!(f.iter().any(|x| x.kind == "link.tabnab-vulnerable"
-            && x.severity == crate::AxisSeverity::Strict));
+        assert!(f.iter().any(
+            |x| x.kind == "link.tabnab-vulnerable" && x.severity == crate::AxisSeverity::Strict
+        ));
         assert!(f.iter().any(|x| x.kind == "link.outbound-no-noreferrer"));
     }
 
@@ -220,15 +227,19 @@ mod tests {
 
     #[test]
     fn blank_noopener_noreferrer_clean() {
-        let f = detect_outbound_link_issues(&snap(vec![link("_blank", &["noopener", "noreferrer"])]));
+        let f =
+            detect_outbound_link_issues(&snap(vec![link("_blank", &["noopener", "noreferrer"])]));
         assert!(f.is_empty(), "{:?}", f);
     }
 
     #[test]
     fn opener_explicit_strict_no_double_tabnab() {
         let f = detect_outbound_link_issues(&snap(vec![link("_blank", &["opener"])]));
-        assert!(f.iter().any(|x| x.kind == "link.opener-explicit"
-            && x.severity == crate::AxisSeverity::Strict));
+        assert!(
+            f.iter()
+                .any(|x| x.kind == "link.opener-explicit"
+                    && x.severity == crate::AxisSeverity::Strict)
+        );
         assert!(!f.iter().any(|x| x.kind == "link.tabnab-vulnerable"));
     }
 
@@ -252,9 +263,16 @@ mod tests {
             links.push(link("_blank", &[]));
         }
         let f = detect_outbound_link_issues(&snap(links));
-        let tabnab = f.iter().find(|x| x.kind == "link.tabnab-vulnerable").expect("present");
+        let tabnab = f
+            .iter()
+            .find(|x| x.kind == "link.tabnab-vulnerable")
+            .expect("present");
         // count message contains the literal "7 outbound link(s)".
-        assert!(tabnab.detail.starts_with("7 outbound link(s)"), "{}", tabnab.detail);
+        assert!(
+            tabnab.detail.starts_with("7 outbound link(s)"),
+            "{}",
+            tabnab.detail
+        );
     }
 
     #[test]
@@ -264,7 +282,10 @@ mod tests {
             links.push(link("_blank", &[]));
         }
         let f = detect_outbound_link_issues(&snap(links));
-        let tabnab = f.iter().find(|x| x.kind == "link.tabnab-vulnerable").expect("present");
+        let tabnab = f
+            .iter()
+            .find(|x| x.kind == "link.tabnab-vulnerable")
+            .expect("present");
         assert_eq!(tabnab.detail.matches("; ").count(), 4);
     }
 

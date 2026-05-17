@@ -158,7 +158,11 @@ pub fn detect_link_underline_issues(snap: &LinkUnderlineSnapshot) -> Vec<crate::
         .iter()
         .take(5)
         .map(|c| {
-            let t = if c.text.is_empty() { "(no text)".to_owned() } else { c.text.clone() };
+            let t = if c.text.is_empty() {
+                "(no text)".to_owned()
+            } else {
+                c.text.clone()
+            };
             format!("{} '{t}' → {}", c.selector, c.href)
         })
         .collect();
@@ -197,8 +201,14 @@ mod tests {
 
     #[test]
     fn js_brackets_balanced() {
-        assert_eq!(LINK_UNDERLINE_JS.matches('(').count(), LINK_UNDERLINE_JS.matches(')').count());
-        assert_eq!(LINK_UNDERLINE_JS.matches('{').count(), LINK_UNDERLINE_JS.matches('}').count());
+        assert_eq!(
+            LINK_UNDERLINE_JS.matches('(').count(),
+            LINK_UNDERLINE_JS.matches(')').count()
+        );
+        assert_eq!(
+            LINK_UNDERLINE_JS.matches('{').count(),
+            LINK_UNDERLINE_JS.matches('}').count()
+        );
     }
 
     #[test]

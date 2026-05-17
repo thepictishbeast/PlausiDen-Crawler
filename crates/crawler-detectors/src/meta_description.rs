@@ -38,9 +38,7 @@ const TOO_SHORT_MAX: usize = 50;
 const TOO_LONG_MIN: usize = 160;
 
 #[must_use]
-pub fn detect_meta_description_issues(
-    snap: &MetaDescriptionSnapshot,
-) -> Vec<crate::AxisFinding> {
+pub fn detect_meta_description_issues(snap: &MetaDescriptionSnapshot) -> Vec<crate::AxisFinding> {
     let mut out = Vec::<crate::AxisFinding>::new();
 
     if !snap.present {
@@ -107,8 +105,14 @@ mod tests {
 
     #[test]
     fn js_brackets_balanced() {
-        assert_eq!(META_DESCRIPTION_JS.matches('(').count(), META_DESCRIPTION_JS.matches(')').count());
-        assert_eq!(META_DESCRIPTION_JS.matches('{').count(), META_DESCRIPTION_JS.matches('}').count());
+        assert_eq!(
+            META_DESCRIPTION_JS.matches('(').count(),
+            META_DESCRIPTION_JS.matches(')').count()
+        );
+        assert_eq!(
+            META_DESCRIPTION_JS.matches('{').count(),
+            META_DESCRIPTION_JS.matches('}').count()
+        );
     }
 
     #[test]

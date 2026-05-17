@@ -121,25 +121,65 @@ pub struct AutocompleteSnapshot {
 }
 
 const VALID_AUTOCOMPLETE_TOKENS: &[&str] = &[
-    "on","off",
-    "name","honorific-prefix","given-name","additional-name","family-name","honorific-suffix","nickname",
-    "email","username",
-    "new-password","current-password","one-time-code",
-    "organization-title","organization",
-    "street-address","address-line1","address-line2","address-line3",
-    "address-level1","address-level2","address-level3","address-level4",
-    "country","country-name","postal-code",
-    "cc-name","cc-given-name","cc-additional-name","cc-family-name",
-    "cc-number","cc-exp","cc-exp-month","cc-exp-year","cc-csc","cc-type",
-    "transaction-currency","transaction-amount",
+    "on",
+    "off",
+    "name",
+    "honorific-prefix",
+    "given-name",
+    "additional-name",
+    "family-name",
+    "honorific-suffix",
+    "nickname",
+    "email",
+    "username",
+    "new-password",
+    "current-password",
+    "one-time-code",
+    "organization-title",
+    "organization",
+    "street-address",
+    "address-line1",
+    "address-line2",
+    "address-line3",
+    "address-level1",
+    "address-level2",
+    "address-level3",
+    "address-level4",
+    "country",
+    "country-name",
+    "postal-code",
+    "cc-name",
+    "cc-given-name",
+    "cc-additional-name",
+    "cc-family-name",
+    "cc-number",
+    "cc-exp",
+    "cc-exp-month",
+    "cc-exp-year",
+    "cc-csc",
+    "cc-type",
+    "transaction-currency",
+    "transaction-amount",
     "language",
-    "bday","bday-day","bday-month","bday-year",
-    "sex","tel","tel-country-code","tel-national","tel-area-code","tel-local",
-    "tel-extension","impp","url","photo","webauthn",
+    "bday",
+    "bday-day",
+    "bday-month",
+    "bday-year",
+    "sex",
+    "tel",
+    "tel-country-code",
+    "tel-national",
+    "tel-area-code",
+    "tel-local",
+    "tel-extension",
+    "impp",
+    "url",
+    "photo",
+    "webauthn",
 ];
 
 const MODIFIER_TOKENS: &[&str] = &[
-    "shipping","billing","home","work","mobile","fax","pager",
+    "shipping", "billing", "home", "work", "mobile", "fax", "pager",
 ];
 
 fn classify_field(field: &CapturedAutocompleteField) -> &'static str {
@@ -171,10 +211,27 @@ fn classify_field(field: &CapturedAutocompleteField) -> &'static str {
         return "credential";
     }
     let pii = [
-        "name","first.name","first-name","last.name","last-name",
-        "given-name","family-name","phone","tel","address","city",
-        "state","zip","postal","postcode","country","birth","dob",
-        "credit-card","credit.card","cc",
+        "name",
+        "first.name",
+        "first-name",
+        "last.name",
+        "last-name",
+        "given-name",
+        "family-name",
+        "phone",
+        "tel",
+        "address",
+        "city",
+        "state",
+        "zip",
+        "postal",
+        "postcode",
+        "country",
+        "birth",
+        "dob",
+        "credit-card",
+        "credit.card",
+        "cc",
     ];
     for p in pii {
         if hay.contains(p) {
@@ -218,7 +275,11 @@ pub fn detect_autocomplete_issues(snap: &AutocompleteSnapshot) -> Vec<crate::Axi
             format!("[type={}]", f.r#type)
         };
         let name = if f.name.is_empty() {
-            if f.id.is_empty() { "?".to_owned() } else { f.id.clone() }
+            if f.id.is_empty() {
+                "?".to_owned()
+            } else {
+                f.id.clone()
+            }
         } else {
             f.name.clone()
         };
@@ -260,7 +321,12 @@ pub fn detect_autocomplete_issues(snap: &AutocompleteSnapshot) -> Vec<crate::Axi
         let examples: Vec<String> = invalid_token
             .iter()
             .take(5)
-            .map(|f| format!("{} (autocomplete='{}', label='{}')", f.selector, f.autocomplete, f.accessible_name))
+            .map(|f| {
+                format!(
+                    "{} (autocomplete='{}', label='{}')",
+                    f.selector, f.autocomplete, f.accessible_name
+                )
+            })
             .collect();
         out.push(crate::AxisFinding {
             severity: crate::AxisSeverity::Warn,
@@ -280,13 +346,7 @@ pub fn detect_autocomplete_issues(snap: &AutocompleteSnapshot) -> Vec<crate::Axi
 mod tests {
     use super::*;
 
-    fn fld(
-        ty: &str,
-        name: &str,
-        ac: &str,
-        has_ac: bool,
-        label: &str,
-    ) -> CapturedAutocompleteField {
+    fn fld(ty: &str, name: &str, ac: &str, has_ac: bool, label: &str) -> CapturedAutocompleteField {
         CapturedAutocompleteField {
             selector: "body > input".to_owned(),
             r#type: ty.to_owned(),
@@ -307,69 +367,106 @@ mod tests {
 
     #[test]
     fn js_brackets_balanced() {
-        assert_eq!(AUTOCOMPLETE_JS.matches('(').count(), AUTOCOMPLETE_JS.matches(')').count());
-        assert_eq!(AUTOCOMPLETE_JS.matches('{').count(), AUTOCOMPLETE_JS.matches('}').count());
+        assert_eq!(
+            AUTOCOMPLETE_JS.matches('(').count(),
+            AUTOCOMPLETE_JS.matches(')').count()
+        );
+        assert_eq!(
+            AUTOCOMPLETE_JS.matches('{').count(),
+            AUTOCOMPLETE_JS.matches('}').count()
+        );
     }
 
     #[test]
     fn generic_no_findings() {
-        let f = detect_autocomplete_issues(&snap(vec![fld("text", "comment", "", false, "Your comment")]));
+        let f = detect_autocomplete_issues(&snap(vec![fld(
+            "text",
+            "comment",
+            "",
+            false,
+            "Your comment",
+        )]));
         assert!(f.is_empty(), "{:?}", f);
     }
 
     #[test]
     fn email_missing_strict() {
         let f = detect_autocomplete_issues(&snap(vec![fld("email", "email", "", false, "Email")]));
-        assert!(f.iter().any(|x| x.kind == "autocomplete.missing-credentials"
-            && x.severity == crate::AxisSeverity::Strict));
+        assert!(f
+            .iter()
+            .any(|x| x.kind == "autocomplete.missing-credentials"
+                && x.severity == crate::AxisSeverity::Strict));
     }
 
     #[test]
     fn password_strict() {
-        let f = detect_autocomplete_issues(&snap(vec![fld("password", "pw", "", false, "Password")]));
-        assert!(f.iter().any(|x| x.kind == "autocomplete.missing-credentials"));
+        let f =
+            detect_autocomplete_issues(&snap(vec![fld("password", "pw", "", false, "Password")]));
+        assert!(f
+            .iter()
+            .any(|x| x.kind == "autocomplete.missing-credentials"));
     }
 
     #[test]
     fn username_strict() {
-        let f = detect_autocomplete_issues(&snap(vec![fld("text", "username", "", false, "Username")]));
-        assert!(f.iter().any(|x| x.kind == "autocomplete.missing-credentials"));
+        let f =
+            detect_autocomplete_issues(&snap(vec![fld("text", "username", "", false, "Username")]));
+        assert!(f
+            .iter()
+            .any(|x| x.kind == "autocomplete.missing-credentials"));
     }
 
     #[test]
     fn tel_pii_warn() {
         let f = detect_autocomplete_issues(&snap(vec![fld("tel", "phone", "", false, "Phone")]));
-        assert!(f.iter().any(|x| x.kind == "autocomplete.missing-pii"
-            && x.severity == crate::AxisSeverity::Warn));
+        assert!(f.iter().any(
+            |x| x.kind == "autocomplete.missing-pii" && x.severity == crate::AxisSeverity::Warn
+        ));
     }
 
     #[test]
     fn email_with_token_clean() {
-        let f = detect_autocomplete_issues(&snap(vec![fld("email", "email", "email", true, "Email")]));
+        let f =
+            detect_autocomplete_issues(&snap(vec![fld("email", "email", "email", true, "Email")]));
         assert!(f.is_empty(), "{:?}", f);
     }
 
     #[test]
     fn off_token_accepted() {
-        let f = detect_autocomplete_issues(&snap(vec![fld("email", "email", "off", true, "Email")]));
+        let f =
+            detect_autocomplete_issues(&snap(vec![fld("email", "email", "off", true, "Email")]));
         assert!(f.is_empty(), "{:?}", f);
     }
 
     #[test]
     fn bogus_token_warn() {
-        let f = detect_autocomplete_issues(&snap(vec![fld("text", "comment", "bogus", true, "Comment")]));
+        let f = detect_autocomplete_issues(&snap(vec![fld(
+            "text", "comment", "bogus", true, "Comment",
+        )]));
         assert!(f.iter().any(|x| x.kind == "autocomplete.invalid-token"));
     }
 
     #[test]
     fn multi_token_shipping_accepted() {
-        let f = detect_autocomplete_issues(&snap(vec![fld("text", "addr", "shipping street-address", true, "Address")]));
+        let f = detect_autocomplete_issues(&snap(vec![fld(
+            "text",
+            "addr",
+            "shipping street-address",
+            true,
+            "Address",
+        )]));
         assert!(f.is_empty(), "{:?}", f);
     }
 
     #[test]
     fn section_prefix_accepted() {
-        let f = detect_autocomplete_issues(&snap(vec![fld("text", "cc", "section-billing cc-number", true, "Card")]));
+        let f = detect_autocomplete_issues(&snap(vec![fld(
+            "text",
+            "cc",
+            "section-billing cc-number",
+            true,
+            "Card",
+        )]));
         assert!(f.is_empty(), "{:?}", f);
     }
 
@@ -380,7 +477,14 @@ mod tests {
             fld("password", "p1", "", false, "Password"),
             fld("password", "p2", "", false, "Confirm"),
         ]));
-        let cred = f.iter().find(|x| x.kind == "autocomplete.missing-credentials").expect("found");
-        assert!(cred.detail.starts_with("3 credential field(s)"), "{}", cred.detail);
+        let cred = f
+            .iter()
+            .find(|x| x.kind == "autocomplete.missing-credentials")
+            .expect("found");
+        assert!(
+            cred.detail.starts_with("3 credential field(s)"),
+            "{}",
+            cred.detail
+        );
     }
 }
