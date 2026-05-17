@@ -78,6 +78,7 @@ use crawler_detectors::hsts::{build_hsts_snapshot, detect_hsts_issues};
 use crawler_detectors::html_lang::{detect_html_lang_issues, HtmlLangSnapshot, HTML_LANG_JS};
 use crawler_detectors::info_leak_headers::{build_info_leak_snapshot, detect_info_leak_issues};
 use crawler_detectors::link_text::{detect_link_text_issues, LinkTextSnapshot, LINK_TEXT_JS};
+use crawler_detectors::network_error_logging::{build_nel_snapshot, detect_nel_issues};
 use crawler_detectors::origin_agent_cluster::{
     build_origin_agent_cluster_snapshot, detect_origin_agent_cluster_issues,
 };
@@ -89,6 +90,9 @@ use crawler_detectors::placeholder_text::{
 };
 use crawler_detectors::referrer_policy::{
     build_referrer_policy_snapshot, detect_referrer_policy_issues,
+};
+use crawler_detectors::reporting_endpoints::{
+    build_reporting_endpoints_snapshot, detect_reporting_endpoints_issues,
 };
 use crawler_detectors::runtime_contrast::{
     detect_runtime_contrast_issues, RuntimeContrastSnapshot, RUNTIME_CONTRAST_JS,
@@ -103,6 +107,9 @@ use crawler_detectors::runtime_landmarks::{
     detect_runtime_landmarks_issues, RuntimeLandmarksSnapshot, RUNTIME_LANDMARKS_JS,
 };
 use crawler_detectors::skip_link::{detect_skip_link_issues, SkipLinkSnapshot, SKIP_LINK_JS};
+use crawler_detectors::speculation_rules::{
+    detect_speculation_rules_issues, SpeculationRulesSnapshot, SPECULATION_RULES_DOM_CAPTURE_JS,
+};
 use crawler_detectors::tap_targets::{
     detect_tap_target_issues, TapTargetsSnapshot, TAP_TARGETS_JS,
 };
@@ -523,6 +530,17 @@ async fn run() -> Result<ExitCode> {
             }
             if let Err(e) = capture_cache_control(&cur_url, &network, &events, started_at).await {
                 tracing::debug!("cache_control snapshot failed: {e}");
+            }
+            if let Err(e) = capture_nel(&cur_url, &network, &events, started_at).await {
+                tracing::debug!("nel snapshot failed: {e}");
+            }
+            if let Err(e) =
+                capture_reporting_endpoints(&cur_url, &network, &events, started_at).await
+            {
+                tracing::debug!("reporting_endpoints snapshot failed: {e}");
+            }
+            if let Err(e) = capture_speculation_rules(&page, &events, started_at).await {
+                tracing::debug!("speculation_rules snapshot failed: {e}");
             }
             if let Err(e) = capture_css_health(&page, &events, &network, started_at).await {
                 tracing::debug!("css_health snapshot failed: {e}");
@@ -1254,6 +1272,71 @@ async fn capture_origin_agent_cluster(
         events,
         findings,
         EventKind::OriginAgentCluster,
+        started_at.elapsed().as_millis() as u64,
+    )
+    .await;
+    Ok(())
+}
+
+/// T75 batch wiring (2026-05-17): networkErrorLogging (NEL).
+async fn capture_nel(
+    page_url: &str,
+    network: &crate::cdp_raw::NetworkObservations,
+    events: &Arc<Mutex<Vec<CapturedEvent>>>,
+    started_at: Instant,
+) -> Result<()> {
+    let headers = page_headers_btreemap(page_url, network).await;
+    let snap = build_nel_snapshot(
+        page_url,
+        headers.iter().map(|(k, v)| (k.clone(), v.clone())),
+    );
+    let findings = detect_nel_issues(&snap);
+    push_axis_findings(
+        events,
+        findings,
+        EventKind::Nel,
+        started_at.elapsed().as_millis() as u64,
+    )
+    .await;
+    Ok(())
+}
+
+/// T75 batch wiring (2026-05-17): reportingEndpoints.
+async fn capture_reporting_endpoints(
+    page_url: &str,
+    network: &crate::cdp_raw::NetworkObservations,
+    events: &Arc<Mutex<Vec<CapturedEvent>>>,
+    started_at: Instant,
+) -> Result<()> {
+    let headers = page_headers_btreemap(page_url, network).await;
+    let snap = build_reporting_endpoints_snapshot(page_url, &headers);
+    let findings = detect_reporting_endpoints_issues(&snap);
+    push_axis_findings(
+        events,
+        findings,
+        EventKind::ReportingEndpoints,
+        started_at.elapsed().as_millis() as u64,
+    )
+    .await;
+    Ok(())
+}
+
+/// T75 batch wiring (2026-05-17): speculationRules (DOM-walk via
+/// page.evaluate). Mirrors the existing DOM-walk pattern.
+async fn capture_speculation_rules(
+    page: &chromiumoxide::Page,
+    events: &Arc<Mutex<Vec<CapturedEvent>>>,
+    started_at: Instant,
+) -> Result<()> {
+    let result = page.evaluate(SPECULATION_RULES_DOM_CAPTURE_JS).await?;
+    let snap: SpeculationRulesSnapshot = result
+        .into_value()
+        .context("deserialize speculationRules snapshot")?;
+    let findings = detect_speculation_rules_issues(&snap);
+    push_axis_findings(
+        events,
+        findings,
+        EventKind::SpeculationRules,
         started_at.elapsed().as_millis() as u64,
     )
     .await;

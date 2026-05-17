@@ -124,6 +124,12 @@ pub enum EventKind {
     OriginAgentCluster,
     /// cacheControl detector — Cache-Control directive sanity.
     CacheControl,
+    /// networkErrorLogging detector — NEL response header.
+    Nel,
+    /// reportingEndpoints detector — Reporting-Endpoints header.
+    ReportingEndpoints,
+    /// speculationRules detector — speculation-rules script blocks.
+    SpeculationRules,
 }
 
 /// Severity of a finding-bucketed event (cssHealth / uiOverflow
