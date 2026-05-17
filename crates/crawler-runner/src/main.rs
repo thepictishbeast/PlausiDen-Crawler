@@ -2168,8 +2168,28 @@ async fn run_step(
 ) -> Result<()> {
     match step {
         Step::Goto { url, timeout, .. } => {
-            let _ = timeout; // TODO honor per-step timeout
-            page.goto(url.as_str()).await?.wait_for_navigation().await?;
+            // Per-step timeout (T75 entrypoint polish 2026-05-17):
+            // honor the journey's `timeout` field. None means
+            // fall back to a 30s default so a hung navigation
+            // doesn't wedge the whole run. The default mirrors
+            // Playwright's navigationTimeout default for parity
+            // with the TS port we're replacing.
+            let nav_timeout = Duration::from_millis(timeout.map_or(30_000u64, u64::from));
+            let goto_fut = async {
+                page.goto(url.as_str()).await?.wait_for_navigation().await?;
+                Ok::<(), anyhow::Error>(())
+            };
+            match tokio::time::timeout(nav_timeout, goto_fut).await {
+                Ok(Ok(())) => {}
+                Ok(Err(e)) => return Err(e),
+                Err(_) => {
+                    return Err(anyhow::anyhow!(
+                        "goto({}) exceeded {}ms timeout",
+                        url,
+                        nav_timeout.as_millis()
+                    ));
+                }
+            }
         }
         Step::Wait { ms, .. } => {
             tokio::time::sleep(Duration::from_millis(*ms as u64)).await;
