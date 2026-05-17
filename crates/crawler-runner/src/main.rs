@@ -2390,6 +2390,24 @@ mod tests {
     }
 
     #[test]
+    fn escape_js_string_handles_empty_and_unescaped() {
+        // Identity for inputs without ' or \.
+        assert_eq!(escape_js_string(""), "");
+        assert_eq!(escape_js_string("hello"), "hello");
+        assert_eq!(escape_js_string("button.cta"), "button.cta");
+    }
+
+    #[test]
+    fn escape_js_string_escapes_each_occurrence_independently() {
+        // Three single quotes → three escapes.
+        assert_eq!(escape_js_string("'''"), "\\'\\'\\'");
+        // Mixed backslashes + quotes — escape order must not
+        // double-process the inserted backslashes.
+        assert_eq!(escape_js_string("\\'"), "\\\\\\'");
+        assert_eq!(escape_js_string("a\\'b"), "a\\\\\\'b");
+    }
+
+    #[test]
     fn compute_counts_basic() {
         let events = vec![
             CapturedEvent {
