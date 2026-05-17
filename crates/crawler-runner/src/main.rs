@@ -2423,4 +2423,34 @@ mod tests {
         assert_eq!(c.steps_ok, 5);
         assert_eq!(c.total, 2);
     }
+
+    #[test]
+    fn map_axis_severity_round_trips_known_variants() {
+        assert!(matches!(
+            map_axis_severity(AxisSeverity::Strict),
+            ReportSeverity::Strict
+        ));
+        assert!(matches!(
+            map_axis_severity(AxisSeverity::Warn),
+            ReportSeverity::Warn
+        ));
+    }
+
+    #[test]
+    fn band_to_severity_classifies_web_vitals_bands_correctly() {
+        use crawler_detectors::web_vitals::Band;
+        // Good band ⇒ no event (None) — we don't surface healthy
+        // metrics to keep report.json focused on regressions.
+        assert!(band_to_severity(Band::Good).is_none());
+        // NeedsImprovement ⇒ Warn (advisory).
+        assert!(matches!(
+            band_to_severity(Band::NeedsImprovement),
+            Some(ReportSeverity::Warn)
+        ));
+        // Poor ⇒ Strict (operator must address).
+        assert!(matches!(
+            band_to_severity(Band::Poor),
+            Some(ReportSeverity::Strict)
+        ));
+    }
 }
