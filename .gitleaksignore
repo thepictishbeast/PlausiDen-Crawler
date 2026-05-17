@@ -1,0 +1,13 @@
+# Allowlist entries for gitleaks. Format: <commit-sha>:<path>:<rule>:<line>
+#
+# Each entry below is a KNOWN-OK match — gitleaks would otherwise
+# re-flag the same finding on every run.
+
+# Self-signed RSA-2048 fixture key for the HTTPS detector test
+# harness. CN=localhost, 100-year validity, generated specifically
+# for fixture use per fixtures/t76-detectors-https/serve.py.
+# Commit message: "For fixture testing only; never reuse." Public
+# exposure is intentional — this key was created to be public test
+# material so any reviewer can reproduce the HTTPS detector run
+# locally without minting their own cert.
+db76b2d180730a1865bbcf268b43198198a6cfa9:fixtures/t76-detectors-https/key.pem:private-key:1

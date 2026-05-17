@@ -2,6 +2,30 @@
 
 ![Supersociety](./badges/supersociety.svg)
 
+> ## ⚠ Status: pre-1.0, AVP-2 in flight — NOT production-ready
+>
+> This codebase is published publicly for transparency, third-party
+> audit, and reproducibility — **not** as a shipped product. Per the
+> [Adversarial Validation Protocol v2](https://github.com/thepictishbeast/PlausiDen-AVP-Doctrine/blob/main/AVP2_PROTOCOL.md),
+> every commit is treated as guilty until proven innocent via a
+> minimum of 36 verification passes. The current verdict is **STILL
+> BROKEN** — that's the protocol's default and changes only with an
+> explicit `SHIP-DECISION:` annotation listing accepted residual risk.
+>
+> APIs, file layout, CLI flags, and on-disk formats can and will
+> change between commits. Tests pass locally; CI may or may not be
+> green at any given moment (see Actions tab). Treat this as a
+> live engineering tree, not a release.
+>
+> The repo currently houses TWO parallel runtimes: the original
+> TypeScript Playwright pipeline (`src/`) and the Rust chromiumoxide
+> port (`crates/`) which is mid-migration per T75 / #640. Both
+> ship; only the TS path is exercised against production sites today.
+>
+> Licensed under [FSL-1.1-MIT](./LICENSE) — source-available with
+> a 2-year competitor-restriction window, after which it converts
+> automatically to MIT.
+
 > **Pre-push hook**: opt in with `git config core.hooksPath .githooks` —
 > blocks push if `npm run test:meta` (property + mutation + drift)
 > doesn't pass. See [`.githooks/pre-push`](./.githooks/pre-push).
