@@ -57,13 +57,18 @@ use crawler_detectors::css_health::{
     INLINE_STYLE_BLOCK_COUNT_JS,
 };
 use crawler_detectors::doc_title::{detect_doc_title_issues, DocTitleSnapshot, DOC_TITLE_JS};
+use crawler_detectors::favicon::{detect_favicon_issues, FaviconSnapshot, FAVICON_JS};
 use crawler_detectors::form_labels::{
     detect_form_label_issues, FormLabelsSnapshot, FORM_LABELS_JS,
 };
 use crawler_detectors::heading_order::{
     detect_heading_order_issues, HeadingOrderSnapshot, HEADING_ORDER_JS,
 };
+use crawler_detectors::html_lang::{detect_html_lang_issues, HtmlLangSnapshot, HTML_LANG_JS};
 use crawler_detectors::link_text::{detect_link_text_issues, LinkTextSnapshot, LINK_TEXT_JS};
+use crawler_detectors::placeholder_text::{
+    detect_placeholder_text_issues, PlaceholderTextSnapshot, PLACEHOLDER_TEXT_DOM_CAPTURE_JS,
+};
 use crawler_detectors::runtime_contrast::{
     detect_runtime_contrast_issues, RuntimeContrastSnapshot, RUNTIME_CONTRAST_JS,
 };
@@ -82,6 +87,9 @@ use crawler_detectors::tap_targets::{
 };
 use crawler_detectors::ui_overflow::{
     detect_ui_overflow_issues, Severity as UiSeverity, UiOverflowSnapshot, UI_OVERFLOW_JS,
+};
+use crawler_detectors::viewport_meta::{
+    detect_viewport_meta_issues, ViewportMetaSnapshot, VIEWPORT_META_JS,
 };
 use crawler_detectors::web_vitals::{classify, RawVitals, COLLECT_JS, WIRE_CALLBACKS_JS};
 use crawler_detectors::{AxisFinding, AxisSeverity};
@@ -430,6 +438,18 @@ async fn run() -> Result<ExitCode> {
             }
             if let Err(e) = capture_doc_title(&page, &events, started_at).await {
                 tracing::debug!("doc_title snapshot failed: {e}");
+            }
+            if let Err(e) = capture_placeholder_text(&page, &events, started_at).await {
+                tracing::debug!("placeholder_text snapshot failed: {e}");
+            }
+            if let Err(e) = capture_viewport_meta(&page, &events, started_at).await {
+                tracing::debug!("viewport_meta snapshot failed: {e}");
+            }
+            if let Err(e) = capture_html_lang(&page, &events, started_at).await {
+                tracing::debug!("html_lang snapshot failed: {e}");
+            }
+            if let Err(e) = capture_favicon(&page, &events, started_at).await {
+                tracing::debug!("favicon snapshot failed: {e}");
             }
             if let Err(e) = capture_css_health(&page, &events, &network, started_at).await {
                 tracing::debug!("css_health snapshot failed: {e}");
@@ -793,6 +813,91 @@ async fn capture_doc_title(
         events,
         findings,
         EventKind::DocTitle,
+        started_at.elapsed().as_millis() as u64,
+    )
+    .await;
+    Ok(())
+}
+
+/// T75 batch wiring (2026-05-17): placeholderText detector — sentinel
+/// text (TODO / Lorem ipsum / "delete me") in rendered DOM.
+async fn capture_placeholder_text(
+    page: &chromiumoxide::Page,
+    events: &Arc<Mutex<Vec<CapturedEvent>>>,
+    started_at: Instant,
+) -> Result<()> {
+    let result = page.evaluate(PLACEHOLDER_TEXT_DOM_CAPTURE_JS).await?;
+    let snap: PlaceholderTextSnapshot = result
+        .into_value()
+        .context("deserialize placeholderText snapshot")?;
+    let findings = detect_placeholder_text_issues(&snap);
+    push_axis_findings(
+        events,
+        findings,
+        EventKind::PlaceholderText,
+        started_at.elapsed().as_millis() as u64,
+    )
+    .await;
+    Ok(())
+}
+
+/// T75 batch wiring (2026-05-17): viewportMeta detector.
+async fn capture_viewport_meta(
+    page: &chromiumoxide::Page,
+    events: &Arc<Mutex<Vec<CapturedEvent>>>,
+    started_at: Instant,
+) -> Result<()> {
+    let result = page.evaluate(VIEWPORT_META_JS).await?;
+    let snap: ViewportMetaSnapshot = result
+        .into_value()
+        .context("deserialize viewportMeta snapshot")?;
+    let findings = detect_viewport_meta_issues(&snap);
+    push_axis_findings(
+        events,
+        findings,
+        EventKind::ViewportMeta,
+        started_at.elapsed().as_millis() as u64,
+    )
+    .await;
+    Ok(())
+}
+
+/// T75 batch wiring (2026-05-17): htmlLang detector.
+async fn capture_html_lang(
+    page: &chromiumoxide::Page,
+    events: &Arc<Mutex<Vec<CapturedEvent>>>,
+    started_at: Instant,
+) -> Result<()> {
+    let result = page.evaluate(HTML_LANG_JS).await?;
+    let snap: HtmlLangSnapshot = result
+        .into_value()
+        .context("deserialize htmlLang snapshot")?;
+    let findings = detect_html_lang_issues(&snap);
+    push_axis_findings(
+        events,
+        findings,
+        EventKind::HtmlLang,
+        started_at.elapsed().as_millis() as u64,
+    )
+    .await;
+    Ok(())
+}
+
+/// T75 batch wiring (2026-05-17): favicon detector.
+async fn capture_favicon(
+    page: &chromiumoxide::Page,
+    events: &Arc<Mutex<Vec<CapturedEvent>>>,
+    started_at: Instant,
+) -> Result<()> {
+    let result = page.evaluate(FAVICON_JS).await?;
+    let snap: FaviconSnapshot = result
+        .into_value()
+        .context("deserialize favicon snapshot")?;
+    let findings = detect_favicon_issues(&snap);
+    push_axis_findings(
+        events,
+        findings,
+        EventKind::Favicon,
         started_at.elapsed().as_millis() as u64,
     )
     .await;

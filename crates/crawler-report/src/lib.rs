@@ -86,6 +86,17 @@ pub enum EventKind {
     /// docTitle detector — `<title>` present, non-empty, unique
     /// across the journey.
     DocTitle,
+    /// placeholderText detector — TODO / FIXME / Lorem ipsum /
+    /// template instructions leaked into the rendered DOM.
+    PlaceholderText,
+    /// viewportMeta detector — `<meta name="viewport">` present
+    /// + sane (initial-scale, no user-scalable=no).
+    ViewportMeta,
+    /// htmlLang detector — `<html lang>` present + valid BCP-47.
+    HtmlLang,
+    /// favicon detector — `<link rel="icon">` present with at least
+    /// one resolvable href.
+    Favicon,
 }
 
 /// Severity of a finding-bucketed event (cssHealth / uiOverflow
