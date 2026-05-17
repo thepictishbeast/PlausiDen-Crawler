@@ -97,6 +97,9 @@ pub enum EventKind {
     /// favicon detector — `<link rel="icon">` present with at least
     /// one resolvable href.
     Favicon,
+    /// hsts detector — Strict-Transport-Security response header.
+    /// First detector in the response-header batch (cycle 2026-05-17).
+    Hsts,
 }
 
 /// Severity of a finding-bucketed event (cssHealth / uiOverflow

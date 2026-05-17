@@ -64,6 +64,7 @@ use crawler_detectors::form_labels::{
 use crawler_detectors::heading_order::{
     detect_heading_order_issues, HeadingOrderSnapshot, HEADING_ORDER_JS,
 };
+use crawler_detectors::hsts::{build_hsts_snapshot, detect_hsts_issues};
 use crawler_detectors::html_lang::{detect_html_lang_issues, HtmlLangSnapshot, HTML_LANG_JS};
 use crawler_detectors::link_text::{detect_link_text_issues, LinkTextSnapshot, LINK_TEXT_JS};
 use crawler_detectors::placeholder_text::{
@@ -450,6 +451,14 @@ async fn run() -> Result<ExitCode> {
             }
             if let Err(e) = capture_favicon(&page, &events, started_at).await {
                 tracing::debug!("favicon snapshot failed: {e}");
+            }
+            // T75 response-header batch (2026-05-17): hsts is the
+            // first detector wired through the new
+            // NetworkObservation.headers map. Pattern repeats for
+            // csp / vary / sri / corp / etc. in subsequent cycles.
+            let cur_url = page.url().await.ok().flatten().unwrap_or_default();
+            if let Err(e) = capture_hsts(&cur_url, &network, &events, started_at).await {
+                tracing::debug!("hsts snapshot failed: {e}");
             }
             if let Err(e) = capture_css_health(&page, &events, &network, started_at).await {
                 tracing::debug!("css_health snapshot failed: {e}");
@@ -898,6 +907,39 @@ async fn capture_favicon(
         events,
         findings,
         EventKind::Favicon,
+        started_at.elapsed().as_millis() as u64,
+    )
+    .await;
+    Ok(())
+}
+
+/// T75 batch wiring (2026-05-17): hsts response-header detector.
+/// FIRST consumer of the new cdp_raw NetworkObservation.headers
+/// map — pattern for the ~20 response-header detectors that
+/// follow (csp / vary / sri / corp / etc.).
+async fn capture_hsts(
+    page_url: &str,
+    network: &crate::cdp_raw::NetworkObservations,
+    events: &Arc<Mutex<Vec<CapturedEvent>>>,
+    started_at: Instant,
+) -> Result<()> {
+    let headers: Vec<(String, String)> = {
+        let net = network.lock().await;
+        net.get(page_url)
+            .map(|obs| {
+                obs.headers
+                    .iter()
+                    .map(|(k, v)| (k.clone(), v.clone()))
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    let snap = build_hsts_snapshot(page_url, headers);
+    let findings = detect_hsts_issues(&snap);
+    push_axis_findings(
+        events,
+        findings,
+        EventKind::Hsts,
         started_at.elapsed().as_millis() as u64,
     )
     .await;

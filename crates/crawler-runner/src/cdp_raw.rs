@@ -64,6 +64,12 @@ pub struct NetworkObservation {
     pub body_bytes: u64,
     /// Network-level error text from `Network.loadingFailed`.
     pub error_text: Option<String>,
+    /// T75 (2026-05-17): full response headers, lowercased keys.
+    /// Populated from Network.responseReceived. Unblocks the
+    /// response-header detector batch (corp, csp, hsts, vary,
+    /// permissions_policy, reporting_endpoints, sri, etc.) by
+    /// giving each detector the per-URL header map it expects.
+    pub headers: std::collections::BTreeMap<String, String>,
 }
 
 /// Shared map of URL → observation. Populated by the raw-CDP
@@ -307,12 +313,32 @@ pub async fn spawn_raw_cdp_capture(
                                 .and_then(|s| s.as_str())
                                 .map(ToOwned::to_owned)
                         });
+                    // T75 (2026-05-17): capture the full response
+                    // headers map (lowercased keys for case-insensitive
+                    // lookup) so the response-header detector batch
+                    // (corp / csp / hsts / vary / sri / etc.) can
+                    // consume it without re-walking the CDP stream.
+                    let headers_map: std::collections::BTreeMap<String, String> = params
+                        .get("response")
+                        .and_then(|r| r.get("headers"))
+                        .and_then(|h| h.as_object())
+                        .map(|obj| {
+                            obj.iter()
+                                .filter_map(|(k, v)| {
+                                    v.as_str().map(|s| (k.to_ascii_lowercase(), s.to_owned()))
+                                })
+                                .collect()
+                        })
+                        .unwrap_or_default();
                     // Update the per-URL observation.
                     if let Some(ref url) = url_opt {
                         let mut net = network.lock().await;
                         let entry = net.entry(url.clone()).or_default();
                         entry.status = u16::try_from(status_u).unwrap_or(u16::MAX);
                         entry.content_type = content_type;
+                        if !headers_map.is_empty() {
+                            entry.headers = headers_map;
+                        }
                     }
                     // Status >= 400 → ResponseError.
                     if status_u >= 400 {
