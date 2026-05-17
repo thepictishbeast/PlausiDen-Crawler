@@ -64,6 +64,7 @@ pub mod mixed_content;
 pub mod network_error_logging;
 pub mod origin_agent_cluster;
 pub mod outbound_links;
+pub mod permissions_policy;
 pub mod placeholder_text;
 pub mod referrer_policy;
 pub mod reporting_endpoints;
