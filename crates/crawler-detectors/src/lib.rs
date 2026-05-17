@@ -59,6 +59,7 @@ pub mod favicon;
 pub mod font_loading;
 pub mod form_labels;
 pub mod heading_order;
+pub mod hreflang;
 pub mod hsts;
 pub mod html_lang;
 pub mod iframe_sandbox;
@@ -93,6 +94,7 @@ pub mod ui_overflow;
 pub(crate) mod url_helpers;
 pub mod vary_header;
 pub mod viewport_meta;
+pub mod web_manifest;
 pub mod web_vitals;
 pub mod x_frame_options;
 
