@@ -73,6 +73,7 @@ pub mod runtime_focus;
 pub mod runtime_images;
 pub mod runtime_landmarks;
 pub mod skip_link;
+pub mod speculation_rules;
 pub mod sri;
 pub mod tap_targets;
 pub mod ui_overflow;
