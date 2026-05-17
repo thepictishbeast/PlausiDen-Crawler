@@ -70,6 +70,7 @@ pub mod runtime_focus;
 pub mod runtime_images;
 pub mod runtime_landmarks;
 pub mod skip_link;
+pub mod sri;
 pub mod tap_targets;
 pub mod ui_overflow;
 pub(crate) mod url_helpers;
