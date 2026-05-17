@@ -39,7 +39,9 @@
 
 use serde::{Deserialize, Serialize};
 
+pub mod aria_required_attrs;
 pub mod autocomplete;
+pub mod autoplay_media;
 pub mod cache_control;
 pub mod coep;
 pub mod content_security_policy;
