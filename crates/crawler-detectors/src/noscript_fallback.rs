@@ -16,11 +16,11 @@
 //! Findings:
 //!   * `noscript.missing`              strict   JS required for
 //!                                              first paint AND no
-//!                                              <noscript> present
-//!   * `noscript.empty-message`        warn     <noscript> present
+//!                                              `<noscript>` present
+//!   * `noscript.empty-message`        warn     `<noscript>` present
 //!                                              but contains no
 //!                                              text content
-//!   * `noscript.unhelpful`            warn     <noscript> text
+//!   * `noscript.unhelpful`            warn     `<noscript>` text
 //!                                              < 16 chars (likely
 //!                                              "JS required.")
 //!
@@ -84,13 +84,14 @@ pub fn detect_noscript_fallback_issues(snap: &NoscriptSnapshot) -> Vec<AxisFindi
     }
     let trimmed = snap.noscript_text.trim();
     if trimmed.is_empty() {
-        // <noscript> may exist but be empty, OR there may be no
-        // <noscript> at all. Either way: there's no helpful
+        // `<noscript>` may exist but be empty, OR there may be no
+        // `<noscript>` at all. Either way: there's no helpful
         // fallback.
         out.push(AxisFinding {
             severity: AxisSeverity::Strict,
             kind: "noscript.missing".into(),
-            detail: "page renders nothing without JS and has no <noscript> fallback content".into(),
+            detail: "page renders nothing without JS and has no `<noscript>` fallback content"
+                .into(),
         });
         return out;
     }
@@ -99,7 +100,7 @@ pub fn detect_noscript_fallback_issues(snap: &NoscriptSnapshot) -> Vec<AxisFindi
             severity: AxisSeverity::Warn,
             kind: "noscript.unhelpful".into(),
             detail: format!(
-                "<noscript> fallback is only {} chars ({:?}); expected a useful explanation + alternate path",
+                "`<noscript>` fallback is only {} chars ({:?}); expected a useful explanation + alternate path",
                 trimmed.chars().count(),
                 trimmed
             ),
@@ -122,7 +123,7 @@ mod tests {
 
     #[test]
     fn page_with_pre_js_content_is_clean() {
-        // SSR / static HTML page — no <noscript> needed.
+        // SSR / static HTML page — no `<noscript>` needed.
         let s = snap(true, "");
         assert!(detect_noscript_fallback_issues(&s).is_empty());
     }
@@ -164,7 +165,7 @@ mod tests {
 
     #[test]
     fn pre_js_content_overrides_short_noscript() {
-        // Page has SSR content AND a too-short <noscript> — clean.
+        // Page has SSR content AND a too-short `<noscript>` — clean.
         let s = snap(true, "JS req.");
         assert!(detect_noscript_fallback_issues(&s).is_empty());
     }

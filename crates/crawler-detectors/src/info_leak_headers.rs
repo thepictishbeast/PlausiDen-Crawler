@@ -51,7 +51,8 @@ const AUDITED_HEADERS: &[&str] = &[
     "x-generator",
 ];
 
-/// Build a snapshot. Only headers in [`AUDITED_HEADERS`] are kept.
+/// Build a snapshot. Only headers in `AUDITED_HEADERS` (private)
+/// are kept.
 pub fn build_info_leak_snapshot(
     page_url: &str,
     headers: impl IntoIterator<Item = (impl AsRef<str>, impl AsRef<str>)>,

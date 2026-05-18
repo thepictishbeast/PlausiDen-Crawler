@@ -2,8 +2,8 @@
 //!
 //! Mirror of `src/docTitle.ts`. Findings:
 //!
-//!   * `title.missing`     strict   no <title>
-//!   * `title.empty`       strict   <title></title> / whitespace
+//!   * `title.missing`     strict   no `<title>`
+//!   * `title.empty`       strict   `<title></title>` / whitespace
 //!   * `title.generic`     warn     "Document" / "Untitled" / etc.
 //!   * `title.too-short`   warn     ≤ 2 chars
 //!   * `title.too-long`    warn     ≥ 70 chars
@@ -26,7 +26,7 @@ pub const DOC_TITLE_JS: &str = r##"(() => {
 pub struct DocTitleSnapshot {
     /// Page URL.
     pub page_url: String,
-    /// True iff a <title> element exists in head.
+    /// True iff a `<title>` element exists in head.
     pub present: bool,
     /// Inner text, untrimmed.
     pub raw: String,
@@ -53,7 +53,7 @@ const TITLE_TOO_SHORT_MAX: usize = 2;
 const TITLE_TOO_LONG_MIN: usize = 70;
 
 /// Pure detector: snapshot → findings. Flags missing / empty /
-/// duplicate `<title>` and titles that don't convey the page's
+/// duplicate ``<title>`` and titles that don't convey the page's
 /// purpose (WCAG 2.4.2 Page Titled).
 #[must_use]
 pub fn detect_doc_title_issues(snap: &DocTitleSnapshot) -> Vec<crate::AxisFinding> {
@@ -63,7 +63,7 @@ pub fn detect_doc_title_issues(snap: &DocTitleSnapshot) -> Vec<crate::AxisFindin
         out.push(crate::AxisFinding {
             severity: crate::AxisSeverity::Strict,
             kind: "title.missing".to_owned(),
-            detail: "Page has no <title> element in <head>. Browsers fall back to the URL; screen readers announce 'untitled document'. Add a unique, descriptive <title>.".to_owned(),
+            detail: "Page has no `<title>` element in <head>. Browsers fall back to the URL; screen readers announce 'untitled document'. Add a unique, descriptive `<title>`.".to_owned(),
         });
         return out;
     }
@@ -73,7 +73,7 @@ pub fn detect_doc_title_issues(snap: &DocTitleSnapshot) -> Vec<crate::AxisFindin
         out.push(crate::AxisFinding {
             severity: crate::AxisSeverity::Strict,
             kind: "title.empty".to_owned(),
-            detail: "Page <title> is empty or whitespace-only. Same effect as missing — the URL becomes the fallback title.".to_owned(),
+            detail: "Page `<title>` is empty or whitespace-only. Same effect as missing — the URL becomes the fallback title.".to_owned(),
         });
         return out;
     }
@@ -84,7 +84,7 @@ pub fn detect_doc_title_issues(snap: &DocTitleSnapshot) -> Vec<crate::AxisFindin
             severity: crate::AxisSeverity::Warn,
             kind: "title.generic".to_owned(),
             detail: format!(
-                "Page <title> is a generic default ('{trimmed}') — almost always copy-paste leftover from a template / IDE. Replace with a descriptive page-specific title."
+                "Page `<title>` is a generic default ('{trimmed}') — almost always copy-paste leftover from a template / IDE. Replace with a descriptive page-specific title."
             ),
         });
     }
@@ -94,7 +94,7 @@ pub fn detect_doc_title_issues(snap: &DocTitleSnapshot) -> Vec<crate::AxisFindin
             severity: crate::AxisSeverity::Warn,
             kind: "title.too-short".to_owned(),
             detail: format!(
-                "Page <title> is only {} characters ('{trimmed}'). Search-result previews and screen-reader announcements need more context.",
+                "Page `<title>` is only {} characters ('{trimmed}'). Search-result previews and screen-reader announcements need more context.",
                 trimmed.chars().count()
             ),
         });
@@ -105,7 +105,7 @@ pub fn detect_doc_title_issues(snap: &DocTitleSnapshot) -> Vec<crate::AxisFindin
             severity: crate::AxisSeverity::Warn,
             kind: "title.too-long".to_owned(),
             detail: format!(
-                "Page <title> is {} characters — Google truncates around 60-70 chars in search results. Trim or move detail into <meta name=\"description\">.",
+                "Page `<title>` is {} characters — Google truncates around 60-70 chars in search results. Trim or move detail into <meta name=\"description\">.",
                 trimmed.chars().count()
             ),
         });

@@ -2,8 +2,8 @@
 //!
 //! Mirror of `src/htmlLang.ts`. WCAG 3.1.1 (Level A). Findings:
 //!
-//!   * `lang.missing`         strict   <html> has no lang attribute
-//!   * `lang.empty`           strict   <html lang="">
+//!   * `lang.missing`         strict   `<html>` has no lang attribute
+//!   * `lang.empty`           strict   `<html lang="">`
 //!   * `lang.invalid`         warn     structurally non-BCP-47
 //!   * `lang.unknown-primary` warn     primary subtag not in common
 //!                                     ISO 639-1 set
