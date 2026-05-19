@@ -180,6 +180,11 @@ pub enum EventKind {
     /// provides fewer than 2 of: site-wide navigation, in-page
     /// search, sitemap link, table of contents, related-links.
     MultipleWays,
+    /// renderBlockingResources detector — Lighthouse perf. Flags
+    /// stylesheets and scripts in `<head>` that block first paint
+    /// because they lack the defer pattern / defer / async / module
+    /// attributes.
+    RenderBlocking,
 }
 
 /// Severity of a finding-bucketed event (cssHealth / uiOverflow

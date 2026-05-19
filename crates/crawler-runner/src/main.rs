@@ -124,6 +124,9 @@ use crawler_detectors::doctype_charset::{
 use crawler_detectors::multiple_ways::{
     detect_multiple_ways, MultipleWaysSnapshot, MULTIPLE_WAYS_DOM_CAPTURE_JS,
 };
+use crawler_detectors::render_blocking_resources::{
+    detect_render_blocking_resources, RenderBlockingSnapshot, RENDER_BLOCKING_DOM_CAPTURE_JS,
+};
 use crawler_detectors::status_messages::{
     detect_status_messages, StatusMessagesSnapshot, STATUS_MESSAGES_DOM_CAPTURE_JS,
 };
@@ -598,6 +601,9 @@ async fn run() -> Result<ExitCode> {
             }
             if let Err(e) = capture_multiple_ways(&page, &events, started_at).await {
                 tracing::debug!("multiple_ways snapshot failed: {e}");
+            }
+            if let Err(e) = capture_render_blocking(&page, &events, started_at).await {
+                tracing::debug!("render_blocking snapshot failed: {e}");
             }
             if let Err(e) = capture_placeholder_text(&page, &events, started_at).await {
                 tracing::debug!("placeholder_text snapshot failed: {e}");
@@ -1105,6 +1111,28 @@ async fn capture_doc_title(
 }
 
 /// T75 batch wiring (2026-05-17): placeholderText detector — sentinel
+/// renderBlocking — flag stylesheets + scripts in `<head>` that
+/// block first paint.
+async fn capture_render_blocking(
+    page: &chromiumoxide::Page,
+    events: &Arc<Mutex<Vec<CapturedEvent>>>,
+    started_at: Instant,
+) -> Result<()> {
+    let result = page.evaluate(RENDER_BLOCKING_DOM_CAPTURE_JS).await?;
+    let snap: RenderBlockingSnapshot = result
+        .into_value()
+        .context("deserialize renderBlocking snapshot")?;
+    let findings = detect_render_blocking_resources(&snap);
+    push_axis_findings(
+        events,
+        findings,
+        EventKind::RenderBlocking,
+        started_at.elapsed().as_millis() as u64,
+    )
+    .await;
+    Ok(())
+}
+
 /// multipleWays — WCAG 2.1 SC 2.4.5. Warn if the page provides
 /// fewer than 2 of nav / search / sitemap / toc / related-links.
 async fn capture_multiple_ways(
