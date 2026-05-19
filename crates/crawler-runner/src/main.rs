@@ -127,6 +127,9 @@ use crawler_detectors::multiple_ways::{
 use crawler_detectors::form_error_id_and_suggest::{
     detect_form_errors, FormErrorSnapshot, FORM_ERROR_DOM_CAPTURE_JS,
 };
+use crawler_detectors::robots_txt::{
+    detect_robots_txt, RobotsTxtSnapshot, ROBOTS_TXT_DOM_CAPTURE_JS,
+};
 use crawler_detectors::modern_image_formats::{
     detect_modern_image_formats, ModernImageFormatsSnapshot, MODERN_IMAGE_FORMATS_DOM_CAPTURE_JS,
 };
@@ -616,6 +619,9 @@ async fn run() -> Result<ExitCode> {
             }
             if let Err(e) = capture_form_errors(&page, &events, started_at).await {
                 tracing::debug!("form_errors snapshot failed: {e}");
+            }
+            if let Err(e) = capture_robots_txt(&page, &events, started_at).await {
+                tracing::debug!("robots_txt snapshot failed: {e}");
             }
             if let Err(e) = capture_placeholder_text(&page, &events, started_at).await {
                 tracing::debug!("placeholder_text snapshot failed: {e}");
@@ -1123,6 +1129,29 @@ async fn capture_doc_title(
 }
 
 /// T75 batch wiring (2026-05-17): placeholderText detector — sentinel
+/// robotsTxt — Lighthouse SEO. Fetch `/robots.txt`, parse, and
+/// audit the canonical URL against its Disallow rules + sitemap
+/// reachability.
+async fn capture_robots_txt(
+    page: &chromiumoxide::Page,
+    events: &Arc<Mutex<Vec<CapturedEvent>>>,
+    started_at: Instant,
+) -> Result<()> {
+    let result = page.evaluate(ROBOTS_TXT_DOM_CAPTURE_JS).await?;
+    let snap: RobotsTxtSnapshot = result
+        .into_value()
+        .context("deserialize robotsTxt snapshot")?;
+    let findings = detect_robots_txt(&snap);
+    push_axis_findings(
+        events,
+        findings,
+        EventKind::RobotsTxt,
+        started_at.elapsed().as_millis() as u64,
+    )
+    .await;
+    Ok(())
+}
+
 /// formErrorIdAndSuggest — WCAG 3.3.1 + 3.3.3. Invalid inputs
 /// must wire an aria-describedby message and that message must
 /// suggest a corrective action.

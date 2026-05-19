@@ -194,6 +194,10 @@ pub enum EventKind {
     /// message wired via aria-describedby, (2) include a
     /// corrective suggestion in the message text.
     FormErrorIdAndSuggest,
+    /// robotsTxt detector — Lighthouse SEO. Fetches `/robots.txt`,
+    /// parses, and audits the canonical URL against Disallow rules
+    /// + sitemap reachability.
+    RobotsTxt,
 }
 
 /// Severity of a finding-bucketed event (cssHealth / uiOverflow
