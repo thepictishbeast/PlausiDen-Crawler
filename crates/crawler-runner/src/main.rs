@@ -115,6 +115,9 @@ use crawler_detectors::permissions_policy::{
 use crawler_detectors::placeholder_text::{
     detect_placeholder_text_issues, PlaceholderTextSnapshot, PLACEHOLDER_TEXT_DOM_CAPTURE_JS,
 };
+use crawler_detectors::link_color_only::{
+    detect_link_color_only, LinkColorOnlySnapshot, LINK_COLOR_ONLY_DOM_CAPTURE_JS,
+};
 use crawler_detectors::text_wrap_collapse::{
     detect_text_wrap_collapse, TextWrapCollapseSnapshot, TEXT_WRAP_COLLAPSE_DOM_CAPTURE_JS,
 };
@@ -574,6 +577,9 @@ async fn run() -> Result<ExitCode> {
             }
             if let Err(e) = capture_text_wrap_collapse(&page, &events, started_at).await {
                 tracing::debug!("text_wrap_collapse snapshot failed: {e}");
+            }
+            if let Err(e) = capture_link_color_only(&page, &events, started_at).await {
+                tracing::debug!("link_color_only snapshot failed: {e}");
             }
             if let Err(e) = capture_placeholder_text(&page, &events, started_at).await {
                 tracing::debug!("placeholder_text snapshot failed: {e}");
@@ -1081,6 +1087,29 @@ async fn capture_doc_title(
 }
 
 /// T75 batch wiring (2026-05-17): placeholderText detector — sentinel
+/// linkColorOnly — WCAG 2.1 SC 1.4.1. Flag links that signal
+/// hyperlink-ness only via color (no underline) and have low
+/// contrast against surrounding text.
+async fn capture_link_color_only(
+    page: &chromiumoxide::Page,
+    events: &Arc<Mutex<Vec<CapturedEvent>>>,
+    started_at: Instant,
+) -> Result<()> {
+    let result = page.evaluate(LINK_COLOR_ONLY_DOM_CAPTURE_JS).await?;
+    let snap: LinkColorOnlySnapshot = result
+        .into_value()
+        .context("deserialize linkColorOnly snapshot")?;
+    let findings = detect_link_color_only(&snap);
+    push_axis_findings(
+        events,
+        findings,
+        EventKind::LinkColorOnly,
+        started_at.elapsed().as_millis() as u64,
+    )
+    .await;
+    Ok(())
+}
+
 /// textWrapCollapse — flag text elements wrapping at <3 chars
 /// per visual line (narrow-column collapse).
 async fn capture_text_wrap_collapse(

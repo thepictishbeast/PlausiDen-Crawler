@@ -160,6 +160,11 @@ pub enum EventKind {
     /// existing uiOverflow detector misses because the text isn't
     /// overflowing — the column is just way too narrow.
     TextWrapCollapse,
+    /// linkColorOnly detector — WCAG 2.1 SC 1.4.1. Flags `<a>`
+    /// elements that signal hyperlink-ness ONLY via color (no
+    /// underline, no border, no caller-side opt-out marker) AND
+    /// have < 3:1 contrast against surrounding text.
+    LinkColorOnly,
 }
 
 /// Severity of a finding-bucketed event (cssHealth / uiOverflow

@@ -66,6 +66,7 @@ pub mod iframe_sandbox;
 pub mod image_dimensions;
 pub mod info_leak_headers;
 pub mod inline_script;
+pub mod link_color_only;
 pub mod link_target_blank_safety;
 pub mod link_text;
 pub mod link_underline;
