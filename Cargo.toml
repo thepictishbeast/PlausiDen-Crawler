@@ -30,6 +30,11 @@ members = [
     # grid. Runner instantiates the real engines; this crate is
     # the cross-runner contract.
     "crates/crawler-browser-matrix",
+    # #116: Galen-style layout-assertion DSL — operator-authored
+    # specs ("logo inside header top-left, 0-40px"). Typed surface
+    # ships here; runner that consumes a LayoutSpec + DOM-bounds
+    # snapshot is a follow-up.
+    "crates/crawler-layout-spec",
 ]
 
 [workspace.package]

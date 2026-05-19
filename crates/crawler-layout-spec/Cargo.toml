@@ -1,0 +1,21 @@
+[package]
+name = "crawler-layout-spec"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Crawler — Galen-style typed layout-assertion DSL. Operator-authored specs describing where elements should sit (inside / left-of / aligned-to / width-in-range) + a stable JSON wire shape. Runner integration is a follow-up."
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[lints.rust]
+unsafe_code = "forbid"
+unused_must_use = "deny"
+missing_docs = "warn"
+
+[lints.clippy]
+unwrap_used = "warn"
