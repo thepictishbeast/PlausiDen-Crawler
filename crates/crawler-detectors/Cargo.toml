@@ -11,6 +11,10 @@ description = "Crawler — page-side detector eval-function strings + typed resu
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
+# `image` is pure-Rust PNG/JPEG decode for the pixel_diff detector
+# (BackstopJS equivalent). Default features off — we only need
+# PNG decode, not the full format zoo.
+image = { version = "0.25", default-features = false, features = ["png"] }
 
 [lints.rust]
 unsafe_code = "deny"

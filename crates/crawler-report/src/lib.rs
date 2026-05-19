@@ -203,6 +203,11 @@ pub enum EventKind {
     /// the overflow heuristic with `document.documentElement.style
     /// .zoom = "200%"` and diffing against the 100%-zoom baseline.
     ResizeText200pct,
+    /// pixelDiff detector — BackstopJS-equivalent. Compares the
+    /// current screenshot against a stored baseline, emitting
+    /// dimension-mismatch / major / minor finding kinds per the
+    /// configurable channel-tolerance + warn/strict thresholds.
+    PixelDiff,
 }
 
 /// Severity of a finding-bucketed event (cssHealth / uiOverflow
