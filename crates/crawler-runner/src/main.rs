@@ -124,6 +124,9 @@ use crawler_detectors::doctype_charset::{
 use crawler_detectors::multiple_ways::{
     detect_multiple_ways, MultipleWaysSnapshot, MULTIPLE_WAYS_DOM_CAPTURE_JS,
 };
+use crawler_detectors::form_error_id_and_suggest::{
+    detect_form_errors, FormErrorSnapshot, FORM_ERROR_DOM_CAPTURE_JS,
+};
 use crawler_detectors::modern_image_formats::{
     detect_modern_image_formats, ModernImageFormatsSnapshot, MODERN_IMAGE_FORMATS_DOM_CAPTURE_JS,
 };
@@ -610,6 +613,9 @@ async fn run() -> Result<ExitCode> {
             }
             if let Err(e) = capture_modern_image_formats(&page, &events, started_at).await {
                 tracing::debug!("modern_image_formats snapshot failed: {e}");
+            }
+            if let Err(e) = capture_form_errors(&page, &events, started_at).await {
+                tracing::debug!("form_errors snapshot failed: {e}");
             }
             if let Err(e) = capture_placeholder_text(&page, &events, started_at).await {
                 tracing::debug!("placeholder_text snapshot failed: {e}");
@@ -1117,6 +1123,29 @@ async fn capture_doc_title(
 }
 
 /// T75 batch wiring (2026-05-17): placeholderText detector — sentinel
+/// formErrorIdAndSuggest — WCAG 3.3.1 + 3.3.3. Invalid inputs
+/// must wire an aria-describedby message and that message must
+/// suggest a corrective action.
+async fn capture_form_errors(
+    page: &chromiumoxide::Page,
+    events: &Arc<Mutex<Vec<CapturedEvent>>>,
+    started_at: Instant,
+) -> Result<()> {
+    let result = page.evaluate(FORM_ERROR_DOM_CAPTURE_JS).await?;
+    let snap: FormErrorSnapshot = result
+        .into_value()
+        .context("deserialize formError snapshot")?;
+    let findings = detect_form_errors(&snap);
+    push_axis_findings(
+        events,
+        findings,
+        EventKind::FormErrorIdAndSuggest,
+        started_at.elapsed().as_millis() as u64,
+    )
+    .await;
+    Ok(())
+}
+
 /// modernImageFormats — flag legacy raster `<img>` refs without
 /// AVIF / WebP `<source>` alternatives.
 async fn capture_modern_image_formats(

@@ -189,6 +189,11 @@ pub enum EventKind {
     /// `<img>` references to legacy JPEG / PNG / GIF that don't
     /// have an AVIF / WebP `<source>` sibling.
     ModernImageFormats,
+    /// formErrorIdAndSuggest detector — WCAG 2.1 SC 3.3.1 + 3.3.3.
+    /// Invalid form inputs must (1) have a programmatic error
+    /// message wired via aria-describedby, (2) include a
+    /// corrective suggestion in the message text.
+    FormErrorIdAndSuggest,
 }
 
 /// Severity of a finding-bucketed event (cssHealth / uiOverflow

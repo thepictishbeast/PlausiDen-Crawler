@@ -58,6 +58,7 @@ pub mod document_policy;
 pub mod dom_size;
 pub mod favicon;
 pub mod font_loading;
+pub mod form_error_id_and_suggest;
 pub mod form_labels;
 pub mod heading_order;
 pub mod hreflang;
