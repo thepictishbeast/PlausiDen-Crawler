@@ -154,6 +154,12 @@ pub enum EventKind {
     FontLoading,
     /// trustedTypesRuntime detector — DOM-sink monitor (Trusted Types).
     TrustedTypes,
+    /// textWrapCollapse detector — flags text elements wrapping at
+    /// one or two characters per visual line. Catches CSS layout
+    /// failures (narrow column, aggressive word-break) that the
+    /// existing uiOverflow detector misses because the text isn't
+    /// overflowing — the column is just way too narrow.
+    TextWrapCollapse,
 }
 
 /// Severity of a finding-bucketed event (cssHealth / uiOverflow

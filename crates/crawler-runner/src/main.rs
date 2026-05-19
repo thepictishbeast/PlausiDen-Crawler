@@ -115,6 +115,9 @@ use crawler_detectors::permissions_policy::{
 use crawler_detectors::placeholder_text::{
     detect_placeholder_text_issues, PlaceholderTextSnapshot, PLACEHOLDER_TEXT_DOM_CAPTURE_JS,
 };
+use crawler_detectors::text_wrap_collapse::{
+    detect_text_wrap_collapse, TextWrapCollapseSnapshot, TEXT_WRAP_COLLAPSE_DOM_CAPTURE_JS,
+};
 use crawler_detectors::referrer_policy::{
     build_referrer_policy_snapshot, detect_referrer_policy_issues,
 };
@@ -251,6 +254,26 @@ async fn run() -> Result<ExitCode> {
     let mut builder = BrowserConfig::builder().no_sandbox();
     if !args.headless {
         builder = builder.with_head();
+    }
+    // T75b (2026-05-19): widen executable auto-detection. The
+    // chromiumoxide default only checks for plain "chromium" /
+    // "chrome" / "google-chrome" on PATH; Debian 13 ships the
+    // headless binary as `chromium-shell`. Walk a fallback list
+    // before letting chromiumoxide's auto-detect fail.
+    if std::env::var_os("CHROME").is_none() {
+        for candidate in [
+            "/usr/bin/chromium-shell",
+            "/usr/bin/chromium",
+            "/usr/bin/chromium-browser",
+            "/usr/bin/google-chrome",
+            "/usr/bin/google-chrome-stable",
+            "/snap/bin/chromium",
+        ] {
+            if std::path::Path::new(candidate).is_file() {
+                builder = builder.chrome_executable(candidate);
+                break;
+            }
+        }
     }
     let config = builder
         .build()
@@ -548,6 +571,9 @@ async fn run() -> Result<ExitCode> {
             }
             if let Err(e) = capture_doc_title(&page, &events, started_at).await {
                 tracing::debug!("doc_title snapshot failed: {e}");
+            }
+            if let Err(e) = capture_text_wrap_collapse(&page, &events, started_at).await {
+                tracing::debug!("text_wrap_collapse snapshot failed: {e}");
             }
             if let Err(e) = capture_placeholder_text(&page, &events, started_at).await {
                 tracing::debug!("placeholder_text snapshot failed: {e}");
@@ -1055,6 +1081,28 @@ async fn capture_doc_title(
 }
 
 /// T75 batch wiring (2026-05-17): placeholderText detector — sentinel
+/// textWrapCollapse — flag text elements wrapping at <3 chars
+/// per visual line (narrow-column collapse).
+async fn capture_text_wrap_collapse(
+    page: &chromiumoxide::Page,
+    events: &Arc<Mutex<Vec<CapturedEvent>>>,
+    started_at: Instant,
+) -> Result<()> {
+    let result = page.evaluate(TEXT_WRAP_COLLAPSE_DOM_CAPTURE_JS).await?;
+    let snap: TextWrapCollapseSnapshot = result
+        .into_value()
+        .context("deserialize textWrapCollapse snapshot")?;
+    let findings = detect_text_wrap_collapse(&snap);
+    push_axis_findings(
+        events,
+        findings,
+        EventKind::TextWrapCollapse,
+        started_at.elapsed().as_millis() as u64,
+    )
+    .await;
+    Ok(())
+}
+
 /// text (TODO / Lorem ipsum / "delete me") in rendered DOM.
 async fn capture_placeholder_text(
     page: &chromiumoxide::Page,
