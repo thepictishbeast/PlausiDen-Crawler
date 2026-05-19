@@ -35,15 +35,17 @@
 //!
 //! ## Status
 //!
-//! Closes the DSL half of #116. Runner half — consume a spec
-//! + DOM-bounds capture + emit pass/fail — is a follow-up.
-//! Shipping the typed surface first lets authors write specs
-//! before the runner is finished.
+//! DSL + offline runner ship in this crate. The chromiumoxide
+//! integration that populates a [`BoundsSnapshot`] from a live
+//! page is a downstream concern (the Crawler runner already
+//! calls `getBoundingClientRect` per axis — that wiring is
+//! mechanical).
 
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// A complete layout specification.
 ///
@@ -389,6 +391,303 @@ impl std::fmt::Display for LayoutSpecError {
 
 impl std::error::Error for LayoutSpecError {}
 
+/// One element's bounding box as captured from a live page.
+///
+/// Coordinates are CSS pixels relative to the document origin
+/// (NOT the viewport — viewport coordinates lose information
+/// when the page is scrolled).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct BoundingBox {
+    /// Left edge (CSS px from document origin).
+    pub x: f64,
+    /// Top edge (CSS px from document origin).
+    pub y: f64,
+    /// Width in CSS px.
+    pub width: f64,
+    /// Height in CSS px.
+    pub height: f64,
+    /// True iff the element is rendered (non-zero size AND not
+    /// `display: none` AND not `visibility: hidden`).
+    pub visible: bool,
+    /// True iff the element's rect lies fully within the current
+    /// viewport (no horizontal scroll required).
+    pub in_viewport: bool,
+}
+
+impl BoundingBox {
+    /// Right edge (x + width).
+    pub fn right(&self) -> f64 {
+        self.x + self.width
+    }
+    /// Bottom edge (y + height).
+    pub fn bottom(&self) -> f64 {
+        self.y + self.height
+    }
+    /// Horizontal center.
+    pub fn center_x(&self) -> f64 {
+        self.x + self.width / 2.0
+    }
+    /// Vertical center.
+    pub fn center_y(&self) -> f64 {
+        self.y + self.height / 2.0
+    }
+}
+
+/// A snapshot of every named object's bounding box, keyed by
+/// the [`LayoutObject::name`] from the spec.
+///
+/// Populated by the Crawler runner via `getBoundingClientRect` +
+/// `getComputedStyle` evaluation. This crate consumes the
+/// snapshot offline — the IO of capturing it is a separate
+/// concern, deliberately not coupled here.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct BoundsSnapshot {
+    /// Object name → bounding box.
+    pub boxes: HashMap<String, BoundingBox>,
+}
+
+impl BoundsSnapshot {
+    /// Construct an empty snapshot.
+    pub fn new() -> Self {
+        Self::default()
+    }
+    /// Insert a bounding box for a named object.
+    pub fn insert(&mut self, name: impl Into<String>, bbox: BoundingBox) {
+        self.boxes.insert(name.into(), bbox);
+    }
+    /// Look up a bounding box by object name.
+    pub fn get(&self, name: &str) -> Option<&BoundingBox> {
+        self.boxes.get(name)
+    }
+}
+
+/// Result of evaluating a single assertion against a snapshot.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct AssertionResult {
+    /// Echoed assertion (so the report stands alone without the spec).
+    pub assertion: LayoutAssertion,
+    /// True iff the assertion held against the snapshot.
+    pub passed: bool,
+    /// Human-readable detail. On pass, an empty-ish "ok"; on
+    /// fail, the measured value vs the expected range/relation.
+    pub detail: String,
+}
+
+/// Evaluate every assertion in `spec` against `snapshot`.
+///
+/// Returns one [`AssertionResult`] per assertion, in declared
+/// order. If an assertion references an object that's not in the
+/// snapshot, the result is `passed: false` with a "missing
+/// object" detail — same shape as any other failure so callers
+/// don't branch on a separate error.
+///
+/// This is a pure function: same `(spec, snapshot)` → same
+/// `Vec<AssertionResult>`. Safe to call in tests / replay.
+pub fn evaluate(spec: &LayoutSpec, snapshot: &BoundsSnapshot) -> Vec<AssertionResult> {
+    spec.assertions
+        .iter()
+        .map(|a| evaluate_assertion(a, snapshot))
+        .collect()
+}
+
+fn evaluate_assertion(a: &LayoutAssertion, snap: &BoundsSnapshot) -> AssertionResult {
+    let (passed, detail) = match a {
+        LayoutAssertion::Width { object, range } => match snap.get(object) {
+            Some(b) => check_range_f64("width", b.width, *range),
+            None => missing(object),
+        },
+        LayoutAssertion::Height { object, range } => match snap.get(object) {
+            Some(b) => check_range_f64("height", b.height, *range),
+            None => missing(object),
+        },
+        LayoutAssertion::Inside {
+            inner,
+            outer,
+            edge,
+            offset,
+        } => match (snap.get(inner), snap.get(outer)) {
+            (Some(i), Some(o)) => check_inside(i, o, *edge, *offset),
+            (None, _) => missing(inner),
+            (_, None) => missing(outer),
+        },
+        LayoutAssertion::LeftOf { left, right, gap } => match (snap.get(left), snap.get(right)) {
+            (Some(l), Some(r)) => check_horizontal_gap(l, r, *gap),
+            (None, _) => missing(left),
+            (_, None) => missing(right),
+        },
+        LayoutAssertion::RightOf { right, left, gap } => match (snap.get(left), snap.get(right)) {
+            (Some(l), Some(r)) => check_horizontal_gap(l, r, *gap),
+            (None, _) => missing(left),
+            (_, None) => missing(right),
+        },
+        LayoutAssertion::Above { top, bottom, gap } => match (snap.get(top), snap.get(bottom)) {
+            (Some(t), Some(b)) => check_vertical_gap(t, b, *gap),
+            (None, _) => missing(top),
+            (_, None) => missing(bottom),
+        },
+        LayoutAssertion::Below { bottom, top, gap } => match (snap.get(top), snap.get(bottom)) {
+            (Some(t), Some(b)) => check_vertical_gap(t, b, *gap),
+            (None, _) => missing(top),
+            (_, None) => missing(bottom),
+        },
+        LayoutAssertion::AlignedTo {
+            a: an,
+            b: bn,
+            axis,
+            tolerance,
+        } => match (snap.get(an), snap.get(bn)) {
+            (Some(a), Some(b)) => check_aligned(a, b, *axis, *tolerance),
+            (None, _) => missing(an),
+            (_, None) => missing(bn),
+        },
+        LayoutAssertion::Visible { object } => match snap.get(object) {
+            Some(b) if b.visible => (true, "ok".to_owned()),
+            Some(_) => (false, format!("{object} is not visible")),
+            None => return missing_result(a, object),
+        },
+        LayoutAssertion::InViewport { object } => match snap.get(object) {
+            Some(b) if b.in_viewport => (true, "ok".to_owned()),
+            Some(_) => (false, format!("{object} is outside the viewport")),
+            None => return missing_result(a, object),
+        },
+    };
+    AssertionResult {
+        assertion: a.clone(),
+        passed,
+        detail,
+    }
+}
+
+fn check_range_f64(label: &str, value: f64, range: PxRange) -> (bool, String) {
+    let v = value.round() as i64;
+    let min = range.min as i64;
+    let max = range.max as i64;
+    if v >= min && v <= max {
+        (true, format!("{label}={v}px in [{min}, {max}]"))
+    } else {
+        (false, format!("{label}={v}px outside [{min}, {max}]"))
+    }
+}
+
+fn check_inside(
+    inner: &BoundingBox,
+    outer: &BoundingBox,
+    edge: InsideEdge,
+    offset: Option<PxRange>,
+) -> (bool, String) {
+    let contained = inner.x >= outer.x
+        && inner.y >= outer.y
+        && inner.right() <= outer.right()
+        && inner.bottom() <= outer.bottom();
+    if !contained {
+        return (
+            false,
+            format!(
+                "inner box ({},{},{}x{}) not contained in outer ({},{},{}x{})",
+                inner.x as i64,
+                inner.y as i64,
+                inner.width as i64,
+                inner.height as i64,
+                outer.x as i64,
+                outer.y as i64,
+                outer.width as i64,
+                outer.height as i64
+            ),
+        );
+    }
+    if let Some(r) = offset {
+        let perpendicular_offset: f64 = match edge {
+            InsideEdge::Any => return (true, "ok (contained, edge=any)".to_owned()),
+            InsideEdge::Top => inner.y - outer.y,
+            InsideEdge::Bottom => outer.bottom() - inner.bottom(),
+            InsideEdge::Left => inner.x - outer.x,
+            InsideEdge::Right => outer.right() - inner.right(),
+            InsideEdge::TopLeft => (inner.y - outer.y).max(inner.x - outer.x),
+            InsideEdge::TopRight => (inner.y - outer.y).max(outer.right() - inner.right()),
+            InsideEdge::BottomLeft => (outer.bottom() - inner.bottom()).max(inner.x - outer.x),
+            InsideEdge::BottomRight => {
+                (outer.bottom() - inner.bottom()).max(outer.right() - inner.right())
+            }
+        };
+        let v = perpendicular_offset.round() as i64;
+        if r.contains(v.max(0) as u32) {
+            (true, format!("ok (offset={v}px, edge={edge:?})"))
+        } else {
+            (
+                false,
+                format!("offset={v}px outside [{},{}] (edge={edge:?})", r.min, r.max),
+            )
+        }
+    } else {
+        (true, "ok (contained)".to_owned())
+    }
+}
+
+fn check_horizontal_gap(left: &BoundingBox, right: &BoundingBox, gap: PxRange) -> (bool, String) {
+    let g = (right.x - left.right()).round() as i64;
+    if g < gap.min as i64 || g > gap.max as i64 {
+        (false, format!("gap={g}px outside [{},{}]", gap.min, gap.max))
+    } else {
+        (true, format!("gap={g}px in [{},{}]", gap.min, gap.max))
+    }
+}
+
+fn check_vertical_gap(top: &BoundingBox, bottom: &BoundingBox, gap: PxRange) -> (bool, String) {
+    let g = (bottom.y - top.bottom()).round() as i64;
+    if g < gap.min as i64 || g > gap.max as i64 {
+        (false, format!("gap={g}px outside [{},{}]", gap.min, gap.max))
+    } else {
+        (true, format!("gap={g}px in [{},{}]", gap.min, gap.max))
+    }
+}
+
+fn check_aligned(
+    a: &BoundingBox,
+    b: &BoundingBox,
+    axis: AlignAxis,
+    tolerance: u32,
+) -> (bool, String) {
+    let delta = match axis {
+        AlignAxis::Left => (a.x - b.x).abs(),
+        AlignAxis::Right => (a.right() - b.right()).abs(),
+        AlignAxis::Top => (a.y - b.y).abs(),
+        AlignAxis::Bottom => (a.bottom() - b.bottom()).abs(),
+        AlignAxis::CenterX => (a.center_x() - b.center_x()).abs(),
+        AlignAxis::CenterY => (a.center_y() - b.center_y()).abs(),
+    };
+    let d = delta.round() as u64;
+    if d <= tolerance as u64 {
+        (true, format!("delta={d}px within tol={tolerance}"))
+    } else {
+        (false, format!("delta={d}px exceeds tol={tolerance}"))
+    }
+}
+
+fn missing(name: &str) -> (bool, String) {
+    (false, format!("missing object in snapshot: {name}"))
+}
+
+fn missing_result(assertion: &LayoutAssertion, name: &str) -> AssertionResult {
+    AssertionResult {
+        assertion: assertion.clone(),
+        passed: false,
+        detail: format!("missing object in snapshot: {name}"),
+    }
+}
+
+/// Convenience: return the count of failed assertions.
+pub fn count_failures(results: &[AssertionResult]) -> usize {
+    results.iter().filter(|r| !r.passed).count()
+}
+
+/// Convenience: true iff every assertion in `results` passed.
+pub fn all_passed(results: &[AssertionResult]) -> bool {
+    results.iter().all(|r| r.passed)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -578,6 +877,205 @@ mod tests {
         let names = a.referenced_object_names();
         assert!(names.contains(&"logo"));
         assert!(names.contains(&"header"));
+    }
+
+    fn bbox(x: f64, y: f64, w: f64, h: f64) -> BoundingBox {
+        BoundingBox {
+            x,
+            y,
+            width: w,
+            height: h,
+            visible: true,
+            in_viewport: true,
+        }
+    }
+
+    #[test]
+    fn evaluate_width_height_pass_and_fail() {
+        let spec = LayoutSpec {
+            name: "n".into(),
+            author: None,
+            version: "1".into(),
+            applies_to: None,
+            objects: vec![LayoutObject {
+                name: "h".into(),
+                selector: "header".into(),
+            }],
+            assertions: vec![
+                LayoutAssertion::Width {
+                    object: "h".into(),
+                    range: PxRange::new(1000, 1300),
+                },
+                LayoutAssertion::Height {
+                    object: "h".into(),
+                    range: PxRange::new(60, 120),
+                },
+                LayoutAssertion::Height {
+                    object: "h".into(),
+                    range: PxRange::new(200, 300),
+                },
+            ],
+        };
+        let mut snap = BoundsSnapshot::new();
+        snap.insert("h", bbox(0.0, 0.0, 1200.0, 80.0));
+        let results = evaluate(&spec, &snap);
+        assert!(results[0].passed, "width should pass");
+        assert!(results[1].passed, "height should pass");
+        assert!(!results[2].passed, "height 200-300 should fail at 80");
+        assert_eq!(count_failures(&results), 1);
+        assert!(!all_passed(&results));
+    }
+
+    #[test]
+    fn evaluate_inside_with_top_left_offset() {
+        let spec = LayoutSpec {
+            name: "n".into(),
+            author: None,
+            version: "1".into(),
+            applies_to: None,
+            objects: vec![
+                LayoutObject {
+                    name: "outer".into(),
+                    selector: "header".into(),
+                },
+                LayoutObject {
+                    name: "inner".into(),
+                    selector: ".logo".into(),
+                },
+            ],
+            assertions: vec![LayoutAssertion::Inside {
+                inner: "inner".into(),
+                outer: "outer".into(),
+                edge: InsideEdge::TopLeft,
+                offset: Some(PxRange::new(0, 20)),
+            }],
+        };
+        let mut snap = BoundsSnapshot::new();
+        snap.insert("outer", bbox(0.0, 0.0, 1200.0, 80.0));
+        snap.insert("inner", bbox(10.0, 10.0, 100.0, 40.0));
+        let results = evaluate(&spec, &snap);
+        assert!(results[0].passed);
+    }
+
+    #[test]
+    fn evaluate_left_of_right_of_gap() {
+        let spec = LayoutSpec {
+            name: "n".into(),
+            author: None,
+            version: "1".into(),
+            applies_to: None,
+            objects: vec![
+                LayoutObject {
+                    name: "a".into(),
+                    selector: "#a".into(),
+                },
+                LayoutObject {
+                    name: "b".into(),
+                    selector: "#b".into(),
+                },
+            ],
+            assertions: vec![
+                LayoutAssertion::LeftOf {
+                    left: "a".into(),
+                    right: "b".into(),
+                    gap: PxRange::new(10, 50),
+                },
+                LayoutAssertion::LeftOf {
+                    left: "a".into(),
+                    right: "b".into(),
+                    gap: PxRange::new(100, 200),
+                },
+            ],
+        };
+        let mut snap = BoundsSnapshot::new();
+        snap.insert("a", bbox(0.0, 0.0, 100.0, 40.0));
+        snap.insert("b", bbox(120.0, 0.0, 100.0, 40.0));
+        let results = evaluate(&spec, &snap);
+        assert!(results[0].passed, "20px gap in [10,50]");
+        assert!(!results[1].passed, "20px gap NOT in [100,200]");
+    }
+
+    #[test]
+    fn evaluate_aligned_to_with_tolerance() {
+        let spec = LayoutSpec {
+            name: "n".into(),
+            author: None,
+            version: "1".into(),
+            applies_to: None,
+            objects: vec![
+                LayoutObject {
+                    name: "a".into(),
+                    selector: "#a".into(),
+                },
+                LayoutObject {
+                    name: "b".into(),
+                    selector: "#b".into(),
+                },
+            ],
+            assertions: vec![LayoutAssertion::AlignedTo {
+                a: "a".into(),
+                b: "b".into(),
+                axis: AlignAxis::CenterY,
+                tolerance: 2,
+            }],
+        };
+        let mut snap = BoundsSnapshot::new();
+        snap.insert("a", bbox(0.0, 0.0, 100.0, 40.0));
+        // center_y of a = 20, center_y of b = 21 — within tol 2
+        snap.insert("b", bbox(200.0, 1.0, 100.0, 40.0));
+        let results = evaluate(&spec, &snap);
+        assert!(results[0].passed);
+    }
+
+    #[test]
+    fn evaluate_visible_and_in_viewport() {
+        let spec = LayoutSpec {
+            name: "n".into(),
+            author: None,
+            version: "1".into(),
+            applies_to: None,
+            objects: vec![LayoutObject {
+                name: "x".into(),
+                selector: "#x".into(),
+            }],
+            assertions: vec![
+                LayoutAssertion::Visible {
+                    object: "x".into(),
+                },
+                LayoutAssertion::InViewport {
+                    object: "x".into(),
+                },
+            ],
+        };
+        let mut snap = BoundsSnapshot::new();
+        let mut hidden = bbox(0.0, 0.0, 0.0, 0.0);
+        hidden.visible = false;
+        hidden.in_viewport = false;
+        snap.insert("x", hidden);
+        let results = evaluate(&spec, &snap);
+        assert!(!results[0].passed);
+        assert!(!results[1].passed);
+    }
+
+    #[test]
+    fn evaluate_missing_object_reports_failure_not_panic() {
+        let spec = LayoutSpec {
+            name: "n".into(),
+            author: None,
+            version: "1".into(),
+            applies_to: None,
+            objects: vec![LayoutObject {
+                name: "ghost".into(),
+                selector: "#missing".into(),
+            }],
+            assertions: vec![LayoutAssertion::Visible {
+                object: "ghost".into(),
+            }],
+        };
+        let snap = BoundsSnapshot::new();
+        let results = evaluate(&spec, &snap);
+        assert!(!results[0].passed);
+        assert!(results[0].detail.contains("missing"));
     }
 
     #[test]
