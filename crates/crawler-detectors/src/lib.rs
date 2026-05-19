@@ -89,6 +89,7 @@ pub mod skip_link;
 pub mod speculation_rules;
 pub mod sri;
 pub mod tap_targets;
+pub mod text_wrap_collapse;
 pub mod trusted_types_runtime;
 pub mod ui_overflow;
 pub(crate) mod url_helpers;
