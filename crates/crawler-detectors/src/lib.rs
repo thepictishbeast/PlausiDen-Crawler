@@ -75,6 +75,7 @@ pub mod local_storage_use;
 pub mod long_tasks;
 pub mod meta_description;
 pub mod mixed_content;
+pub mod multiple_ways;
 pub mod network_error_logging;
 pub mod noscript_fallback;
 pub mod origin_agent_cluster;

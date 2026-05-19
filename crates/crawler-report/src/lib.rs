@@ -176,6 +176,10 @@ pub enum EventKind {
     /// rendered HTML: starts-with `<!doctype html>`, and
     /// contains a UTF-8 charset declaration.
     DoctypeCharset,
+    /// multipleWays detector — WCAG 2.1 SC 2.4.5. Warn if page
+    /// provides fewer than 2 of: site-wide navigation, in-page
+    /// search, sitemap link, table of contents, related-links.
+    MultipleWays,
 }
 
 /// Severity of a finding-bucketed event (cssHealth / uiOverflow

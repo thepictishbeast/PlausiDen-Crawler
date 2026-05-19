@@ -121,6 +121,9 @@ use crawler_detectors::link_color_only::{
 use crawler_detectors::doctype_charset::{
     detect_doctype_charset, DoctypeCharsetSnapshot, DOCTYPE_CHARSET_DOM_CAPTURE_JS,
 };
+use crawler_detectors::multiple_ways::{
+    detect_multiple_ways, MultipleWaysSnapshot, MULTIPLE_WAYS_DOM_CAPTURE_JS,
+};
 use crawler_detectors::status_messages::{
     detect_status_messages, StatusMessagesSnapshot, STATUS_MESSAGES_DOM_CAPTURE_JS,
 };
@@ -592,6 +595,9 @@ async fn run() -> Result<ExitCode> {
             }
             if let Err(e) = capture_doctype_charset(&page, &events, started_at).await {
                 tracing::debug!("doctype_charset snapshot failed: {e}");
+            }
+            if let Err(e) = capture_multiple_ways(&page, &events, started_at).await {
+                tracing::debug!("multiple_ways snapshot failed: {e}");
             }
             if let Err(e) = capture_placeholder_text(&page, &events, started_at).await {
                 tracing::debug!("placeholder_text snapshot failed: {e}");
@@ -1099,6 +1105,28 @@ async fn capture_doc_title(
 }
 
 /// T75 batch wiring (2026-05-17): placeholderText detector — sentinel
+/// multipleWays — WCAG 2.1 SC 2.4.5. Warn if the page provides
+/// fewer than 2 of nav / search / sitemap / toc / related-links.
+async fn capture_multiple_ways(
+    page: &chromiumoxide::Page,
+    events: &Arc<Mutex<Vec<CapturedEvent>>>,
+    started_at: Instant,
+) -> Result<()> {
+    let result = page.evaluate(MULTIPLE_WAYS_DOM_CAPTURE_JS).await?;
+    let snap: MultipleWaysSnapshot = result
+        .into_value()
+        .context("deserialize multipleWays snapshot")?;
+    let findings = detect_multiple_ways(&snap);
+    push_axis_findings(
+        events,
+        findings,
+        EventKind::MultipleWays,
+        started_at.elapsed().as_millis() as u64,
+    )
+    .await;
+    Ok(())
+}
+
 /// doctypeCharset — Lighthouse Best-Practices baseline. Flag
 /// pages missing `<!doctype html>` or a UTF-8 charset
 /// declaration in the first 1024 bytes.
