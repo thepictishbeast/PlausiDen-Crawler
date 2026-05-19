@@ -67,6 +67,7 @@ pub mod hreflang;
 pub mod hsts;
 pub mod html_lang;
 pub mod iframe_sandbox;
+pub mod image_desert;
 pub mod image_dimensions;
 pub mod info_leak_headers;
 pub mod inline_script;
