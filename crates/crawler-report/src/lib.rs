@@ -165,6 +165,12 @@ pub enum EventKind {
     /// underline, no border, no caller-side opt-out marker) AND
     /// have < 3:1 contrast against surrounding text.
     LinkColorOnly,
+    /// statusMessages detector — WCAG 2.1 SC 4.1.3. Flags
+    /// dynamic-content widgets (toast / alert / form-error /
+    /// search-results / etc.) that lack `aria-live` or a
+    /// status/alert/log role, so assistive tech doesn't get a
+    /// chance to announce the update.
+    StatusMessages,
 }
 
 /// Severity of a finding-bucketed event (cssHealth / uiOverflow

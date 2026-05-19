@@ -118,6 +118,9 @@ use crawler_detectors::placeholder_text::{
 use crawler_detectors::link_color_only::{
     detect_link_color_only, LinkColorOnlySnapshot, LINK_COLOR_ONLY_DOM_CAPTURE_JS,
 };
+use crawler_detectors::status_messages::{
+    detect_status_messages, StatusMessagesSnapshot, STATUS_MESSAGES_DOM_CAPTURE_JS,
+};
 use crawler_detectors::text_wrap_collapse::{
     detect_text_wrap_collapse, TextWrapCollapseSnapshot, TEXT_WRAP_COLLAPSE_DOM_CAPTURE_JS,
 };
@@ -580,6 +583,9 @@ async fn run() -> Result<ExitCode> {
             }
             if let Err(e) = capture_link_color_only(&page, &events, started_at).await {
                 tracing::debug!("link_color_only snapshot failed: {e}");
+            }
+            if let Err(e) = capture_status_messages(&page, &events, started_at).await {
+                tracing::debug!("status_messages snapshot failed: {e}");
             }
             if let Err(e) = capture_placeholder_text(&page, &events, started_at).await {
                 tracing::debug!("placeholder_text snapshot failed: {e}");
@@ -1087,6 +1093,29 @@ async fn capture_doc_title(
 }
 
 /// T75 batch wiring (2026-05-17): placeholderText detector — sentinel
+/// statusMessages — WCAG 2.1 SC 4.1.3. Flag dynamic-content
+/// widgets (toast / alert / form-error / etc.) that lack
+/// aria-live or a status/alert/log role.
+async fn capture_status_messages(
+    page: &chromiumoxide::Page,
+    events: &Arc<Mutex<Vec<CapturedEvent>>>,
+    started_at: Instant,
+) -> Result<()> {
+    let result = page.evaluate(STATUS_MESSAGES_DOM_CAPTURE_JS).await?;
+    let snap: StatusMessagesSnapshot = result
+        .into_value()
+        .context("deserialize statusMessages snapshot")?;
+    let findings = detect_status_messages(&snap);
+    push_axis_findings(
+        events,
+        findings,
+        EventKind::StatusMessages,
+        started_at.elapsed().as_millis() as u64,
+    )
+    .await;
+    Ok(())
+}
+
 /// linkColorOnly — WCAG 2.1 SC 1.4.1. Flag links that signal
 /// hyperlink-ness only via color (no underline) and have low
 /// contrast against surrounding text.

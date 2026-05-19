@@ -89,6 +89,7 @@ pub mod runtime_landmarks;
 pub mod skip_link;
 pub mod speculation_rules;
 pub mod sri;
+pub mod status_messages;
 pub mod tap_targets;
 pub mod text_wrap_collapse;
 pub mod trusted_types_runtime;
