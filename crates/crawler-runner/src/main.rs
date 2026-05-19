@@ -127,6 +127,9 @@ use crawler_detectors::multiple_ways::{
 use crawler_detectors::form_error_id_and_suggest::{
     detect_form_errors, FormErrorSnapshot, FORM_ERROR_DOM_CAPTURE_JS,
 };
+use crawler_detectors::resize_text_200pct::{
+    detect_resize_text_200pct, ResizeText200pctSnapshot, RESIZE_TEXT_200PCT_DOM_CAPTURE_JS,
+};
 use crawler_detectors::robots_txt::{
     detect_robots_txt, RobotsTxtSnapshot, ROBOTS_TXT_DOM_CAPTURE_JS,
 };
@@ -622,6 +625,9 @@ async fn run() -> Result<ExitCode> {
             }
             if let Err(e) = capture_robots_txt(&page, &events, started_at).await {
                 tracing::debug!("robots_txt snapshot failed: {e}");
+            }
+            if let Err(e) = capture_resize_text_200pct(&page, &events, started_at).await {
+                tracing::debug!("resize_text_200pct snapshot failed: {e}");
             }
             if let Err(e) = capture_placeholder_text(&page, &events, started_at).await {
                 tracing::debug!("placeholder_text snapshot failed: {e}");
@@ -1129,6 +1135,30 @@ async fn capture_doc_title(
 }
 
 /// T75 batch wiring (2026-05-17): placeholderText detector — sentinel
+/// resizeText200pct — WCAG 1.4.4. Re-evaluate overflow at 200%
+/// zoom and flag elements that overflow only at zoom (didn't at
+/// 100%). The capture JS sets + restores zoom; subsequent
+/// detectors run against the unzoomed page.
+async fn capture_resize_text_200pct(
+    page: &chromiumoxide::Page,
+    events: &Arc<Mutex<Vec<CapturedEvent>>>,
+    started_at: Instant,
+) -> Result<()> {
+    let result = page.evaluate(RESIZE_TEXT_200PCT_DOM_CAPTURE_JS).await?;
+    let snap: ResizeText200pctSnapshot = result
+        .into_value()
+        .context("deserialize resizeText200pct snapshot")?;
+    let findings = detect_resize_text_200pct(&snap);
+    push_axis_findings(
+        events,
+        findings,
+        EventKind::ResizeText200pct,
+        started_at.elapsed().as_millis() as u64,
+    )
+    .await;
+    Ok(())
+}
+
 /// robotsTxt — Lighthouse SEO. Fetch `/robots.txt`, parse, and
 /// audit the canonical URL against its Disallow rules + sitemap
 /// reachability.

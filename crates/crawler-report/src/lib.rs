@@ -198,6 +198,11 @@ pub enum EventKind {
     /// parses, and audits the canonical URL against Disallow rules
     /// + sitemap reachability.
     RobotsTxt,
+    /// resizeText200pct detector — WCAG 2.1 SC 1.4.4. Verifies
+    /// the page remains functional at 200% zoom by re-running
+    /// the overflow heuristic with `document.documentElement.style
+    /// .zoom = "200%"` and diffing against the 100%-zoom baseline.
+    ResizeText200pct,
 }
 
 /// Severity of a finding-bucketed event (cssHealth / uiOverflow
