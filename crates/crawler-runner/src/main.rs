@@ -124,6 +124,9 @@ use crawler_detectors::doctype_charset::{
 use crawler_detectors::multiple_ways::{
     detect_multiple_ways, MultipleWaysSnapshot, MULTIPLE_WAYS_DOM_CAPTURE_JS,
 };
+use crawler_detectors::modern_image_formats::{
+    detect_modern_image_formats, ModernImageFormatsSnapshot, MODERN_IMAGE_FORMATS_DOM_CAPTURE_JS,
+};
 use crawler_detectors::render_blocking_resources::{
     detect_render_blocking_resources, RenderBlockingSnapshot, RENDER_BLOCKING_DOM_CAPTURE_JS,
 };
@@ -604,6 +607,9 @@ async fn run() -> Result<ExitCode> {
             }
             if let Err(e) = capture_render_blocking(&page, &events, started_at).await {
                 tracing::debug!("render_blocking snapshot failed: {e}");
+            }
+            if let Err(e) = capture_modern_image_formats(&page, &events, started_at).await {
+                tracing::debug!("modern_image_formats snapshot failed: {e}");
             }
             if let Err(e) = capture_placeholder_text(&page, &events, started_at).await {
                 tracing::debug!("placeholder_text snapshot failed: {e}");
@@ -1111,6 +1117,28 @@ async fn capture_doc_title(
 }
 
 /// T75 batch wiring (2026-05-17): placeholderText detector — sentinel
+/// modernImageFormats — flag legacy raster `<img>` refs without
+/// AVIF / WebP `<source>` alternatives.
+async fn capture_modern_image_formats(
+    page: &chromiumoxide::Page,
+    events: &Arc<Mutex<Vec<CapturedEvent>>>,
+    started_at: Instant,
+) -> Result<()> {
+    let result = page.evaluate(MODERN_IMAGE_FORMATS_DOM_CAPTURE_JS).await?;
+    let snap: ModernImageFormatsSnapshot = result
+        .into_value()
+        .context("deserialize modernImageFormats snapshot")?;
+    let findings = detect_modern_image_formats(&snap);
+    push_axis_findings(
+        events,
+        findings,
+        EventKind::ModernImageFormats,
+        started_at.elapsed().as_millis() as u64,
+    )
+    .await;
+    Ok(())
+}
+
 /// renderBlocking — flag stylesheets + scripts in `<head>` that
 /// block first paint.
 async fn capture_render_blocking(

@@ -185,6 +185,10 @@ pub enum EventKind {
     /// because they lack the defer pattern / defer / async / module
     /// attributes.
     RenderBlocking,
+    /// modernImageFormats detector — Lighthouse perf. Flags
+    /// `<img>` references to legacy JPEG / PNG / GIF that don't
+    /// have an AVIF / WebP `<source>` sibling.
+    ModernImageFormats,
 }
 
 /// Severity of a finding-bucketed event (cssHealth / uiOverflow
