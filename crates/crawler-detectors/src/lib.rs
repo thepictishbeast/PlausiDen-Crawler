@@ -94,6 +94,7 @@ pub mod render_blocking_resources;
 pub mod reporting_endpoints;
 pub mod resize_text_200pct;
 pub mod robots_txt;
+pub mod rtl_ltr_mix;
 pub mod runtime_contrast;
 pub mod runtime_focus;
 pub mod runtime_images;
