@@ -118,6 +118,9 @@ use crawler_detectors::placeholder_text::{
 use crawler_detectors::link_color_only::{
     detect_link_color_only, LinkColorOnlySnapshot, LINK_COLOR_ONLY_DOM_CAPTURE_JS,
 };
+use crawler_detectors::doctype_charset::{
+    detect_doctype_charset, DoctypeCharsetSnapshot, DOCTYPE_CHARSET_DOM_CAPTURE_JS,
+};
 use crawler_detectors::status_messages::{
     detect_status_messages, StatusMessagesSnapshot, STATUS_MESSAGES_DOM_CAPTURE_JS,
 };
@@ -586,6 +589,9 @@ async fn run() -> Result<ExitCode> {
             }
             if let Err(e) = capture_status_messages(&page, &events, started_at).await {
                 tracing::debug!("status_messages snapshot failed: {e}");
+            }
+            if let Err(e) = capture_doctype_charset(&page, &events, started_at).await {
+                tracing::debug!("doctype_charset snapshot failed: {e}");
             }
             if let Err(e) = capture_placeholder_text(&page, &events, started_at).await {
                 tracing::debug!("placeholder_text snapshot failed: {e}");
@@ -1093,6 +1099,29 @@ async fn capture_doc_title(
 }
 
 /// T75 batch wiring (2026-05-17): placeholderText detector — sentinel
+/// doctypeCharset — Lighthouse Best-Practices baseline. Flag
+/// pages missing `<!doctype html>` or a UTF-8 charset
+/// declaration in the first 1024 bytes.
+async fn capture_doctype_charset(
+    page: &chromiumoxide::Page,
+    events: &Arc<Mutex<Vec<CapturedEvent>>>,
+    started_at: Instant,
+) -> Result<()> {
+    let result = page.evaluate(DOCTYPE_CHARSET_DOM_CAPTURE_JS).await?;
+    let snap: DoctypeCharsetSnapshot = result
+        .into_value()
+        .context("deserialize doctypeCharset snapshot")?;
+    let findings = detect_doctype_charset(&snap);
+    push_axis_findings(
+        events,
+        findings,
+        EventKind::DoctypeCharset,
+        started_at.elapsed().as_millis() as u64,
+    )
+    .await;
+    Ok(())
+}
+
 /// statusMessages — WCAG 2.1 SC 4.1.3. Flag dynamic-content
 /// widgets (toast / alert / form-error / etc.) that lack
 /// aria-live or a status/alert/log role.

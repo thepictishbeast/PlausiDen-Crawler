@@ -171,6 +171,11 @@ pub enum EventKind {
     /// status/alert/log role, so assistive tech doesn't get a
     /// chance to announce the update.
     StatusMessages,
+    /// doctypeCharset detector — Lighthouse Best-Practices.
+    /// Two strict checks against the first 1024 bytes of the
+    /// rendered HTML: starts-with `<!doctype html>`, and
+    /// contains a UTF-8 charset declaration.
+    DoctypeCharset,
 }
 
 /// Severity of a finding-bucketed event (cssHealth / uiOverflow
