@@ -222,7 +222,12 @@ pub fn detect_cpl_collapse(snap: &CplCollapseSnapshot) -> Vec<AxisFinding> {
         let examples: Vec<String> = overflow
             .iter()
             .take(5)
-            .map(|h| format!("{} (\"{}\", {}c in {}px nowrap)", h.selector, h.text, h.char_count, h.rect_width))
+            .map(|h| {
+                format!(
+                    "{} (\"{}\", {}c in {}px nowrap)",
+                    h.selector, h.text, h.char_count, h.rect_width
+                )
+            })
             .collect();
         out.push(AxisFinding {
             severity: AxisSeverity::Warn,

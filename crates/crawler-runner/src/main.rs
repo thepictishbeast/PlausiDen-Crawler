@@ -2396,12 +2396,7 @@ async fn run_capture_reference(args: Args, url: String) -> Result<ExitCode> {
         page.goto(url.as_str())
             .await
             .with_context(|| format!("goto {url}"))?;
-        match tokio::time::timeout(
-            Duration::from_secs(15),
-            page.wait_for_navigation(),
-        )
-        .await
-        {
+        match tokio::time::timeout(Duration::from_secs(15), page.wait_for_navigation()).await {
             Ok(Ok(_)) => {}
             Ok(Err(e)) => {
                 warn!(
@@ -2449,9 +2444,7 @@ async fn run_capture_reference(args: Args, url: String) -> Result<ExitCode> {
             .evaluate(REFERENCE_CAPTURE_PROBE_JS)
             .await
             .with_context(|| format!("computed-styles probe {viewport_px}"))?;
-        let probe_json: serde_json::Value = probe
-            .into_value()
-            .unwrap_or(serde_json::Value::Null);
+        let probe_json: serde_json::Value = probe.into_value().unwrap_or(serde_json::Value::Null);
 
         let styles_name = format!("{viewport_px}.styles.json");
         let styles_path = out_dir.join(&styles_name);
@@ -2459,8 +2452,8 @@ async fn run_capture_reference(args: Args, url: String) -> Result<ExitCode> {
             .get("computedStyles")
             .cloned()
             .unwrap_or(serde_json::Value::Array(Vec::new()));
-        let styles_bytes = serde_json::to_vec_pretty(&styles_payload)
-            .context("serialize computed-styles JSON")?;
+        let styles_bytes =
+            serde_json::to_vec_pretty(&styles_payload).context("serialize computed-styles JSON")?;
         tokio::fs::write(&styles_path, styles_bytes)
             .await
             .with_context(|| format!("write {}", styles_path.display()))?;
@@ -2592,8 +2585,14 @@ mod capture_reference_tests {
 
     #[test]
     fn derive_site_slug_basic() {
-        assert_eq!(derive_site_slug("https://prosperityclub.com/"), "prosperityclub-com");
-        assert_eq!(derive_site_slug("https://www.example.com/page"), "example-com");
+        assert_eq!(
+            derive_site_slug("https://prosperityclub.com/"),
+            "prosperityclub-com"
+        );
+        assert_eq!(
+            derive_site_slug("https://www.example.com/page"),
+            "example-com"
+        );
         assert_eq!(derive_site_slug("http://sacred.vote"), "sacred-vote");
         assert_eq!(derive_site_slug("https://STRIPE.com/"), "stripe-com");
     }
@@ -2601,7 +2600,10 @@ mod capture_reference_tests {
     #[test]
     fn derive_site_slug_collapses_dashes() {
         // Multiple non-alphanumeric runs should collapse to one dash
-        assert_eq!(derive_site_slug("https://a---b.example.com/"), "a-b-example-com");
+        assert_eq!(
+            derive_site_slug("https://a---b.example.com/"),
+            "a-b-example-com"
+        );
     }
 
     #[test]
