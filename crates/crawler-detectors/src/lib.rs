@@ -98,6 +98,7 @@ pub mod link_underline;
 pub mod local_storage_use;
 pub mod long_tasks;
 pub mod meta_description;
+pub mod meta_refresh;
 pub mod mixed_content;
 pub mod modern_image_formats;
 pub mod multiple_ways;
