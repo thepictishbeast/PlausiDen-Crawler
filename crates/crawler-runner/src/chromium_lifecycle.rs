@@ -193,60 +193,72 @@ impl ShutdownOutcome {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    // Process-global env vars cannot be safely mutated from multiple
+    // tests in parallel — cargo test runs threads concurrently and one
+    // test's `remove_var` races with another's `set_var`, producing
+    // intermittent failures. Serialize every test that mutates
+    // CRASHPAD_REAP_ENV through this mutex.
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    /// RAII guard: takes the env lock, snapshots prior value, restores
+    /// it (or removes if absent) on drop. Used by every test that
+    /// mutates `CRAWLER_REAP_CRASHPAD`.
+    struct EnvGuard {
+        _lock: std::sync::MutexGuard<'static, ()>,
+        prior: Option<String>,
+    }
+
+    impl EnvGuard {
+        fn lock() -> Self {
+            let lock = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+            let prior = std::env::var(CRASHPAD_REAP_ENV).ok();
+            Self { _lock: lock, prior }
+        }
+    }
+
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            match &self.prior {
+                Some(v) => std::env::set_var(CRASHPAD_REAP_ENV, v),
+                None => std::env::remove_var(CRASHPAD_REAP_ENV),
+            }
+        }
+    }
 
     #[test]
     fn crashpad_reap_default_off() {
-        // EnvGuard pattern — restore prior value to avoid bleed.
-        let prior = std::env::var(CRASHPAD_REAP_ENV).ok();
-        // SAFETY: tests run sequentially in this module via #[test];
-        // crate-wide env writes are not pretty but acceptable here.
+        let _g = EnvGuard::lock();
         std::env::remove_var(CRASHPAD_REAP_ENV);
         assert!(!crashpad_reap_enabled());
-        if let Some(v) = prior {
-            std::env::set_var(CRASHPAD_REAP_ENV, v);
-        }
     }
 
     #[test]
     fn crashpad_reap_on_with_one() {
-        let prior = std::env::var(CRASHPAD_REAP_ENV).ok();
+        let _g = EnvGuard::lock();
         std::env::set_var(CRASHPAD_REAP_ENV, "1");
         assert!(crashpad_reap_enabled());
-        if let Some(v) = prior {
-            std::env::set_var(CRASHPAD_REAP_ENV, v);
-        } else {
-            std::env::remove_var(CRASHPAD_REAP_ENV);
-        }
     }
 
     #[test]
     fn crashpad_reap_on_with_true() {
-        let prior = std::env::var(CRASHPAD_REAP_ENV).ok();
+        let _g = EnvGuard::lock();
         std::env::set_var(CRASHPAD_REAP_ENV, "true");
         assert!(crashpad_reap_enabled());
         std::env::set_var(CRASHPAD_REAP_ENV, "True");
         assert!(crashpad_reap_enabled());
-        if let Some(v) = prior {
-            std::env::set_var(CRASHPAD_REAP_ENV, v);
-        } else {
-            std::env::remove_var(CRASHPAD_REAP_ENV);
-        }
     }
 
     #[test]
     fn crashpad_reap_off_with_other() {
-        let prior = std::env::var(CRASHPAD_REAP_ENV).ok();
+        let _g = EnvGuard::lock();
         for v in ["0", "false", "no", "yes", ""] {
             std::env::set_var(CRASHPAD_REAP_ENV, v);
             assert!(
                 !crashpad_reap_enabled(),
                 "expected disabled for value {v:?}"
             );
-        }
-        if let Some(v) = prior {
-            std::env::set_var(CRASHPAD_REAP_ENV, v);
-        } else {
-            std::env::remove_var(CRASHPAD_REAP_ENV);
         }
     }
 
