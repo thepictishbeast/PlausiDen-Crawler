@@ -81,6 +81,7 @@ pub mod hreflang;
 pub mod hsts;
 pub mod html_lang;
 pub mod iframe_sandbox;
+pub mod iframe_title;
 pub mod image_desert;
 pub mod image_dimensions;
 pub mod layout_thrash;
