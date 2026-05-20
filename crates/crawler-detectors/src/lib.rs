@@ -126,6 +126,7 @@ pub mod speculation_rules;
 pub mod sri;
 pub mod status_messages;
 pub mod tab_order;
+pub mod tabindex_positive;
 pub mod tap_targets;
 pub mod text_wrap_collapse;
 pub mod trait_verification;
