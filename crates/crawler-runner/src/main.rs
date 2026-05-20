@@ -2247,13 +2247,34 @@ async fn run_capture_reference(args: Args, url: String) -> Result<ExitCode> {
             .await
             .with_context(|| format!("set viewport {viewport_px}"))?;
 
-        // Navigate.
+        // Navigate. WordPress + ad-heavy sites can keep firing
+        // subresource requests indefinitely; chromiumoxide's
+        // wait_for_navigation waits for Page.loadEventFired which
+        // may never arrive. Bound the wait at 15s and continue —
+        // partial paint is still usable for visual diff. Screenshot
+        // after this catches whatever the page renders within the
+        // budget.
         page.goto(url.as_str())
             .await
             .with_context(|| format!("goto {url}"))?;
-        page.wait_for_navigation()
-            .await
-            .with_context(|| format!("wait for nav {url}"))?;
+        match tokio::time::timeout(
+            Duration::from_secs(15),
+            page.wait_for_navigation(),
+        )
+        .await
+        {
+            Ok(Ok(_)) => {}
+            Ok(Err(e)) => {
+                warn!(
+                    "wait_for_navigation error at {viewport_px}px: {e} — continuing with partial paint"
+                );
+            }
+            Err(_) => {
+                warn!("wait_for_navigation timed out at {viewport_px}px after 15s — continuing with partial paint");
+            }
+        }
+        // Brief settle so late-arriving paints land before screenshot.
+        tokio::time::sleep(Duration::from_millis(500)).await;
 
         // Screenshot (full-page).
         let screenshot_name = format!("{viewport_px}.png");
