@@ -86,6 +86,12 @@ use crawler_detectors::document_policy::{
     build_document_policy_snapshot, detect_document_policy_issues,
 };
 use crawler_detectors::favicon::{detect_favicon_issues, FaviconSnapshot, FAVICON_JS};
+use crawler_detectors::inline_theme_override::{
+    detect_inline_theme_overrides, InlineThemeOverrideSnapshot, INLINE_THEME_OVERRIDE_JS,
+};
+use crawler_detectors::stale_preconnect::{
+    detect_stale_preconnects, StalePreconnectSnapshot, STALE_PRECONNECT_JS,
+};
 use crawler_detectors::font_loading::{detect_font_loading_issues, FontLoadingSnapshot};
 use crawler_detectors::form_error_id_and_suggest::{
     detect_form_errors, FormErrorSnapshot, FORM_ERROR_DOM_CAPTURE_JS,
@@ -667,6 +673,13 @@ async fn run() -> Result<ExitCode> {
             }
             if let Err(e) = capture_favicon(&page, &events, started_at).await {
                 tracing::debug!("favicon snapshot failed: {e}");
+            }
+            if let Err(e) = capture_stale_preconnect(&page, &events, started_at).await {
+                tracing::debug!("stale_preconnect snapshot failed: {e}");
+            }
+            if let Err(e) = capture_inline_theme_override(&page, &events, started_at).await
+            {
+                tracing::debug!("inline_theme_override snapshot failed: {e}");
             }
             // T75 response-header batch (2026-05-17): hsts is the
             // first detector wired through the new
@@ -1477,6 +1490,51 @@ async fn capture_favicon(
         events,
         findings,
         EventKind::Favicon,
+        started_at.elapsed().as_millis() as u64,
+    )
+    .await;
+    Ok(())
+}
+
+/// Resource-hint waste detector: flags `<link rel="preconnect">`
+/// to origins nothing else loads from, plus cross-origin
+/// preconnects missing `crossorigin="anonymous"`.
+async fn capture_stale_preconnect(
+    page: &chromiumoxide::Page,
+    events: &Arc<Mutex<Vec<CapturedEvent>>>,
+    started_at: Instant,
+) -> Result<()> {
+    let result = page.evaluate(STALE_PRECONNECT_JS).await?;
+    let snap: StalePreconnectSnapshot = result
+        .into_value()
+        .context("deserialize stale_preconnect snapshot")?;
+    let findings = detect_stale_preconnects(&snap);
+    push_axis_findings(
+        events,
+        findings,
+        EventKind::StalePreconnect,
+        started_at.elapsed().as_millis() as u64,
+    )
+    .await;
+    Ok(())
+}
+
+/// Theme-cascade-bypass detector: flags inline `style="color:..."`
+/// / `style="background[-color]:..."` on non-SVG elements.
+async fn capture_inline_theme_override(
+    page: &chromiumoxide::Page,
+    events: &Arc<Mutex<Vec<CapturedEvent>>>,
+    started_at: Instant,
+) -> Result<()> {
+    let result = page.evaluate(INLINE_THEME_OVERRIDE_JS).await?;
+    let snap: InlineThemeOverrideSnapshot = result
+        .into_value()
+        .context("deserialize inline_theme_override snapshot")?;
+    let findings = detect_inline_theme_overrides(&snap);
+    push_axis_findings(
+        events,
+        findings,
+        EventKind::InlineThemeOverride,
         started_at.elapsed().as_millis() as u64,
     )
     .await;

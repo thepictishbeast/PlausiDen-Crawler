@@ -208,6 +208,14 @@ pub enum EventKind {
     /// dimension-mismatch / major / minor finding kinds per the
     /// configurable channel-tolerance + warn/strict thresholds.
     PixelDiff,
+    /// stalePreconnect detector — `<link rel="preconnect|dns-prefetch|preload">`
+    /// hints whose origin isn't used elsewhere on the page,
+    /// plus cross-origin preconnects missing `crossorigin="anonymous"`.
+    StalePreconnect,
+    /// inlineThemeOverride detector — elements with inline
+    /// `style="color: ..."` / `style="background[-color]: ..."`
+    /// declarations that bypass the page's theme cascade.
+    InlineThemeOverride,
 }
 
 /// Severity of a finding-bucketed event (cssHealth / uiOverflow
