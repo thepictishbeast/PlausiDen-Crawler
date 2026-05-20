@@ -500,6 +500,37 @@ fn max_severity(a: Severity, b: Severity) -> Severity {
     }
 }
 
+/// Compact severity tally for [`Report::summarize_by_severity`].
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SeverityTally {
+    /// Events with `severity == Strict`.
+    pub strict: u32,
+    /// Events with `severity == Warn`.
+    pub warn: u32,
+    /// Events without a severity field (Console, Pageerror, etc).
+    pub no_severity: u32,
+}
+
+impl Report {
+    /// Count captured events by severity bucket. Companion to
+    /// `summarize_by_kind` — same source data, different
+    /// projection. Useful for the "did anything strict-fail in
+    /// this run?" question without iterating the event list.
+    #[must_use]
+    pub fn summarize_by_severity(&self) -> SeverityTally {
+        let mut tally = SeverityTally::default();
+        for ev in &self.events {
+            match ev.severity {
+                Some(Severity::Strict) => tally.strict = tally.strict.saturating_add(1),
+                Some(Severity::Warn) => tally.warn = tally.warn.saturating_add(1),
+                None => tally.no_severity = tally.no_severity.saturating_add(1),
+            }
+        }
+        tally
+    }
+}
+
 /// Map severity to a sortable ordering (None < Warn < Strict).
 /// Used by both `summarize_by_kind` and `max_severity`.
 fn severity_rank(s: Option<Severity>) -> u8 {
@@ -673,6 +704,47 @@ mod tests {
         ]);
         let s = r.summarize_by_kind();
         assert_eq!(s[0].worst_severity, Some(Severity::Strict));
+    }
+
+    #[test]
+    fn summarize_by_severity_counts_all_three_buckets() {
+        let r = report_with(vec![
+            ev(EventKind::CssHealth, Some(Severity::Strict)),
+            ev(EventKind::CssHealth, Some(Severity::Strict)),
+            ev(EventKind::Favicon, Some(Severity::Warn)),
+            ev(EventKind::Favicon, Some(Severity::Warn)),
+            ev(EventKind::Favicon, Some(Severity::Warn)),
+            ev(EventKind::Console, None),
+        ]);
+        let t = r.summarize_by_severity();
+        assert_eq!(t.strict, 2);
+        assert_eq!(t.warn, 3);
+        assert_eq!(t.no_severity, 1);
+    }
+
+    #[test]
+    fn summarize_by_severity_empty_report_zero_everything() {
+        let r = report_with(vec![]);
+        let t = r.summarize_by_severity();
+        assert_eq!(t.strict, 0);
+        assert_eq!(t.warn, 0);
+        assert_eq!(t.no_severity, 0);
+    }
+
+    #[test]
+    fn severity_tally_round_trips_json() {
+        let t = SeverityTally {
+            strict: 2,
+            warn: 5,
+            no_severity: 1,
+        };
+        let json = serde_json::to_string(&t).expect("ser");
+        let back: SeverityTally = serde_json::from_str(&json).expect("de");
+        assert_eq!(back, t);
+        assert!(
+            json.contains("\"noSeverity\":1"),
+            "camelCase wire shape; got: {json}"
+        );
     }
 
     #[test]
