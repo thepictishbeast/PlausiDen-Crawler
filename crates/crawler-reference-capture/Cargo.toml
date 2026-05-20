@@ -1,0 +1,16 @@
+[package]
+name = "crawler-reference-capture"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.78"
+license = "AGPL-3.0-or-later"
+description = "Crawler — typed wire shape for headless reference-site captures. Mirrors PlausiDen-Forge::forge-core::reference_capture so the chromiumoxide runner can emit the manifest forge-core extractors consume. Contract only; runner does the IO."
+
+[lints.rust]
+unsafe_code = "deny"
+missing_docs = "deny"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }

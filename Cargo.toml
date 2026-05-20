@@ -35,6 +35,11 @@ members = [
     # ships here; runner that consumes a LayoutSpec + DOM-bounds
     # snapshot is a follow-up.
     "crates/crawler-layout-spec",
+    # #298: typed wire shape for headless reference-site captures.
+    # Mirrors PlausiDen-Forge::forge-core::reference_capture so the
+    # chromiumoxide runner can emit the manifest forge-core
+    # extractors consume. Contract only; runner does the IO.
+    "crates/crawler-reference-capture",
 ]
 
 [workspace.package]
