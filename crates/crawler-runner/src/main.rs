@@ -2228,14 +2228,21 @@ async fn run_capture_reference(args: Args, url: String) -> Result<ExitCode> {
     let mut manifest = CaptureManifest::new(site_slug.clone(), url.clone());
     manifest.updated_at = iso_ts();
 
-    for &viewport_px in viewports {
-        let page = browser
-            .new_page("about:blank")
-            .await
-            .with_context(|| format!("creating page for viewport {viewport_px}"))?;
+    // Refactor v2 (#307 fix candidate 1): create ONE page up front
+    // and change the viewport per iteration. The previous shape
+    // recreated a page per viewport, which deadlocked on iteration
+    // 2 against the chromiumoxide handler task that was already
+    // processing the first page's residual events. Single-page
+    // mode lets the handler stay synchronous with the active page.
+    let page = browser
+        .new_page("about:blank")
+        .await
+        .context("creating capture page")?;
 
-        // Set viewport via CDP. chromiumoxide's Page::set_viewport
-        // wraps Emulation.setDeviceMetricsOverride.
+    for &viewport_px in viewports {
+        // Set viewport via CDP Emulation.setDeviceMetricsOverride.
+        // The width/height applies before navigation so the page
+        // lays out at the target size from first paint.
         let viewport = chromiumoxide::cdp::browser_protocol::emulation::SetDeviceMetricsOverrideParams::builder()
             .width(i64::from(viewport_px))
             .height(i64::from(viewport_px * 2)) // 1:2 aspect for full-page screenshots
@@ -2251,9 +2258,7 @@ async fn run_capture_reference(args: Args, url: String) -> Result<ExitCode> {
         // subresource requests indefinitely; chromiumoxide's
         // wait_for_navigation waits for Page.loadEventFired which
         // may never arrive. Bound the wait at 15s and continue —
-        // partial paint is still usable for visual diff. Screenshot
-        // after this catches whatever the page renders within the
-        // budget.
+        // partial paint is still usable for visual diff.
         page.goto(url.as_str())
             .await
             .with_context(|| format!("goto {url}"))?;
@@ -2301,16 +2306,18 @@ async fn run_capture_reference(args: Args, url: String) -> Result<ExitCode> {
             .await
             .with_context(|| format!("write {}", html_path.display()))?;
 
+        info!("captured {viewport_px}px → {} + {}", screenshot_name, html_name);
+
         // Append to manifest.
         let mut capture = ReferenceCapture::new(url.clone(), iso_ts(), viewport_px);
         capture.screenshot_path = screenshot_name;
         capture.html_path = html_name;
         // computed_styles_path left empty — separate slice
         manifest.captures.push(capture);
-
-        // Close page to free resources before next viewport.
-        let _ = page.close().await;
     }
+
+    // Close the single page after all viewports.
+    let _ = page.close().await;
 
     // Emit manifest. validate_timestamps() inside write() enforces
     // canonical RFC-3339 form on updated_at + each captured_at.
