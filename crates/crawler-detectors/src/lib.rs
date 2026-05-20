@@ -62,6 +62,7 @@ pub mod content_security_policy;
 pub mod cookie_security;
 pub mod coop;
 pub mod corp;
+pub mod cpl_collapse;
 pub mod cross_origin_form_post;
 pub mod cross_page_meta_description;
 pub mod cross_page_title;
