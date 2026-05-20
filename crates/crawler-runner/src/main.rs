@@ -2539,21 +2539,30 @@ async fn run_capture_reference(args: Args, url: String) -> Result<ExitCode> {
         // (decode failure, broken src) are caught individually so
         // one bad image doesn't take down the whole screenshot.
         //
-        // Brief secondary settle after decode so the compositor
-        // catches up on any layout-dependent reflow.
-        if let Err(e) = page
-            .evaluate(
-                r#"(async () => {
-                    const imgs = Array.from(document.images);
-                    await Promise.all(imgs.map(i => i.decode().catch(() => null)));
-                    return imgs.length;
-                })()"#,
-            )
-            .await
-        {
-            warn!(
+        // Bounded with both a JS-side per-call Promise.race against
+        // a 3s timeout AND a Rust-side timeout(5s) wrapper, so
+        // pages with hundreds of slow-decode images (stripe.com /
+        // unsplash grids) can't stall the capture pipeline. The
+        // secondary settle still runs even on timeout.
+        let decode_promise = page.evaluate(
+            r#"(async () => {
+                const imgs = Array.from(document.images);
+                const safe = i => Promise.race([
+                    i.decode().catch(() => null),
+                    new Promise(r => setTimeout(r, 3000)),
+                ]);
+                await Promise.all(imgs.map(safe));
+                return imgs.length;
+            })()"#,
+        );
+        match tokio::time::timeout(Duration::from_secs(5), decode_promise).await {
+            Ok(Ok(_)) => {}
+            Ok(Err(e)) => warn!(
                 "image-decode wait failed at {viewport_px}px: {e} — continuing"
-            );
+            ),
+            Err(_) => warn!(
+                "image-decode wait at {viewport_px}px exceeded 5s — continuing with partial paint"
+            ),
         }
         tokio::time::sleep(Duration::from_millis(150)).await;
 
