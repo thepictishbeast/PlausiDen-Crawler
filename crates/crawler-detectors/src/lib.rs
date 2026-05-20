@@ -91,6 +91,7 @@ pub mod image_desert;
 pub mod image_dimensions;
 pub mod info_leak_headers;
 pub mod inline_script;
+pub mod inline_theme_override;
 pub mod interactive_nesting;
 pub mod label_for_resolution;
 pub mod layout_thrash;
