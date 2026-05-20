@@ -67,6 +67,7 @@ pub mod cross_page_title;
 pub mod css_health;
 pub mod doc_title;
 pub mod doctype_charset;
+pub mod empty_button;
 pub mod document_policy;
 pub mod dom_size;
 pub mod favicon;
