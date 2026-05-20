@@ -216,6 +216,11 @@ pub enum EventKind {
     /// `style="color: ..."` / `style="background[-color]: ..."`
     /// declarations that bypass the page's theme cascade.
     InlineThemeOverride,
+    /// headingQuality detector — heading text quality (single-
+    /// word filler, SaaS-marketing cliche phrases). Companion
+    /// to headingOrder (structural) — this one checks editorial
+    /// substance.
+    HeadingQuality,
 }
 
 /// Severity of a finding-bucketed event (cssHealth / uiOverflow

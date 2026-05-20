@@ -86,6 +86,9 @@ use crawler_detectors::document_policy::{
     build_document_policy_snapshot, detect_document_policy_issues,
 };
 use crawler_detectors::favicon::{detect_favicon_issues, FaviconSnapshot, FAVICON_JS};
+use crawler_detectors::heading_quality::{
+    detect_heading_quality_issues, HeadingQualitySnapshot, HEADING_QUALITY_JS,
+};
 use crawler_detectors::inline_theme_override::{
     detect_inline_theme_overrides, InlineThemeOverrideSnapshot, INLINE_THEME_OVERRIDE_JS,
 };
@@ -680,6 +683,9 @@ async fn run() -> Result<ExitCode> {
             if let Err(e) = capture_inline_theme_override(&page, &events, started_at).await
             {
                 tracing::debug!("inline_theme_override snapshot failed: {e}");
+            }
+            if let Err(e) = capture_heading_quality(&page, &events, started_at).await {
+                tracing::debug!("heading_quality snapshot failed: {e}");
             }
             // T75 response-header batch (2026-05-17): hsts is the
             // first detector wired through the new
@@ -1535,6 +1541,29 @@ async fn capture_inline_theme_override(
         events,
         findings,
         EventKind::InlineThemeOverride,
+        started_at.elapsed().as_millis() as u64,
+    )
+    .await;
+    Ok(())
+}
+
+/// Heading-quality detector: flags single-word headings + known
+/// SaaS-marketing cliche phrases. Editorial-substance companion
+/// to heading_order (which checks level structure only).
+async fn capture_heading_quality(
+    page: &chromiumoxide::Page,
+    events: &Arc<Mutex<Vec<CapturedEvent>>>,
+    started_at: Instant,
+) -> Result<()> {
+    let result = page.evaluate(HEADING_QUALITY_JS).await?;
+    let snap: HeadingQualitySnapshot = result
+        .into_value()
+        .context("deserialize heading_quality snapshot")?;
+    let findings = detect_heading_quality_issues(&snap);
+    push_axis_findings(
+        events,
+        findings,
+        EventKind::HeadingQuality,
         started_at.elapsed().as_millis() as u64,
     )
     .await;

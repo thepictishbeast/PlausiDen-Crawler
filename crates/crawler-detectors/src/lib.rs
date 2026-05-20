@@ -81,6 +81,7 @@ pub mod fouc_risk;
 pub mod fragment_anchor;
 pub mod gradient_text_clip;
 pub mod heading_order;
+pub mod heading_quality;
 pub mod hidden_elements;
 pub mod hreflang;
 pub mod hsts;
