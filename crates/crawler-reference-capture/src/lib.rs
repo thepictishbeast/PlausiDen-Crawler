@@ -133,6 +133,51 @@ pub enum CaptureError {
         /// Spec carried by the loaded payload.
         actual: CaptureSpec,
     },
+    /// Timestamp field is not the substrate's canonical RFC-3339
+    /// UTC form (`YYYY-MM-DDTHH:MM:SSZ`, 20 chars). Mirrors
+    /// forge-core::reference_capture::CaptureError::BadTimestamp
+    /// so the wire shape rejects on both sides.
+    #[error("invalid RFC-3339 UTC timestamp in {field}: {provided:?} (expected YYYY-MM-DDTHH:MM:SSZ)")]
+    BadTimestamp {
+        /// Field that carried the bad value.
+        field: String,
+        /// The string that failed validation.
+        provided: String,
+    },
+}
+
+/// Check whether a string is the substrate's canonical RFC-3339
+/// UTC form (`YYYY-MM-DDTHH:MM:SSZ`, 20 chars). Mirrors
+/// forge-core::iso_time::is_canonical_rfc3339_utc so the Crawler
+/// can validate before emitting without taking a forge-core dep.
+#[must_use]
+pub fn is_canonical_rfc3339_utc(s: &str) -> bool {
+    if s.len() != 20 {
+        return false;
+    }
+    let b = s.as_bytes();
+    let digits_at = |i: usize| b.get(i).is_some_and(u8::is_ascii_digit);
+    let ch_at = |i: usize, c: u8| b.get(i) == Some(&c);
+    digits_at(0)
+        && digits_at(1)
+        && digits_at(2)
+        && digits_at(3)
+        && ch_at(4, b'-')
+        && digits_at(5)
+        && digits_at(6)
+        && ch_at(7, b'-')
+        && digits_at(8)
+        && digits_at(9)
+        && ch_at(10, b'T')
+        && digits_at(11)
+        && digits_at(12)
+        && ch_at(13, b':')
+        && digits_at(14)
+        && digits_at(15)
+        && ch_at(16, b':')
+        && digits_at(17)
+        && digits_at(18)
+        && ch_at(19, b'Z')
 }
 
 impl ReferenceCapture {
@@ -185,13 +230,37 @@ impl CaptureManifest {
     }
 
     /// Write a manifest JSON file to disk (pretty-printed).
-    /// Creates the parent directory if missing.
+    /// Creates the parent directory if missing. Validates
+    /// timestamp fields up front — a manifest with a
+    /// non-canonical timestamp never reaches disk.
     pub fn write(&self, path: &Path) -> Result<(), CaptureError> {
+        self.validate_timestamps()?;
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
         let body = serde_json::to_string_pretty(self)?;
         fs::write(path, body)?;
+        Ok(())
+    }
+
+    /// Walk timestamp fields, rejecting anything that is not
+    /// canonical RFC-3339 UTC. Exposed pub so the runner can
+    /// validate a manifest before committing to a write.
+    pub fn validate_timestamps(&self) -> Result<(), CaptureError> {
+        if !is_canonical_rfc3339_utc(&self.updated_at) {
+            return Err(CaptureError::BadTimestamp {
+                field: "updated_at".to_owned(),
+                provided: self.updated_at.clone(),
+            });
+        }
+        for (idx, cap) in self.captures.iter().enumerate() {
+            if !is_canonical_rfc3339_utc(&cap.captured_at) {
+                return Err(CaptureError::BadTimestamp {
+                    field: format!("captures[{idx}].captured_at"),
+                    provided: cap.captured_at.clone(),
+                });
+            }
+        }
         Ok(())
     }
 
@@ -302,10 +371,54 @@ mod tests {
         let dir = temp_dir("create-parent");
         let nested = dir.join("a/b/c");
         let path = nested.join("manifest.json");
-        let m = CaptureManifest::new("s", "https://x");
+        let mut m = CaptureManifest::new("s", "https://x");
+        m.updated_at = "2026-05-20T13:00:00Z".to_owned();
         m.write(&path).unwrap();
         assert!(path.exists());
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn write_rejects_empty_updated_at() {
+        let dir = temp_dir("bad-updated-at");
+        let path = dir.join("manifest.json");
+        let m = CaptureManifest::new("s", "https://x");
+        match m.write(&path) {
+            Err(CaptureError::BadTimestamp { field, provided }) => {
+                assert_eq!(field, "updated_at");
+                assert!(provided.is_empty());
+            }
+            other => panic!("expected BadTimestamp, got {other:?}"),
+        }
+        assert!(!path.exists(), "manifest must not land on disk on failure");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn write_rejects_bad_capture_timestamp() {
+        let dir = temp_dir("bad-capture-at");
+        let path = dir.join("manifest.json");
+        let mut m = CaptureManifest::new("s", "https://x");
+        m.updated_at = "2026-05-20T13:00:00Z".to_owned();
+        m.captures.push(ReferenceCapture::new("https://x", "yesterday", 1280));
+        match m.write(&path) {
+            Err(CaptureError::BadTimestamp { field, provided }) => {
+                assert_eq!(field, "captures[0].captured_at");
+                assert_eq!(provided, "yesterday");
+            }
+            other => panic!("expected BadTimestamp, got {other:?}"),
+        }
+        assert!(!path.exists());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn is_canonical_rejects_off_shape() {
+        assert!(is_canonical_rfc3339_utc("2026-05-20T13:45:09Z"));
+        assert!(!is_canonical_rfc3339_utc(""));
+        assert!(!is_canonical_rfc3339_utc("2026-05-20t13:45:09Z"));
+        assert!(!is_canonical_rfc3339_utc("2026-05-20T13:45:09.1Z"));
+        assert!(!is_canonical_rfc3339_utc("2026-05-20T13:45:09+00:00"));
     }
 
     #[test]
