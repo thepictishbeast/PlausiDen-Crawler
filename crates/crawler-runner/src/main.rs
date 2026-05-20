@@ -2525,6 +2525,38 @@ async fn run_capture_reference(args: Args, url: String) -> Result<ExitCode> {
         // Brief settle so late-arriving paints land before screenshot.
         tokio::time::sleep(Duration::from_millis(500)).await;
 
+        // Force-decode every <img> before the screenshot. Pages
+        // with `decoding="async"` (common — Loom emits it on
+        // image_hero photos for LCP, Lighthouse rewards it) let
+        // the browser punt decode past loadEventFired; the
+        // screenshot then fires before the image rasters, and
+        // the resulting PNG shows a missing hero photo even
+        // though the asset loaded fine.
+        //
+        // `HTMLImageElement.decode()` returns a Promise that
+        // resolves when the decode is complete; awaiting all of
+        // them blocks until every image is paint-ready. Errors
+        // (decode failure, broken src) are caught individually so
+        // one bad image doesn't take down the whole screenshot.
+        //
+        // Brief secondary settle after decode so the compositor
+        // catches up on any layout-dependent reflow.
+        if let Err(e) = page
+            .evaluate(
+                r#"(async () => {
+                    const imgs = Array.from(document.images);
+                    await Promise.all(imgs.map(i => i.decode().catch(() => null)));
+                    return imgs.length;
+                })()"#,
+            )
+            .await
+        {
+            warn!(
+                "image-decode wait failed at {viewport_px}px: {e} — continuing"
+            );
+        }
+        tokio::time::sleep(Duration::from_millis(150)).await;
+
         // Screenshot (full-page).
         let screenshot_name = format!("{viewport_px}.png");
         let screenshot_path = out_dir.join(&screenshot_name);
