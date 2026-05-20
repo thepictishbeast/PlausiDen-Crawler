@@ -143,6 +143,7 @@ pub(crate) mod url_helpers;
 pub mod vary_header;
 pub mod viewport_meta;
 pub mod web_manifest;
+pub mod webfont_preload_audit;
 pub mod web_vitals;
 pub mod x_frame_options;
 
