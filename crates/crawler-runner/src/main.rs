@@ -2057,6 +2057,114 @@ async fn capture_font_loading(
 /// `Page.addScriptToEvaluateOnNewDocument` — otherwise the probe
 /// misses early sink writes.
 ///
+/// JS probe executed inside the captured page during
+/// `--capture-reference` mode. Walks the rendered DOM, collects
+/// per-element computed styles for extractor-relevant CSS
+/// properties, and emits aggregate element counts + font families
+/// for the NetworkSummary partial fields.
+///
+/// Wire shape (returned via page.evaluate → serde_json::Value):
+///
+/// ```jsonc
+/// {
+///   "computedStyles": [
+///     { "selector": "body > main:nth-of-type(1)", "tag": "main",
+///       "computed": { "font-size": "16px", "color": "rgb(15 23 42)", ... } },
+///     ...
+///   ],
+///   "imageCount":  18,
+///   "videoCount":  1,
+///   "scriptCount": 6,
+///   "fontsLoaded": ["ui-sans-serif", "Inter", "Roboto Mono"]
+/// }
+/// ```
+///
+/// Properties harvested: font-family / font-size / font-weight /
+/// color / background-color / border-style / padding / margin /
+/// display / position / width / height / line-height /
+/// letter-spacing / text-align / white-space / overflow.
+///
+/// Cap: 200 elements (depth-first, body subtree, no script/style
+/// descendants) — keeps the JSON small + the probe fast. Larger
+/// captures sample-cap rather than fail.
+///
+/// AVP-2: no `unsafe_code` (Rust side); no element-side mutations
+/// (JS side reads only).
+const REFERENCE_CAPTURE_PROBE_JS: &str = r#"
+(() => {
+  const selectorOf = (el) => {
+    if (!el || el === document.documentElement) return 'html';
+    const parts = [];
+    let node = el;
+    let depth = 0;
+    while (node && node.nodeType === 1 && node !== document.body && depth < 6) {
+      const tag = node.tagName.toLowerCase();
+      const parent = node.parentElement;
+      if (parent) {
+        const same = Array.from(parent.children).filter(c => c.tagName === node.tagName);
+        if (same.length > 1) parts.unshift(tag + ':nth-of-type(' + (same.indexOf(node) + 1) + ')');
+        else parts.unshift(tag);
+      } else parts.unshift(tag);
+      node = parent;
+      depth += 1;
+    }
+    return 'body > ' + parts.join(' > ');
+  };
+
+  const isSkipTag = (tag) => tag === 'script' || tag === 'style' || tag === 'noscript' || tag === 'template';
+
+  const PROPS = [
+    'font-family', 'font-size', 'font-weight', 'color',
+    'background-color', 'border-style', 'padding', 'margin',
+    'display', 'position', 'width', 'height',
+    'line-height', 'letter-spacing', 'text-align',
+    'white-space', 'overflow'
+  ];
+
+  const MAX_ELEMENTS = 200;
+  const styles = [];
+  const fontFamilies = new Set();
+
+  if (document.body) {
+    const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT, null);
+    let node = walk.currentNode;
+    while (node && styles.length < MAX_ELEMENTS) {
+      if (node.nodeType === 1) {
+        const tag = node.tagName ? node.tagName.toLowerCase() : '';
+        if (!isSkipTag(tag)) {
+          const cs = window.getComputedStyle(node);
+          const computed = {};
+          for (const prop of PROPS) {
+            const v = cs.getPropertyValue(prop);
+            if (v) computed[prop] = v;
+          }
+          styles.push({
+            selector: selectorOf(node),
+            tag: tag,
+            computed: computed
+          });
+          const ff = cs.getPropertyValue('font-family');
+          if (ff) fontFamilies.add(ff.split(',')[0].trim().replace(/^['\"]|['\"]$/g, ''));
+        }
+      }
+      node = walk.nextNode();
+    }
+  }
+
+  const imageCount = document.querySelectorAll('img, picture').length;
+  const videoCount = document.querySelectorAll('video, iframe[src*=\"youtube\"], iframe[src*=\"vimeo\"]').length;
+  const scriptCount = document.querySelectorAll('script').length;
+
+  return {
+    computedStyles: styles,
+    imageCount: imageCount,
+    videoCount: videoCount,
+    scriptCount: scriptCount,
+    fontsLoaded: Array.from(fontFamilies)
+  };
+})()
+"#;
+
 /// Ported char-for-char from `src/trustedTypesRuntime.ts`
 /// `installTrustedTypesProbe`. Errors during install are swallowed
 /// per the doctrine that the probe must never break the page.
@@ -2306,13 +2414,80 @@ async fn run_capture_reference(args: Args, url: String) -> Result<ExitCode> {
             .await
             .with_context(|| format!("write {}", html_path.display()))?;
 
-        info!("captured {viewport_px}px → {} + {}", screenshot_name, html_name);
+        // Computed styles + element counts via page.evaluate.
+        // Simpler than CDP DOM.getDocument + per-node
+        // CSS.getComputedStyleForNode for this slice. The JS
+        // walks the DOM, returns a JSON-serializable shape we
+        // deserialize into the typed sub-results below.
+        let probe = page
+            .evaluate(REFERENCE_CAPTURE_PROBE_JS)
+            .await
+            .with_context(|| format!("computed-styles probe {viewport_px}"))?;
+        let probe_json: serde_json::Value = probe
+            .into_value()
+            .unwrap_or(serde_json::Value::Null);
 
-        // Append to manifest.
+        let styles_name = format!("{viewport_px}.styles.json");
+        let styles_path = out_dir.join(&styles_name);
+        let styles_payload = probe_json
+            .get("computedStyles")
+            .cloned()
+            .unwrap_or(serde_json::Value::Array(Vec::new()));
+        let styles_bytes = serde_json::to_vec_pretty(&styles_payload)
+            .context("serialize computed-styles JSON")?;
+        tokio::fs::write(&styles_path, styles_bytes)
+            .await
+            .with_context(|| format!("write {}", styles_path.display()))?;
+
+        // NetworkSummary partial — image/video/script counts +
+        // fonts_loaded harvested from computed styles. The
+        // third_party_origins + total_bytes fields need
+        // Network domain event harvesting (separate slice).
+        let fonts_loaded: Vec<String> = probe_json
+            .get("fontsLoaded")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(|s| s.to_owned()))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let image_count = probe_json
+            .get("imageCount")
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or(0) as u32;
+        let video_count = probe_json
+            .get("videoCount")
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or(0) as u32;
+        let script_count = probe_json
+            .get("scriptCount")
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or(0) as u32;
+
+        info!(
+            "captured {viewport_px}px → {} + {} + {} ({} styles, {} fonts, {}/{}/{} img/video/script)",
+            screenshot_name,
+            html_name,
+            styles_name,
+            styles_payload.as_array().map_or(0, std::vec::Vec::len),
+            fonts_loaded.len(),
+            image_count,
+            video_count,
+            script_count
+        );
+
+        // Append to manifest with the harvested wire-shape fields.
         let mut capture = ReferenceCapture::new(url.clone(), iso_ts(), viewport_px);
         capture.screenshot_path = screenshot_name;
         capture.html_path = html_name;
-        // computed_styles_path left empty — separate slice
+        capture.computed_styles_path = styles_name;
+        capture.network_summary.fonts_loaded = fonts_loaded;
+        capture.network_summary.image_count = image_count;
+        capture.network_summary.video_count = video_count;
+        capture.network_summary.script_count = script_count;
+        // third_party_origins + total_bytes still empty — need
+        // CDP Network domain event harvesting, separate slice.
         manifest.captures.push(capture);
     }
 
