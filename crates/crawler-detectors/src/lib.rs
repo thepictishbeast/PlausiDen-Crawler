@@ -63,6 +63,7 @@ pub mod form_labels;
 pub mod fouc_risk;
 pub mod gradient_text_clip;
 pub mod heading_order;
+pub mod hidden_elements;
 pub mod hreflang;
 pub mod hsts;
 pub mod html_lang;
