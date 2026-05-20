@@ -88,6 +88,7 @@ pub mod image_desert;
 pub mod image_dimensions;
 pub mod label_for_resolution;
 pub mod layout_thrash;
+pub mod lazy_above_fold;
 pub mod info_leak_headers;
 pub mod inline_script;
 pub mod interactive_nesting;
