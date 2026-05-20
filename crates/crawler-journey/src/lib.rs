@@ -180,6 +180,30 @@ pub enum Step {
         #[serde(skip_serializing_if = "Option::is_none", default)]
         label: Option<String>,
     },
+    /// Verify declared traits hold at runtime for a set of primitives.
+    ///
+    /// Detector implementation: `crawler-detectors::trait_verification`.
+    /// This step is the wire shape journey JSON files use to drive
+    /// runtime trait audits without depending on any consumer-specific
+    /// crate (loom-traits / cms-traits / etc.). Probes carry the
+    /// entity ↔ selector ↔ declared-traits mapping; `registryOverrides`
+    /// merges onto the detector's ecosystem-default predicate registry.
+    #[serde(rename = "verifyTraits")]
+    VerifyTraits {
+        /// Optional label.
+        #[serde(skip_serializing_if = "Option::is_none", default)]
+        label: Option<String>,
+        /// Probe rows: selector → declared traits per entity.
+        probes: Vec<TraitProbe>,
+        /// Trait id → predicate (kebab-case) overrides. Empty = use
+        /// the detector's ecosystem-default registry unchanged.
+        #[serde(
+            rename = "registryOverrides",
+            default,
+            skip_serializing_if = "std::collections::BTreeMap::is_empty"
+        )]
+        registry_overrides: std::collections::BTreeMap<String, String>,
+    },
     /// Emit an annotation into the Annotator session output (#63).
     ///
     /// Used by hand-authored "click here to flag this UI bug"
@@ -226,6 +250,7 @@ impl Step {
             Self::Discover { .. } => "discover",
             Self::Probe { .. } => "probe",
             Self::Annotate { .. } => "annotate",
+            Self::VerifyTraits { .. } => "verifyTraits",
         }
     }
 
@@ -241,10 +266,29 @@ impl Step {
             | Self::WaitForSelector { label, .. }
             | Self::Discover { label, .. }
             | Self::Probe { label, .. }
-            | Self::Annotate { label, .. } => label.as_deref(),
+            | Self::Annotate { label, .. }
+            | Self::VerifyTraits { label, .. } => label.as_deref(),
             Self::Screenshot { label } => Some(label.as_str()),
         }
     }
+}
+
+/// One probe row carried by `Step::VerifyTraits`.
+///
+/// Wire-compat with `crawler_detectors::trait_verification::TraitProbeInput`
+/// — kept as a separate type here so `crawler-journey` does not depend
+/// on `crawler-detectors`. The runner reconciles the two when it
+/// dispatches the eval.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+#[serde(rename_all = "camelCase")]
+pub struct TraitProbe {
+    /// Caller-defined primitive id (e.g. `Loom.Primitive.Heading`).
+    pub entity_id: String,
+    /// CSS selector that resolves to all instances on this page.
+    pub selector: String,
+    /// Trait identifiers the entity declares (kebab-case wire form).
+    pub declared_traits: Vec<String>,
 }
 
 /// Top-level journey definition. Wire-compat with the TS
@@ -597,6 +641,91 @@ mod tests {
             }
             other => unreachable!("wrong variant: {other:?}"),
         }
+    }
+
+    #[test]
+    fn parse_verify_traits_step() {
+        let json = r##"{
+            "kind": "verifyTraits",
+            "label": "loom-primitives",
+            "probes": [
+                {
+                    "entityId": "Loom.Primitive.Heading",
+                    "selector": ".loom-heading",
+                    "declaredTraits": ["screen-reader-accessible", "mobile-friendly"]
+                }
+            ],
+            "registryOverrides": {
+                "custom-trait": "focusable"
+            }
+        }"##;
+        let s: Step = serde_json::from_str(json).expect("parse");
+        match s {
+            Step::VerifyTraits {
+                label,
+                probes,
+                registry_overrides,
+            } => {
+                assert_eq!(label.as_deref(), Some("loom-primitives"));
+                assert_eq!(probes.len(), 1);
+                assert_eq!(probes[0].entity_id, "Loom.Primitive.Heading");
+                assert_eq!(probes[0].selector, ".loom-heading");
+                assert_eq!(probes[0].declared_traits.len(), 2);
+                assert_eq!(
+                    registry_overrides.get("custom-trait"),
+                    Some(&"focusable".to_owned())
+                );
+            }
+            other => unreachable!("wrong variant: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn verify_traits_minimal_shape_no_overrides() {
+        let json = r##"{
+            "kind": "verifyTraits",
+            "probes": [
+                {
+                    "entityId": "X",
+                    "selector": ".x",
+                    "declaredTraits": ["theme-aware"]
+                }
+            ]
+        }"##;
+        let s: Step = serde_json::from_str(json).expect("parse");
+        match s {
+            Step::VerifyTraits {
+                label,
+                probes,
+                registry_overrides,
+            } => {
+                assert!(label.is_none());
+                assert_eq!(probes.len(), 1);
+                assert!(registry_overrides.is_empty());
+            }
+            other => unreachable!("wrong variant: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn verify_traits_round_trips() {
+        let mut overrides = std::collections::BTreeMap::new();
+        overrides.insert("a-trait".to_owned(), "focusable".to_owned());
+        let s = Step::VerifyTraits {
+            label: Some("rt".into()),
+            probes: vec![TraitProbe {
+                entity_id: "E".into(),
+                selector: ".e".into(),
+                declared_traits: vec!["lang-aware".into()],
+            }],
+            registry_overrides: overrides,
+        };
+        assert_eq!(s.kind(), "verifyTraits");
+        assert_eq!(s.label(), Some("rt"));
+        let json = serde_json::to_string(&s).expect("ser");
+        assert!(json.contains(r#""kind":"verifyTraits""#));
+        let back: Step = serde_json::from_str(&json).expect("de");
+        assert_eq!(s, back);
     }
 
     #[test]

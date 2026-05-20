@@ -26,6 +26,19 @@
 //! * web_vitals
 //! * aria_drift
 //!
+//! Cross-substrate axis (#170):
+//!
+//! * `trait_verification` — runtime audit of declared substrate
+//!   traits. Consumer-agnostic: the caller (Forge / Loom / CMS / a
+//!   third-party site) hands the detector a list of
+//!   `(entity_id, selector, declared_traits)` rows plus a
+//!   `trait_id → predicate` registry. The detector emits a finding
+//!   for every runtime-verifiable trait the rendered DOM does not
+//!   uphold. Source-level-only traits (`manifested`, `versioned`,
+//!   `doctrine-cited`, `substrate-native`, `no-site-specific`) are
+//!   classified as `NotRuntimeVerifiable` and routed back to the
+//!   consumer's own source audit.
+//!
 //! AVP-2 invariants:
 //!
 //! * `unsafe_code = "deny"`.
@@ -107,6 +120,7 @@ pub mod sri;
 pub mod status_messages;
 pub mod tap_targets;
 pub mod text_wrap_collapse;
+pub mod trait_verification;
 pub mod trusted_types_runtime;
 pub mod ui_overflow;
 pub(crate) mod url_helpers;

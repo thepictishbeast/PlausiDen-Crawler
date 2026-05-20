@@ -105,7 +105,9 @@ Per `[[trait-dag]]`: Crawler Detectors declare these default-required traits via
 
 - `manifested` / `property-tested` / `regression-fixtured`
 
-The runtime trait-verification (#170) is the consumer of trait declarations — Crawler asserts at journey time that the consumed entity actually behaves consistent with its declared traits.
+Runtime trait verification ships in `crawler-detectors::trait_verification` (#170). The detector is **consumer-agnostic**: callers supply a list of `(entity_id, selector, declared_traits)` rows plus a `trait_id → predicate` registry; the detector emits a strict finding for every runtime-verifiable trait the rendered DOM does not uphold. The ecosystem-default registry maps 11 runtime-verifiable traits (`has-accessible-name`, `keyboard-operable`, `focusable`, `lang-aware`, `theme-aware`, `mobile-friendly`, `rtl-aware`, `lazy-loadable`, `reduced-motion-aware`, `screen-reader-accessible`, `touch-target-sized`) plus marks source-level traits (`manifested`, `versioned`, `doctrine-cited`, `substrate-native`, `no-site-specific`, `bundle-size-bounded`, `audit-passing`, `non-flaky`, `deterministic-baseline`) as `NotRuntimeVerifiable` so they pass through cleanly to the consumer's source-level audit.
+
+The matching journey step is `{ "kind": "verifyTraits", "probes": [...], "registryOverrides": {...} }` — see `journeys/loom-trait-verification.json` for the canonical shape.
 
 ---
 

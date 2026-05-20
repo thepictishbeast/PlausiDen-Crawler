@@ -1,0 +1,85 @@
+{
+  "name": "loom-trait-verification",
+  "description": "Verify that the runtime DOM of Loom primitive instances upholds the traits each primitive declares in its trait-manifest.toml. Source-level traits (manifested / versioned / doctrine-cited / substrate-native / no-site-specific) are routed to the Forge source-level audit and skipped here; this journey covers the runtime-verifiable subset.",
+  "baseUrl": "http://127.0.0.1:8123/",
+  "viewport": { "w": 360, "h": 800 },
+  "steps": [
+    { "kind": "goto", "url": "http://127.0.0.1:8123/", "timeout": 10000, "label": "home" },
+    { "kind": "wait", "ms": 800, "label": "settle" },
+    {
+      "kind": "verifyTraits",
+      "label": "loom-primitives-mobile",
+      "probes": [
+        {
+          "entityId": "Loom.Primitive.Heading",
+          "selector": "[data-loom-primitive='heading']",
+          "declaredTraits": [
+            "screen-reader-accessible",
+            "mobile-friendly",
+            "rtl-aware",
+            "theme-aware",
+            "lang-aware",
+            "reduced-motion-aware",
+            "manifested",
+            "versioned",
+            "doctrine-cited",
+            "substrate-native",
+            "no-site-specific"
+          ]
+        },
+        {
+          "entityId": "Loom.Primitive.Paragraph",
+          "selector": "[data-loom-primitive='paragraph']",
+          "declaredTraits": [
+            "mobile-friendly",
+            "rtl-aware",
+            "theme-aware",
+            "reduced-motion-aware",
+            "manifested",
+            "versioned",
+            "doctrine-cited",
+            "substrate-native",
+            "no-site-specific"
+          ]
+        },
+        {
+          "entityId": "Loom.Primitive.CallToAction",
+          "selector": "[data-loom-primitive='call-to-action']",
+          "declaredTraits": [
+            "focusable",
+            "keyboard-operable",
+            "screen-reader-accessible",
+            "touch-target-sized",
+            "mobile-friendly",
+            "rtl-aware",
+            "theme-aware",
+            "reduced-motion-aware",
+            "manifested",
+            "versioned",
+            "doctrine-cited",
+            "substrate-native",
+            "no-site-specific"
+          ]
+        },
+        {
+          "entityId": "Loom.Primitive.ImageHero",
+          "selector": "[data-loom-primitive='image-hero'] img",
+          "declaredTraits": [
+            "lazy-loadable",
+            "mobile-friendly",
+            "rtl-aware",
+            "theme-aware",
+            "reduced-motion-aware",
+            "manifested",
+            "versioned",
+            "doctrine-cited",
+            "substrate-native",
+            "no-site-specific",
+            "bundle-size-bounded"
+          ]
+        }
+      ]
+    },
+    { "kind": "screenshot", "label": "01-mobile-verified" }
+  ]
+}
