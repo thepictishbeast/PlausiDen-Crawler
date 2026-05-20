@@ -35,7 +35,9 @@ use serde::{Deserialize, Serialize};
 /// BUG ASSUMPTION: `#[non_exhaustive]` so adding a future kind
 /// (e.g. a new detector axis) is non-breaking. Match arms in
 /// downstream code MUST include `_ =>` fallback.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
+)]
 #[non_exhaustive]
 #[serde(rename_all = "kebab-case")]
 pub enum EventKind {
@@ -433,6 +435,83 @@ pub struct Diff {
     pub fixed_steps: Vec<StepResult>,
 }
 
+/// One row of the kind-aggregation output: a tally of how many
+/// captured events fell into a single [`EventKind`] bucket,
+/// plus the worst-case severity present in that bucket.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct KindTally {
+    /// Event kind being tallied.
+    pub kind: EventKind,
+    /// Count of CapturedEvents with that kind.
+    pub count: u32,
+    /// Worst severity observed across the events in this
+    /// bucket. `None` when no event carried a severity (the
+    /// kind doesn't bucket by severity — e.g. Console).
+    pub worst_severity: Option<Severity>,
+}
+
+impl Report {
+    /// Aggregate captured events by [`EventKind`] and return a
+    /// per-kind tally, sorted with the highest worst-severity
+    /// kinds first (ties broken by descending count, then by
+    /// kind name for stable output).
+    ///
+    /// Useful for operators reading the JSON report
+    /// programmatically — exposes "what kinds of things broke,
+    /// and how badly" without re-scanning every event.
+    ///
+    /// Kinds with zero events are omitted from the output.
+    #[must_use]
+    pub fn summarize_by_kind(&self) -> Vec<KindTally> {
+        use std::collections::BTreeMap;
+        let mut counts: BTreeMap<EventKind, (u32, Option<Severity>)> = BTreeMap::new();
+        for ev in &self.events {
+            let entry = counts.entry(ev.kind).or_insert((0, None));
+            entry.0 = entry.0.saturating_add(1);
+            if let Some(sev) = ev.severity {
+                entry.1 = Some(match entry.1 {
+                    Some(existing) => max_severity(existing, sev),
+                    None => sev,
+                });
+            }
+        }
+        let mut out: Vec<KindTally> = counts
+            .into_iter()
+            .map(|(kind, (count, worst_severity))| KindTally {
+                kind,
+                count,
+                worst_severity,
+            })
+            .collect();
+        out.sort_by(|a, b| {
+            severity_rank(b.worst_severity)
+                .cmp(&severity_rank(a.worst_severity))
+                .then(b.count.cmp(&a.count))
+                .then(format!("{:?}", a.kind).cmp(&format!("{:?}", b.kind)))
+        });
+        out
+    }
+}
+
+fn max_severity(a: Severity, b: Severity) -> Severity {
+    if severity_rank(Some(a)) >= severity_rank(Some(b)) {
+        a
+    } else {
+        b
+    }
+}
+
+/// Map severity to a sortable ordering (None < Warn < Strict).
+/// Used by both `summarize_by_kind` and `max_severity`.
+fn severity_rank(s: Option<Severity>) -> u8 {
+    match s {
+        None => 0,
+        Some(Severity::Warn) => 1,
+        Some(Severity::Strict) => 2,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -528,6 +607,89 @@ mod tests {
         assert!(d.new_console_errors.is_empty());
         assert!(d.new_aria_drift_findings.is_empty());
         assert!(d.fixed_steps.is_empty());
+    }
+
+    fn ev(kind: EventKind, severity: Option<Severity>) -> CapturedEvent {
+        CapturedEvent {
+            t: 0,
+            kind,
+            level: None,
+            text: String::new(),
+            url: None,
+            status: None,
+            stack: None,
+            impact: None,
+            rule_id: None,
+            severity,
+        }
+    }
+
+    fn report_with(events: Vec<CapturedEvent>) -> Report {
+        Report {
+            target: "http://t".to_owned(),
+            journey: "smoke".to_owned(),
+            viewport: Viewport { w: 1280, h: 800 },
+            started: "2026-05-20T00:00:00Z".to_owned(),
+            duration_ms: 0,
+            counts: ReportCounts::default(),
+            events,
+            steps: vec![],
+        }
+    }
+
+    #[test]
+    fn summarize_by_kind_groups_and_sorts_by_severity() {
+        let r = report_with(vec![
+            ev(EventKind::CssHealth, Some(Severity::Warn)),
+            ev(EventKind::CssHealth, Some(Severity::Strict)),
+            ev(EventKind::Favicon, Some(Severity::Warn)),
+            ev(EventKind::Console, None),
+            ev(EventKind::Console, None),
+            ev(EventKind::Console, None),
+        ]);
+        let s = r.summarize_by_kind();
+        // CssHealth has Strict — sorts first.
+        assert_eq!(s[0].kind, EventKind::CssHealth);
+        assert_eq!(s[0].count, 2);
+        assert_eq!(s[0].worst_severity, Some(Severity::Strict));
+        // Favicon (Warn) comes next.
+        assert_eq!(s[1].kind, EventKind::Favicon);
+        // Console (no severity) sorts last.
+        let console = s.iter().find(|t| t.kind == EventKind::Console).unwrap();
+        assert_eq!(console.count, 3);
+        assert!(console.worst_severity.is_none());
+    }
+
+    #[test]
+    fn summarize_empty_report_returns_empty_vec() {
+        let r = report_with(vec![]);
+        assert!(r.summarize_by_kind().is_empty());
+    }
+
+    #[test]
+    fn summarize_max_severity_picks_worst_across_events() {
+        let r = report_with(vec![
+            ev(EventKind::CssHealth, Some(Severity::Warn)),
+            ev(EventKind::CssHealth, Some(Severity::Strict)),
+            ev(EventKind::CssHealth, Some(Severity::Warn)),
+        ]);
+        let s = r.summarize_by_kind();
+        assert_eq!(s[0].worst_severity, Some(Severity::Strict));
+    }
+
+    #[test]
+    fn summarize_tally_count_is_per_kind() {
+        let r = report_with(vec![
+            ev(EventKind::Favicon, Some(Severity::Warn)),
+            ev(EventKind::Favicon, Some(Severity::Warn)),
+            ev(EventKind::HeadingOrder, Some(Severity::Warn)),
+        ]);
+        let s = r.summarize_by_kind();
+        // Both Warn — sort by count descending → Favicon first.
+        assert_eq!(s[0].kind, EventKind::Favicon);
+        assert_eq!(s[0].count, 2);
+        assert_eq!(s[1].kind, EventKind::HeadingOrder);
+        assert_eq!(s[1].count, 1);
     }
 
     #[test]
