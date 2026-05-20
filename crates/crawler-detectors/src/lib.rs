@@ -96,6 +96,7 @@ pub mod interactive_nesting;
 pub mod link_color_only;
 pub mod link_target_blank_safety;
 pub mod link_text;
+pub mod link_text_distinguishable;
 pub mod link_underline;
 pub mod local_storage_use;
 pub mod long_tasks;
