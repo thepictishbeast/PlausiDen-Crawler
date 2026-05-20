@@ -2662,24 +2662,33 @@ fn escape_js_string(s: &str) -> String {
     s.replace('\\', "\\\\").replace('\'', "\\'")
 }
 
+/// Emit the current wall-clock time as an RFC 3339 timestamp.
+///
+/// Returns `YYYY-MM-DDTHH:MM:SSZ` (UTC, second precision, 20 chars).
+/// Conforms to RFC 3339 §5.6 + ISO 8601:2019; the format is the
+/// machine-readable timestamp shape every report / log line in the
+/// ecosystem ships per memory [[iso-standards]].
+///
+/// Previous implementation hand-rolled epoch → Y-M-D-H-M-S math and
+/// emitted HYPHENS between time components (`T15-30-45Z`) — NOT
+/// RFC 3339-compliant. Plus the month/day modulo math drifted by
+/// the year. Replaced with the `time` crate's canonical formatter.
 fn iso_ts() -> String {
-    let secs = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs();
     let _ = json!({}); // keep serde_json imported (silences unused-import in MVP)
-    let mins = (secs / 60) % 60;
-    let hours = (secs / 3600) % 24;
-    let day_secs = secs % 60;
-    format!(
-        "{:04}-{:02}-{:02}T{:02}-{:02}-{:02}Z",
-        1970 + (secs / 31_557_600) as u32,
-        ((secs / 2_629_800) % 12) + 1,
-        ((secs / 86_400) % 31) + 1,
-        hours,
-        mins,
-        day_secs
-    )
+    let now = time::OffsetDateTime::now_utc();
+    // RFC 3339 second-precision shape. `time::format_description::
+    // well_known::Rfc3339` would emit fractional seconds; we use the
+    // explicit macro to lock to the 20-char shape every report
+    // consumer + downstream regex relies on.
+    let fmt = time::macros::format_description!(
+        "[year]-[month]-[day]T[hour]:[minute]:[second]Z"
+    );
+    now.format(&fmt).unwrap_or_else(|_| {
+        // Fallback path: if formatting somehow fails (cannot in
+        // practice for a valid OffsetDateTime), emit a known-good
+        // sentinel rather than panicking. RFC 3339 minimum.
+        "1970-01-01T00:00:00Z".to_owned()
+    })
 }
 
 fn epoch_millis() -> u64 {
@@ -2696,9 +2705,34 @@ mod tests {
     #[test]
     fn iso_ts_format_shape() {
         let s = iso_ts();
-        assert_eq!(s.len(), 20, "expected ISO-ish 20-char shape: {s}");
+        assert_eq!(s.len(), 20, "expected RFC 3339 20-char shape: {s}");
         assert!(s.contains('T'));
         assert!(s.ends_with('Z'));
+        // RFC 3339 §5.6 — colons separate hour:minute:second,
+        // NOT hyphens. The previous hand-rolled implementation
+        // shipped hyphens (regression caught by this assertion).
+        // Total colons in `YYYY-MM-DDTHH:MM:SSZ` = 2.
+        let colon_count = s.matches(':').count();
+        assert_eq!(colon_count, 2, "expected 2 colons (HH:MM:SS) in RFC 3339: {s}");
+        // Position-specific: chars 4 and 7 are hyphens (date),
+        // chars 13 and 16 are colons (time).
+        let bytes = s.as_bytes();
+        assert_eq!(bytes[4], b'-', "expected `-` at position 4 (date): {s}");
+        assert_eq!(bytes[7], b'-', "expected `-` at position 7 (date): {s}");
+        assert_eq!(bytes[10], b'T', "expected `T` at position 10: {s}");
+        assert_eq!(bytes[13], b':', "expected `:` at position 13 (time): {s}");
+        assert_eq!(bytes[16], b':', "expected `:` at position 16 (time): {s}");
+    }
+
+    #[test]
+    fn iso_ts_year_is_post_2025() {
+        // Sanity: the year prefix should be the real current year,
+        // not the broken-math 1970+secs/31_557_600 calculation that
+        // drifted by months over years. As of 2026-05 this is >=2026.
+        let s = iso_ts();
+        let year_str = &s[..4];
+        let year: u32 = year_str.parse().expect("year parses");
+        assert!(year >= 2026, "year should be at least 2026: got {year} from {s}");
     }
 
     #[test]

@@ -45,6 +45,13 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # auto-attach to all targets, and parse events as untyped JSON.
 tokio-tungstenite = { version = "0.27", default-features = false, features = ["connect"] }
 
+# RFC 3339 timestamp emission. Existing iso_ts() hand-rolled the
+# math wrong (used hyphens instead of colons between time components
+# AND mis-handled month/day rollover). `time` crate is the canonical
+# RFC 3339 emitter in the Rust ecosystem; already in use elsewhere
+# in PlausiDen (memberships-core, dr-core).
+time = { version = "0.3", features = ["formatting", "macros"] }
+
 [lints.rust]
 unsafe_code = "deny"
 
