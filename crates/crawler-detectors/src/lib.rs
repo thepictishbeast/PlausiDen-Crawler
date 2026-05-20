@@ -64,6 +64,7 @@ pub mod coop;
 pub mod corp;
 pub mod cross_page_meta_description;
 pub mod cross_page_title;
+pub mod dialog_label;
 pub mod css_health;
 pub mod doc_title;
 pub mod doctype_charset;
