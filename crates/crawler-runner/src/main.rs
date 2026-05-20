@@ -201,9 +201,9 @@ use tracing::{info, warn};
     about = "PlausiDen-Crawler — chromiumoxide-based journey runner."
 )]
 struct Args {
-    /// Journey JSON path.
+    /// Journey JSON path. Required unless --capture-reference is given.
     #[arg(long)]
-    journey: PathBuf,
+    journey: Option<PathBuf>,
 
     /// Override the journey's baseUrl.
     #[arg(long)]
@@ -216,6 +216,21 @@ struct Args {
     /// Run headless (default true). `--no-headless` for visual debug.
     #[arg(long, default_value_t = true)]
     headless: bool,
+
+    /// Reference-capture mode: screenshot the given URL at the
+    /// 390 / 768 / 1280 px viewports, save HTML + screenshot per
+    /// viewport, emit a CaptureManifest JSON conforming to the
+    /// crawler-reference-capture wire shape. Mutually exclusive
+    /// with --journey. See crates/crawler-reference-capture for
+    /// the typed schema. Closes #298 follow-on / #301 emission.
+    #[arg(long)]
+    capture_reference: Option<String>,
+
+    /// Site slug for the capture output directory (used only with
+    /// --capture-reference). Default: derived from the URL host
+    /// in kebab-case.
+    #[arg(long)]
+    site_slug: Option<String>,
 }
 
 #[tokio::main(flavor = "multi_thread")]
@@ -239,8 +254,19 @@ async fn main() -> ExitCode {
 
 async fn run() -> Result<ExitCode> {
     let args = Args::parse();
-    let journey = crawler_journey::load(&args.journey)
-        .with_context(|| format!("loading journey {}", args.journey.display()))?;
+
+    // Reference-capture mode: dispatch before loading a journey,
+    // since --journey is optional when --capture-reference is given.
+    if let Some(url) = args.capture_reference.clone() {
+        return run_capture_reference(args, url).await;
+    }
+
+    let journey_path = args
+        .journey
+        .as_ref()
+        .context("either --journey <path> or --capture-reference <url> is required")?;
+    let journey = crawler_journey::load(journey_path)
+        .with_context(|| format!("loading journey {}", journey_path.display()))?;
 
     info!(
         "crawler {} journey={} target={}",
@@ -2129,6 +2155,222 @@ const TRUSTED_TYPES_PROBE_JS: &str = r#"
   } catch (e) { }
 })();
 "#;
+
+/// Reference-capture mode runner. Screenshots the URL at 390 /
+/// 768 / 1280 px viewports, saves HTML + screenshot per viewport,
+/// emits a CaptureManifest JSON conforming to the
+/// crawler-reference-capture wire shape.
+///
+/// Scope of this slice (#301):
+///   * 3 viewports × {screenshot.png, html}
+///   * manifest.json with spec=V1, site_slug, url, updated_at,
+///     captures[]
+///
+/// Out of scope (separate slice):
+///   * computed-styles.json (DOM.getDocument + per-node
+///     getComputedStyleForNode — sizable CDP plumbing)
+///   * network_summary fields (fonts_loaded / image_count /
+///     video_count / script_count / third_party_origins /
+///     total_bytes — needs Network domain event harvesting)
+///   * iso_time canonical-form validation at the boundary
+///     (handled by CaptureManifest::validate_timestamps on write)
+async fn run_capture_reference(args: Args, url: String) -> Result<ExitCode> {
+    use crawler_reference_capture::{CaptureManifest, ReferenceCapture};
+
+    let site_slug = match args.site_slug.clone() {
+        Some(s) => s,
+        None => derive_site_slug(&url),
+    };
+
+    let out_dir = args.out_dir.join(&site_slug);
+    tokio::fs::create_dir_all(&out_dir)
+        .await
+        .with_context(|| format!("create capture dir {}", out_dir.display()))?;
+
+    info!(
+        "crawler capture-reference {} url={} slug={} out={}",
+        env!("CARGO_PKG_VERSION"),
+        url,
+        site_slug,
+        out_dir.display()
+    );
+
+    // Launch Chromium. Same builder pattern as the journey runner
+    // (no_sandbox + with_head when --no-headless).
+    let mut builder = BrowserConfig::builder().no_sandbox();
+    if !args.headless {
+        builder = builder.with_head();
+    }
+    if std::env::var_os("CHROME").is_none() {
+        for candidate in [
+            "/usr/bin/chromium-shell",
+            "/usr/bin/chromium",
+            "/usr/bin/chromium-browser",
+            "/usr/bin/google-chrome",
+            "/usr/bin/google-chrome-stable",
+            "/snap/bin/chromium",
+        ] {
+            if std::path::Path::new(candidate).exists() {
+                builder = builder.chrome_executable(candidate);
+                break;
+            }
+        }
+    }
+    let config = builder.build().map_err(|e| anyhow::anyhow!("{e}"))?;
+    let (mut browser, mut handler) = Browser::launch(config)
+        .await
+        .context("launching Chromium")?;
+    let handler_task = tokio::spawn(async move {
+        while let Some(_event) = futures::StreamExt::next(&mut handler).await {}
+    });
+
+    let viewports: &[u32] = &[390, 768, 1280];
+    let mut manifest = CaptureManifest::new(site_slug.clone(), url.clone());
+    manifest.updated_at = iso_ts();
+
+    for &viewport_px in viewports {
+        let page = browser
+            .new_page("about:blank")
+            .await
+            .with_context(|| format!("creating page for viewport {viewport_px}"))?;
+
+        // Set viewport via CDP. chromiumoxide's Page::set_viewport
+        // wraps Emulation.setDeviceMetricsOverride.
+        let viewport = chromiumoxide::cdp::browser_protocol::emulation::SetDeviceMetricsOverrideParams::builder()
+            .width(i64::from(viewport_px))
+            .height(i64::from(viewport_px * 2)) // 1:2 aspect for full-page screenshots
+            .device_scale_factor(1.0)
+            .mobile(viewport_px <= 480)
+            .build()
+            .map_err(|e| anyhow::anyhow!("viewport build: {e}"))?;
+        page.execute(viewport)
+            .await
+            .with_context(|| format!("set viewport {viewport_px}"))?;
+
+        // Navigate.
+        page.goto(url.as_str())
+            .await
+            .with_context(|| format!("goto {url}"))?;
+        page.wait_for_navigation()
+            .await
+            .with_context(|| format!("wait for nav {url}"))?;
+
+        // Screenshot (full-page).
+        let screenshot_name = format!("{viewport_px}.png");
+        let screenshot_path = out_dir.join(&screenshot_name);
+        let opts = chromiumoxide::page::ScreenshotParams::builder()
+            .full_page(true)
+            .build();
+        let bytes = page
+            .screenshot(opts)
+            .await
+            .with_context(|| format!("screenshot {viewport_px}"))?;
+        tokio::fs::write(&screenshot_path, bytes)
+            .await
+            .with_context(|| format!("write {}", screenshot_path.display()))?;
+
+        // HTML.
+        let html_name = format!("{viewport_px}.html");
+        let html_path = out_dir.join(&html_name);
+        let html = page
+            .content()
+            .await
+            .with_context(|| format!("get content {viewport_px}"))?;
+        tokio::fs::write(&html_path, html)
+            .await
+            .with_context(|| format!("write {}", html_path.display()))?;
+
+        // Append to manifest.
+        let mut capture = ReferenceCapture::new(url.clone(), iso_ts(), viewport_px);
+        capture.screenshot_path = screenshot_name;
+        capture.html_path = html_name;
+        // computed_styles_path left empty — separate slice
+        manifest.captures.push(capture);
+
+        // Close page to free resources before next viewport.
+        let _ = page.close().await;
+    }
+
+    // Emit manifest. validate_timestamps() inside write() enforces
+    // canonical RFC-3339 form on updated_at + each captured_at.
+    let manifest_path = out_dir.join("manifest.json");
+    manifest
+        .write(&manifest_path)
+        .with_context(|| format!("write {}", manifest_path.display()))?;
+
+    info!(
+        "capture-reference complete: {} viewports → {}",
+        viewports.len(),
+        manifest_path.display()
+    );
+
+    // Tear down browser cleanly.
+    let _ = browser.close().await;
+    let _ = handler_task.await;
+
+    Ok(ExitCode::SUCCESS)
+}
+
+/// Derive a kebab-case site slug from a URL host. Strips
+/// `www.` prefix; replaces non-alphanumeric runs with single
+/// hyphens; trims hyphens at the boundaries; collapses doubled
+/// hyphens. Falls back to `"site"` on parse failure.
+fn derive_site_slug(url: &str) -> String {
+    let host_start = url.find("://").map_or(0, |i| i + 3);
+    let after_scheme = &url[host_start..];
+    let host = after_scheme
+        .split('/')
+        .next()
+        .unwrap_or(after_scheme)
+        .trim_start_matches("www.");
+    let mut out = String::with_capacity(host.len());
+    let mut prev_dash = true;
+    for c in host.chars() {
+        if c.is_ascii_alphanumeric() {
+            out.push(c.to_ascii_lowercase());
+            prev_dash = false;
+        } else if !prev_dash {
+            out.push('-');
+            prev_dash = true;
+        }
+    }
+    let slug = out.trim_matches('-');
+    if slug.is_empty() {
+        "site".to_owned()
+    } else {
+        slug.to_owned()
+    }
+}
+
+#[cfg(test)]
+mod capture_reference_tests {
+    use super::*;
+
+    #[test]
+    fn derive_site_slug_basic() {
+        assert_eq!(derive_site_slug("https://prosperityclub.com/"), "prosperityclub-com");
+        assert_eq!(derive_site_slug("https://www.example.com/page"), "example-com");
+        assert_eq!(derive_site_slug("http://sacred.vote"), "sacred-vote");
+        assert_eq!(derive_site_slug("https://STRIPE.com/"), "stripe-com");
+    }
+
+    #[test]
+    fn derive_site_slug_collapses_dashes() {
+        // Multiple non-alphanumeric runs should collapse to one dash
+        assert_eq!(derive_site_slug("https://a---b.example.com/"), "a-b-example-com");
+    }
+
+    #[test]
+    fn derive_site_slug_handles_missing_scheme() {
+        assert_eq!(derive_site_slug("prosperityclub.com"), "prosperityclub-com");
+    }
+
+    #[test]
+    fn derive_site_slug_fallback_for_empty_host() {
+        assert_eq!(derive_site_slug(""), "site");
+        assert_eq!(derive_site_slug("https:///"), "site");
+    }
+}
 
 /// Install the Trusted Types probe on the page BEFORE its first
 /// script runs. Called once per page lifecycle.
