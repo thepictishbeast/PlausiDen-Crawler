@@ -2155,12 +2155,38 @@ const REFERENCE_CAPTURE_PROBE_JS: &str = r#"
   const videoCount = document.querySelectorAll('video, iframe[src*=\"youtube\"], iframe[src*=\"vimeo\"]').length;
   const scriptCount = document.querySelectorAll('script').length;
 
+  // NetworkSummary follow-on (#308): harvest third-party origins +
+  // total transferred bytes via the Resource Timing API. transferSize
+  // ≈ encodedDataLength on the CDP side. Filter to origins != page
+  // origin; skip data: + blob: + javascript: URLs (page-internal).
+  const pageOrigin = location.origin;
+  const thirdPartySet = new Set();
+  let totalBytes = 0;
+  try {
+    const entries = performance.getEntriesByType('resource') || [];
+    for (const e of entries) {
+      const name = e.name || '';
+      if (name.startsWith('data:') || name.startsWith('blob:') || name.startsWith('javascript:')) continue;
+      try {
+        const u = new URL(name);
+        if (u.origin && u.origin !== pageOrigin) {
+          thirdPartySet.add(u.origin);
+        }
+      } catch (err) { /* relative or malformed — skip */ }
+      const size = typeof e.transferSize === 'number' ? e.transferSize : 0;
+      if (size > 0) totalBytes += size;
+    }
+  } catch (err) { /* perf API unavailable — leave zeros */ }
+  const thirdPartyOrigins = Array.from(thirdPartySet).sort();
+
   return {
     computedStyles: styles,
     imageCount: imageCount,
     videoCount: videoCount,
     scriptCount: scriptCount,
-    fontsLoaded: Array.from(fontFamilies)
+    fontsLoaded: Array.from(fontFamilies),
+    thirdPartyOrigins: thirdPartyOrigins,
+    totalBytes: totalBytes
   };
 })()
 "#;
@@ -2464,9 +2490,22 @@ async fn run_capture_reference(args: Args, url: String) -> Result<ExitCode> {
             .get("scriptCount")
             .and_then(serde_json::Value::as_u64)
             .unwrap_or(0) as u32;
+        let third_party_origins: Vec<String> = probe_json
+            .get("thirdPartyOrigins")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(|s| s.to_owned()))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let total_bytes = probe_json
+            .get("totalBytes")
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or(0);
 
         info!(
-            "captured {viewport_px}px → {} + {} + {} ({} styles, {} fonts, {}/{}/{} img/video/script)",
+            "captured {viewport_px}px → {} + {} + {} ({} styles, {} fonts, {}/{}/{} img/video/script, {} 3p-origins, {}B)",
             screenshot_name,
             html_name,
             styles_name,
@@ -2474,7 +2513,9 @@ async fn run_capture_reference(args: Args, url: String) -> Result<ExitCode> {
             fonts_loaded.len(),
             image_count,
             video_count,
-            script_count
+            script_count,
+            third_party_origins.len(),
+            total_bytes
         );
 
         // Append to manifest with the harvested wire-shape fields.
@@ -2486,8 +2527,8 @@ async fn run_capture_reference(args: Args, url: String) -> Result<ExitCode> {
         capture.network_summary.image_count = image_count;
         capture.network_summary.video_count = video_count;
         capture.network_summary.script_count = script_count;
-        // third_party_origins + total_bytes still empty — need
-        // CDP Network domain event harvesting, separate slice.
+        capture.network_summary.third_party_origins = third_party_origins;
+        capture.network_summary.total_bytes = total_bytes;
         manifest.captures.push(capture);
     }
 
