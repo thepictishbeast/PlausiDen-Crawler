@@ -126,6 +126,7 @@ pub mod text_wrap_collapse;
 pub mod trait_verification;
 pub mod trusted_types_runtime;
 pub mod ui_overflow;
+pub mod unique_id;
 pub(crate) mod url_helpers;
 pub mod vary_header;
 pub mod viewport_meta;
