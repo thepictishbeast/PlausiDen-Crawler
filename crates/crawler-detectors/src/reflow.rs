@@ -247,8 +247,17 @@ mod tests {
     #[test]
     fn js_returns_required_keys() {
         for k in [
-            "vpW", "vpH", "scrollW", "overflowed", "offenders",
-            "selector", "tag", "text", "rightPx", "widthPx", "overflowPx",
+            "vpW",
+            "vpH",
+            "scrollW",
+            "overflowed",
+            "offenders",
+            "selector",
+            "tag",
+            "text",
+            "rightPx",
+            "widthPx",
+            "overflowPx",
         ] {
             assert!(REFLOW_JS.contains(k), "missing key: {k}");
         }

@@ -166,12 +166,8 @@ pub fn detect_hidden_elements(snap: &HiddenElementsSnapshot) -> Vec<AxisFinding>
         out.push(AxisFinding {
             severity,
             kind: kind.to_owned(),
-            detail: format!(
-                "{}: {} site(s). {}",
-                kind,
-                bucket.len(),
-                headline,
-            ) + " Examples: "
+            detail: format!("{}: {} site(s). {}", kind, bucket.len(), headline,)
+                + " Examples: "
                 + &examples.join("; "),
         });
     }
@@ -196,10 +192,7 @@ fn format_hit(h: &HiddenElementHit, cause: HiddenElementCause) -> String {
             format!("opacity={}", h.opacity)
         }
     };
-    format!(
-        "{} <{}> text={:?} {}",
-        h.selector, h.tag, h.text, suffix
-    )
+    format!("{} <{}> text={:?} {}", h.selector, h.tag, h.text, suffix)
 }
 
 /// Browser-side DOM-capture script. Pinned for the chromiumoxide
@@ -349,7 +342,12 @@ mod tests {
     fn aria_hidden_focusable_emits_strict() {
         let s = HiddenElementsSnapshot {
             page_url: "https://x.example/".into(),
-            hits: vec![hit(HiddenElementCause::AriaHiddenFocusable, "Submit", 0, "true")],
+            hits: vec![hit(
+                HiddenElementCause::AriaHiddenFocusable,
+                "Submit",
+                0,
+                "true",
+            )],
             scanned_elements: 1,
         };
         let f = detect_hidden_elements(&s);
@@ -363,7 +361,12 @@ mod tests {
     fn display_hidden_focusable_emits_strict() {
         let s = HiddenElementsSnapshot {
             page_url: "https://x.example/".into(),
-            hits: vec![hit(HiddenElementCause::DisplayHiddenFocusable, "Hidden CTA", 0, "")],
+            hits: vec![hit(
+                HiddenElementCause::DisplayHiddenFocusable,
+                "Hidden CTA",
+                0,
+                "",
+            )],
             scanned_elements: 1,
         };
         let f = detect_hidden_elements(&s);
@@ -373,7 +376,12 @@ mod tests {
 
     #[test]
     fn zero_sized_emits_warn() {
-        let mut h = hit(HiddenElementCause::ZeroSizedContentBearing, "Cloaked", -1, "");
+        let mut h = hit(
+            HiddenElementCause::ZeroSizedContentBearing,
+            "Cloaked",
+            -1,
+            "",
+        );
         h.rect_width = 0;
         h.rect_height = 0;
         let s = HiddenElementsSnapshot {
@@ -389,7 +397,12 @@ mod tests {
 
     #[test]
     fn opacity_zero_emits_warn() {
-        let mut h = hit(HiddenElementCause::OpacityZeroWithText, "Cloaked link", -1, "");
+        let mut h = hit(
+            HiddenElementCause::OpacityZeroWithText,
+            "Cloaked link",
+            -1,
+            "",
+        );
         h.opacity = 0.0;
         let s = HiddenElementsSnapshot {
             page_url: "https://x.example/".into(),
@@ -415,9 +428,15 @@ mod tests {
         };
         let f = detect_hidden_elements(&s);
         assert_eq!(f.len(), 2); // aria-hidden (2 hits) + display-hidden (1 hit)
-        // Verify both bug classes report their respective counts.
-        let aria = f.iter().find(|x| x.kind.contains("aria-hidden")).expect("aria");
-        let disp = f.iter().find(|x| x.kind.contains("display-hidden")).expect("disp");
+                                // Verify both bug classes report their respective counts.
+        let aria = f
+            .iter()
+            .find(|x| x.kind.contains("aria-hidden"))
+            .expect("aria");
+        let disp = f
+            .iter()
+            .find(|x| x.kind.contains("display-hidden"))
+            .expect("disp");
         assert!(aria.detail.contains("2 site(s)"));
         assert!(disp.detail.contains("1 site(s)"));
     }

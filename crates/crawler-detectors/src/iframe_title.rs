@@ -241,8 +241,15 @@ mod tests {
     #[test]
     fn js_returns_required_keys() {
         for k in [
-            "scanned", "missing", "missingCount", "empty", "emptyCount",
-            "selector", "src", "srcdoc", "srcEmpty",
+            "scanned",
+            "missing",
+            "missingCount",
+            "empty",
+            "emptyCount",
+            "selector",
+            "src",
+            "srcdoc",
+            "srcEmpty",
         ] {
             assert!(IFRAME_TITLE_JS.contains(k), "missing key: {k}");
         }
@@ -315,7 +322,9 @@ mod tests {
         assert_eq!(findings.len(), 1);
         assert!(matches!(findings[0].severity, AxisSeverity::Warn));
         assert_eq!(findings[0].kind, "iframe-title.empty");
-        assert!(findings[0].detail.contains("screen readers announce 'frame'"));
+        assert!(findings[0]
+            .detail
+            .contains("screen readers announce 'frame'"));
     }
 
     #[test]

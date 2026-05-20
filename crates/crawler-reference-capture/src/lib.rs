@@ -137,7 +137,9 @@ pub enum CaptureError {
     /// UTC form (`YYYY-MM-DDTHH:MM:SSZ`, 20 chars). Mirrors
     /// forge-core::reference_capture::CaptureError::BadTimestamp
     /// so the wire shape rejects on both sides.
-    #[error("invalid RFC-3339 UTC timestamp in {field}: {provided:?} (expected YYYY-MM-DDTHH:MM:SSZ)")]
+    #[error(
+        "invalid RFC-3339 UTC timestamp in {field}: {provided:?} (expected YYYY-MM-DDTHH:MM:SSZ)"
+    )]
     BadTimestamp {
         /// Field that carried the bad value.
         field: String,
@@ -185,11 +187,7 @@ impl ReferenceCapture {
     /// Crawler-side emitters fill paths in after writing the
     /// screenshot/html/computed-styles artifacts.
     #[must_use]
-    pub fn new(
-        url: impl Into<String>,
-        captured_at: impl Into<String>,
-        viewport_px: u32,
-    ) -> Self {
+    pub fn new(url: impl Into<String>, captured_at: impl Into<String>, viewport_px: u32) -> Self {
         Self {
             spec: CaptureSpec::V1,
             url: url.into(),
@@ -303,11 +301,7 @@ mod tests {
 
     #[test]
     fn reference_capture_new_sets_defaults() {
-        let c = ReferenceCapture::new(
-            "https://example.com",
-            "2026-05-20T00:00:00Z",
-            1280,
-        );
+        let c = ReferenceCapture::new("https://example.com", "2026-05-20T00:00:00Z", 1280);
         assert_eq!(c.url, "https://example.com");
         assert_eq!(c.captured_at, "2026-05-20T00:00:00Z");
         assert_eq!(c.viewport_px, 1280);
@@ -349,10 +343,14 @@ mod tests {
     #[test]
     fn for_viewport_filters_correctly() {
         let mut m = CaptureManifest::new("s", "https://x");
-        m.captures.push(ReferenceCapture::new("https://x", "t", 390));
-        m.captures.push(ReferenceCapture::new("https://x", "t", 768));
-        m.captures.push(ReferenceCapture::new("https://x", "t", 1280));
-        m.captures.push(ReferenceCapture::new("https://x", "t", 1280));
+        m.captures
+            .push(ReferenceCapture::new("https://x", "t", 390));
+        m.captures
+            .push(ReferenceCapture::new("https://x", "t", 768));
+        m.captures
+            .push(ReferenceCapture::new("https://x", "t", 1280));
+        m.captures
+            .push(ReferenceCapture::new("https://x", "t", 1280));
         assert_eq!(m.for_viewport(390).len(), 1);
         assert_eq!(m.for_viewport(768).len(), 1);
         assert_eq!(m.for_viewport(1280).len(), 2);
@@ -400,7 +398,8 @@ mod tests {
         let path = dir.join("manifest.json");
         let mut m = CaptureManifest::new("s", "https://x");
         m.updated_at = "2026-05-20T13:00:00Z".to_owned();
-        m.captures.push(ReferenceCapture::new("https://x", "yesterday", 1280));
+        m.captures
+            .push(ReferenceCapture::new("https://x", "yesterday", 1280));
         match m.write(&path) {
             Err(CaptureError::BadTimestamp { field, provided }) => {
                 assert_eq!(field, "captures[0].captured_at");

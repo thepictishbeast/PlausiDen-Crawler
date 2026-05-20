@@ -275,7 +275,12 @@ mod tests {
 
     #[test]
     fn disallows_canonical_strict_when_no_noindex() {
-        let s = snap(200, "User-agent: *\nDisallow: /private\n", "/private", false);
+        let s = snap(
+            200,
+            "User-agent: *\nDisallow: /private\n",
+            "/private",
+            false,
+        );
         let f = detect_robots_txt(&s);
         assert_eq!(f[0].kind, "robots-txt.disallows-canonical");
         assert_eq!(f[0].severity, AxisSeverity::Strict);
@@ -324,7 +329,12 @@ mod tests {
 
     #[test]
     fn unreachable_sitemap_warns() {
-        let mut s = snap(200, "Sitemap: https://example.com/sitemap.xml\n", "/", false);
+        let mut s = snap(
+            200,
+            "Sitemap: https://example.com/sitemap.xml\n",
+            "/",
+            false,
+        );
         s.sitemap_statuses.push(SitemapStatus {
             url: "https://example.com/sitemap.xml".to_owned(),
             status: 404,

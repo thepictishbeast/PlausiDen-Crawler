@@ -288,8 +288,21 @@ mod tests {
     #[test]
     fn js_returns_required_keys() {
         for k in [
-            "vpW", "vpH", "docW", "docH", "scanned", "truncated", "offenders",
-            "selector", "tag", "text", "side", "absLeft", "absTop", "absRight", "absBottom",
+            "vpW",
+            "vpH",
+            "docW",
+            "docH",
+            "scanned",
+            "truncated",
+            "offenders",
+            "selector",
+            "tag",
+            "text",
+            "side",
+            "absLeft",
+            "absTop",
+            "absRight",
+            "absBottom",
         ] {
             assert!(OFFSCREEN_CONTENT_JS.contains(k), "missing key: {k}");
         }

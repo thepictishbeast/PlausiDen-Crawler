@@ -176,15 +176,11 @@ pub fn detect_placeholder_alt_issues(snap: &PlaceholderAltSnapshot) -> Vec<crate
         return Vec::new();
     }
     // Bucket offenders by kind.
-    let mut by_kind: std::collections::BTreeMap<String, u32> =
-        std::collections::BTreeMap::new();
+    let mut by_kind: std::collections::BTreeMap<String, u32> = std::collections::BTreeMap::new();
     for o in &snap.offenders {
         *by_kind.entry(o.kind.clone()).or_insert(0) += 1;
     }
-    let breakdown: Vec<String> = by_kind
-        .iter()
-        .map(|(k, n)| format!("{k}={n}"))
-        .collect();
+    let breakdown: Vec<String> = by_kind.iter().map(|(k, n)| format!("{k}={n}")).collect();
     let first = &snap.offenders[0];
     let mut out = Vec::with_capacity(1);
     out.push(crate::AxisFinding {
@@ -228,14 +224,29 @@ mod tests {
 
     #[test]
     fn js_returns_required_keys() {
-        for k in ["scanned", "offenderCount", "offenders", "selector", "src", "alt", "kind"] {
+        for k in [
+            "scanned",
+            "offenderCount",
+            "offenders",
+            "selector",
+            "src",
+            "alt",
+            "kind",
+        ] {
             assert!(PLACEHOLDER_ALT_JS.contains(k), "missing key: {k}");
         }
     }
 
     #[test]
     fn js_lists_all_categories() {
-        for cat in ["whitespace", "url", "file-path", "filename", "dimension", "generic-word"] {
+        for cat in [
+            "whitespace",
+            "url",
+            "file-path",
+            "filename",
+            "dimension",
+            "generic-word",
+        ] {
             assert!(
                 PLACEHOLDER_ALT_JS.contains(&format!("'{cat}'")),
                 "missing category in JS: {cat}"

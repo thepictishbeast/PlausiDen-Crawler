@@ -198,14 +198,16 @@ fn is_plausible_datetime(s: &str) -> bool {
         return false;
     }
     // Edge formats (week / year-only / duration) — accept permissively.
-    if s.starts_with('P') || (s.contains("-W") && s.len() >= 7) || (s.len() == 4 && s.chars().all(|c| c.is_ascii_digit())) {
+    if s.starts_with('P')
+        || (s.contains("-W") && s.len() >= 7)
+        || (s.len() == 4 && s.chars().all(|c| c.is_ascii_digit()))
+    {
         return true;
     }
     // ISO date / datetime / year-month / time-of-day shape check.
     // Pattern: digits + recognized separators, no free-form text.
-    let permitted_chars = |c: char| -> bool {
-        c.is_ascii_digit() || matches!(c, '-' | 'T' | ':' | '.' | '+' | 'Z')
-    };
+    let permitted_chars =
+        |c: char| -> bool { c.is_ascii_digit() || matches!(c, '-' | 'T' | ':' | '.' | '+' | 'Z') };
     if !s.chars().all(permitted_chars) {
         return false;
     }
@@ -245,7 +247,8 @@ mod tests {
 
     #[test]
     fn well_formed_time_with_datetime_is_silent() {
-        let findings = detect_time_datetime(&snap(vec![entry("March 15, 2024", Some("2024-03-15"))]));
+        let findings =
+            detect_time_datetime(&snap(vec![entry("March 15, 2024", Some("2024-03-15"))]));
         assert!(findings.is_empty());
     }
 

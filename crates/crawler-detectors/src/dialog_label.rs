@@ -173,10 +173,8 @@ pub fn detect_dialog_label_issues(snap: &DialogLabelSnapshot) -> Vec<AxisFinding
         if let Some(refs) = entry.aria_labelledby.as_deref() {
             let trimmed = refs.trim();
             if !trimmed.is_empty() {
-                let any_resolves =
-                    entry.labelledby_resolutions.iter().any(|r| r.resolves);
-                let any_unresolved =
-                    entry.labelledby_resolutions.iter().any(|r| !r.resolves);
+                let any_resolves = entry.labelledby_resolutions.iter().any(|r| r.resolves);
+                let any_unresolved = entry.labelledby_resolutions.iter().any(|r| !r.resolves);
                 if !any_resolves {
                     findings.push(AxisFinding {
                         severity: AxisSeverity::Strict,
@@ -307,12 +305,8 @@ mod tests {
 
     #[test]
     fn dialog_with_no_name_signals_is_strict_missing() {
-        let findings = detect_dialog_label_issues(&snap(vec![entry(
-            None,
-            None,
-            false,
-            Vec::new(),
-        )]));
+        let findings =
+            detect_dialog_label_issues(&snap(vec![entry(None, None, false, Vec::new())]));
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].severity, AxisSeverity::Strict);
         assert_eq!(findings[0].kind, "dialog-label.missing-name");
@@ -333,12 +327,8 @@ mod tests {
 
     #[test]
     fn dialog_with_whitespace_aria_label_is_strict_empty() {
-        let findings = detect_dialog_label_issues(&snap(vec![entry(
-            Some("   "),
-            None,
-            false,
-            Vec::new(),
-        )]));
+        let findings =
+            detect_dialog_label_issues(&snap(vec![entry(Some("   "), None, false, Vec::new())]));
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].kind, "dialog-label.empty-aria-label");
     }

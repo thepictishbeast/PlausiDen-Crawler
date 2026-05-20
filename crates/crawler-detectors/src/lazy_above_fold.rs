@@ -238,8 +238,7 @@ mod tests {
 
     #[test]
     fn lazy_above_fold_image_is_strict() {
-        let findings =
-            detect_lazy_above_fold(&snap(vec![entry(Some("lazy"), 100, 1200)]));
+        let findings = detect_lazy_above_fold(&snap(vec![entry(Some("lazy"), 100, 1200)]));
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].severity, AxisSeverity::Strict);
         assert_eq!(findings[0].kind, "lazy-above-fold.lcp-image");
@@ -248,8 +247,7 @@ mod tests {
 
     #[test]
     fn lazy_below_fold_image_silent() {
-        let findings =
-            detect_lazy_above_fold(&snap(vec![entry(Some("lazy"), 1200, 200)]));
+        let findings = detect_lazy_above_fold(&snap(vec![entry(Some("lazy"), 1200, 200)]));
         assert!(findings.is_empty());
     }
 
@@ -261,19 +259,14 @@ mod tests {
 
     #[test]
     fn lazy_at_zero_top_is_above_fold_strict() {
-        let findings =
-            detect_lazy_above_fold(&snap(vec![entry(Some("lazy"), 0, 800)]));
+        let findings = detect_lazy_above_fold(&snap(vec![entry(Some("lazy"), 0, 800)]));
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].severity, AxisSeverity::Strict);
     }
 
     #[test]
     fn lazy_just_below_viewport_with_wide_image_warns_partially_visible() {
-        let findings = detect_lazy_above_fold(&snap(vec![entry(
-            Some("lazy"),
-            850,
-            800,
-        )]));
+        let findings = detect_lazy_above_fold(&snap(vec![entry(Some("lazy"), 850, 800)]));
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].severity, AxisSeverity::Warn);
         assert_eq!(findings[0].kind, "lazy-above-fold.partially-visible");
@@ -281,11 +274,7 @@ mod tests {
 
     #[test]
     fn lazy_far_below_fold_silent_even_when_wide() {
-        let findings = detect_lazy_above_fold(&snap(vec![entry(
-            Some("lazy"),
-            1500,
-            800,
-        )]));
+        let findings = detect_lazy_above_fold(&snap(vec![entry(Some("lazy"), 1500, 800)]));
         assert!(findings.is_empty());
     }
 

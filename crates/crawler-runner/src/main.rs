@@ -79,11 +79,17 @@ use crawler_detectors::css_health::{
     INLINE_STYLE_BLOCK_COUNT_JS,
 };
 use crawler_detectors::doc_title::{detect_doc_title_issues, DocTitleSnapshot, DOC_TITLE_JS};
+use crawler_detectors::doctype_charset::{
+    detect_doctype_charset, DoctypeCharsetSnapshot, DOCTYPE_CHARSET_DOM_CAPTURE_JS,
+};
 use crawler_detectors::document_policy::{
     build_document_policy_snapshot, detect_document_policy_issues,
 };
 use crawler_detectors::favicon::{detect_favicon_issues, FaviconSnapshot, FAVICON_JS};
 use crawler_detectors::font_loading::{detect_font_loading_issues, FontLoadingSnapshot};
+use crawler_detectors::form_error_id_and_suggest::{
+    detect_form_errors, FormErrorSnapshot, FORM_ERROR_DOM_CAPTURE_JS,
+};
 use crawler_detectors::form_labels::{
     detect_form_label_issues, FormLabelsSnapshot, FORM_LABELS_JS,
 };
@@ -93,6 +99,9 @@ use crawler_detectors::heading_order::{
 use crawler_detectors::hsts::{build_hsts_snapshot, detect_hsts_issues};
 use crawler_detectors::html_lang::{detect_html_lang_issues, HtmlLangSnapshot, HTML_LANG_JS};
 use crawler_detectors::info_leak_headers::{build_info_leak_snapshot, detect_info_leak_issues};
+use crawler_detectors::link_color_only::{
+    detect_link_color_only, LinkColorOnlySnapshot, LINK_COLOR_ONLY_DOM_CAPTURE_JS,
+};
 use crawler_detectors::link_text::{detect_link_text_issues, LinkTextSnapshot, LINK_TEXT_JS};
 use crawler_detectors::link_underline::{
     detect_link_underline_issues, LinkUnderlineSnapshot, LINK_UNDERLINE_JS,
@@ -102,6 +111,12 @@ use crawler_detectors::meta_description::{
 };
 use crawler_detectors::mixed_content::{
     detect_mixed_content_issues, MixedContentSnapshot, MIXED_CONTENT_JS,
+};
+use crawler_detectors::modern_image_formats::{
+    detect_modern_image_formats, ModernImageFormatsSnapshot, MODERN_IMAGE_FORMATS_DOM_CAPTURE_JS,
+};
+use crawler_detectors::multiple_ways::{
+    detect_multiple_ways, MultipleWaysSnapshot, MULTIPLE_WAYS_DOM_CAPTURE_JS,
 };
 use crawler_detectors::network_error_logging::{build_nel_snapshot, detect_nel_issues};
 use crawler_detectors::origin_agent_cluster::{
@@ -116,41 +131,20 @@ use crawler_detectors::permissions_policy::{
 use crawler_detectors::placeholder_text::{
     detect_placeholder_text_issues, PlaceholderTextSnapshot, PLACEHOLDER_TEXT_DOM_CAPTURE_JS,
 };
-use crawler_detectors::link_color_only::{
-    detect_link_color_only, LinkColorOnlySnapshot, LINK_COLOR_ONLY_DOM_CAPTURE_JS,
+use crawler_detectors::referrer_policy::{
+    build_referrer_policy_snapshot, detect_referrer_policy_issues,
 };
-use crawler_detectors::doctype_charset::{
-    detect_doctype_charset, DoctypeCharsetSnapshot, DOCTYPE_CHARSET_DOM_CAPTURE_JS,
+use crawler_detectors::render_blocking_resources::{
+    detect_render_blocking_resources, RenderBlockingSnapshot, RENDER_BLOCKING_DOM_CAPTURE_JS,
 };
-use crawler_detectors::multiple_ways::{
-    detect_multiple_ways, MultipleWaysSnapshot, MULTIPLE_WAYS_DOM_CAPTURE_JS,
-};
-use crawler_detectors::form_error_id_and_suggest::{
-    detect_form_errors, FormErrorSnapshot, FORM_ERROR_DOM_CAPTURE_JS,
+use crawler_detectors::reporting_endpoints::{
+    build_reporting_endpoints_snapshot, detect_reporting_endpoints_issues,
 };
 use crawler_detectors::resize_text_200pct::{
     detect_resize_text_200pct, ResizeText200pctSnapshot, RESIZE_TEXT_200PCT_DOM_CAPTURE_JS,
 };
 use crawler_detectors::robots_txt::{
     detect_robots_txt, RobotsTxtSnapshot, ROBOTS_TXT_DOM_CAPTURE_JS,
-};
-use crawler_detectors::modern_image_formats::{
-    detect_modern_image_formats, ModernImageFormatsSnapshot, MODERN_IMAGE_FORMATS_DOM_CAPTURE_JS,
-};
-use crawler_detectors::render_blocking_resources::{
-    detect_render_blocking_resources, RenderBlockingSnapshot, RENDER_BLOCKING_DOM_CAPTURE_JS,
-};
-use crawler_detectors::status_messages::{
-    detect_status_messages, StatusMessagesSnapshot, STATUS_MESSAGES_DOM_CAPTURE_JS,
-};
-use crawler_detectors::text_wrap_collapse::{
-    detect_text_wrap_collapse, TextWrapCollapseSnapshot, TEXT_WRAP_COLLAPSE_DOM_CAPTURE_JS,
-};
-use crawler_detectors::referrer_policy::{
-    build_referrer_policy_snapshot, detect_referrer_policy_issues,
-};
-use crawler_detectors::reporting_endpoints::{
-    build_reporting_endpoints_snapshot, detect_reporting_endpoints_issues,
 };
 use crawler_detectors::runtime_contrast::{
     detect_runtime_contrast_issues, RuntimeContrastSnapshot, RUNTIME_CONTRAST_JS,
@@ -169,8 +163,14 @@ use crawler_detectors::speculation_rules::{
     detect_speculation_rules_issues, SpeculationRulesSnapshot, SPECULATION_RULES_DOM_CAPTURE_JS,
 };
 use crawler_detectors::sri::{detect_sri_issues, SriSnapshot, SRI_DOM_CAPTURE_JS};
+use crawler_detectors::status_messages::{
+    detect_status_messages, StatusMessagesSnapshot, STATUS_MESSAGES_DOM_CAPTURE_JS,
+};
 use crawler_detectors::tap_targets::{
     detect_tap_target_issues, TapTargetsSnapshot, TAP_TARGETS_JS,
+};
+use crawler_detectors::text_wrap_collapse::{
+    detect_text_wrap_collapse, TextWrapCollapseSnapshot, TEXT_WRAP_COLLAPSE_DOM_CAPTURE_JS,
 };
 use crawler_detectors::trusted_types_runtime::{detect_trusted_types_issues, TrustedTypesSnapshot};
 use crawler_detectors::ui_overflow::{
@@ -2680,9 +2680,7 @@ fn iso_ts() -> String {
     // well_known::Rfc3339` would emit fractional seconds; we use the
     // explicit macro to lock to the 20-char shape every report
     // consumer + downstream regex relies on.
-    let fmt = time::macros::format_description!(
-        "[year]-[month]-[day]T[hour]:[minute]:[second]Z"
-    );
+    let fmt = time::macros::format_description!("[year]-[month]-[day]T[hour]:[minute]:[second]Z");
     now.format(&fmt).unwrap_or_else(|_| {
         // Fallback path: if formatting somehow fails (cannot in
         // practice for a valid OffsetDateTime), emit a known-good
@@ -2713,7 +2711,10 @@ mod tests {
         // shipped hyphens (regression caught by this assertion).
         // Total colons in `YYYY-MM-DDTHH:MM:SSZ` = 2.
         let colon_count = s.matches(':').count();
-        assert_eq!(colon_count, 2, "expected 2 colons (HH:MM:SS) in RFC 3339: {s}");
+        assert_eq!(
+            colon_count, 2,
+            "expected 2 colons (HH:MM:SS) in RFC 3339: {s}"
+        );
         // Position-specific: chars 4 and 7 are hyphens (date),
         // chars 13 and 16 are colons (time).
         let bytes = s.as_bytes();
@@ -2732,7 +2733,10 @@ mod tests {
         let s = iso_ts();
         let year_str = &s[..4];
         let year: u32 = year_str.parse().expect("year parses");
-        assert!(year >= 2026, "year should be at least 2026: got {year} from {s}");
+        assert!(
+            year >= 2026,
+            "year should be at least 2026: got {year} from {s}"
+        );
     }
 
     #[test]

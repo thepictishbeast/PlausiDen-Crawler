@@ -174,9 +174,7 @@ pub const CROSS_ORIGIN_FORM_POST_JS: &str = r##"(() => {
 
 /// Pure detector: snapshot → findings.
 #[must_use]
-pub fn detect_cross_origin_form_post(
-    snap: &CrossOriginFormSnapshot,
-) -> Vec<AxisFinding> {
+pub fn detect_cross_origin_form_post(snap: &CrossOriginFormSnapshot) -> Vec<AxisFinding> {
     let mut findings = Vec::new();
     for entry in &snap.entries {
         if entry.uses_unsafe_scheme {
@@ -336,13 +334,7 @@ mod tests {
     fn javascript_action_is_warn_unsafe_scheme() {
         let findings = detect_cross_origin_form_post(&snap(
             "https://example.com",
-            vec![entry(
-                "form",
-                "javascript:doSubmit()",
-                false,
-                None,
-                true,
-            )],
+            vec![entry("form", "javascript:doSubmit()", false, None, true)],
         ));
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].kind, "cross-origin-form.unsafe-scheme");
@@ -366,13 +358,7 @@ mod tests {
         let findings = detect_cross_origin_form_post(&snap(
             "https://example.com",
             vec![
-                entry(
-                    "form",
-                    "/safe",
-                    false,
-                    Some("https://example.com"),
-                    false,
-                ),
+                entry("form", "/safe", false, Some("https://example.com"), false),
                 entry(
                     "form",
                     "https://attacker.com/a",
@@ -387,13 +373,7 @@ mod tests {
                     Some("https://attacker.com"),
                     false,
                 ),
-                entry(
-                    "form",
-                    "mailto:x@y.com",
-                    false,
-                    None,
-                    true,
-                ),
+                entry("form", "mailto:x@y.com", false, None, true),
             ],
         ));
         // Strict for the 2 cross-origin + warn for the mailto = 3 total
@@ -447,10 +427,8 @@ mod tests {
     #[test]
     fn js_eval_const_walks_forms_and_submitters() {
         assert!(CROSS_ORIGIN_FORM_POST_JS.contains("querySelectorAll('form[action]')"));
-        assert!(
-            CROSS_ORIGIN_FORM_POST_JS
-                .contains("querySelectorAll('button[formaction], input[formaction]')")
-        );
+        assert!(CROSS_ORIGIN_FORM_POST_JS
+            .contains("querySelectorAll('button[formaction], input[formaction]')"));
         assert!(CROSS_ORIGIN_FORM_POST_JS.contains("location.origin"));
         assert!(CROSS_ORIGIN_FORM_POST_JS.contains("UNSAFE_SCHEMES"));
         // The unsafe schemes list

@@ -275,9 +275,9 @@ mod tests {
 
     #[test]
     fn is_rtl_codepoint_recognises_hebrew_arabic() {
-        assert!(is_rtl_codepoint('א'));   // Hebrew aleph
-        assert!(is_rtl_codepoint('ا'));   // Arabic alef
-        assert!(is_rtl_codepoint('ܐ'));   // Syriac alaph (U+0710)
+        assert!(is_rtl_codepoint('א')); // Hebrew aleph
+        assert!(is_rtl_codepoint('ا')); // Arabic alef
+        assert!(is_rtl_codepoint('ܐ')); // Syriac alaph (U+0710)
         assert!(!is_rtl_codepoint('A'));
         assert!(!is_rtl_codepoint('a'));
         assert!(!is_rtl_codepoint(' '));

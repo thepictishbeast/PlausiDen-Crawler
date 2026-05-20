@@ -184,11 +184,7 @@ pub fn detect_webfont_preload(snap: &WebfontPreloadSnapshot) -> Vec<AxisFinding>
 mod tests {
     use super::*;
 
-    fn entry(
-        href: &str,
-        has_crossorigin: bool,
-        type_attr: Option<&str>,
-    ) -> WebfontPreloadEntry {
+    fn entry(href: &str, has_crossorigin: bool, type_attr: Option<&str>) -> WebfontPreloadEntry {
         WebfontPreloadEntry {
             selector: format!("head > link[href=\"{href}\"]"),
             href: href.to_owned(),
@@ -234,11 +230,8 @@ mod tests {
 
     #[test]
     fn missing_type_is_warn() {
-        let findings = detect_webfont_preload(&snap(vec![entry(
-            "/fonts/inter-var.woff2",
-            true,
-            None,
-        )]));
+        let findings =
+            detect_webfont_preload(&snap(vec![entry("/fonts/inter-var.woff2", true, None)]));
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].severity, AxisSeverity::Warn);
         assert_eq!(findings[0].kind, "webfont-preload.missing-type");
@@ -262,21 +255,16 @@ mod tests {
         // Empty href — element has no actual URL; phase shouldn't
         // false-fire suspicious-extension. Other checks may fire.
         let findings = detect_webfont_preload(&snap(vec![entry("", true, Some("font/woff2"))]));
-        assert!(
-            !findings
-                .iter()
-                .any(|f| f.kind == "webfont-preload.suspicious-extension")
-        );
+        assert!(!findings
+            .iter()
+            .any(|f| f.kind == "webfont-preload.suspicious-extension"));
     }
 
     #[test]
     fn multiple_issues_per_entry_emit_multiple_findings() {
         // Missing crossorigin AND missing type AND suspicious extension.
-        let findings = detect_webfont_preload(&snap(vec![entry(
-            "/fonts/font-bundle",
-            false,
-            None,
-        )]));
+        let findings =
+            detect_webfont_preload(&snap(vec![entry("/fonts/font-bundle", false, None)]));
         assert_eq!(findings.len(), 3);
         let kinds: Vec<&str> = findings.iter().map(|f| f.kind.as_str()).collect();
         assert!(kinds.contains(&"webfont-preload.missing-crossorigin"));
@@ -300,11 +288,8 @@ mod tests {
     fn known_extensions_are_recognized() {
         for ext in [".woff2", ".woff", ".ttf", ".otf"] {
             let href = format!("/fonts/font{ext}");
-            let findings = detect_webfont_preload(&snap(vec![entry(
-                &href,
-                true,
-                Some("font/woff2"),
-            )]));
+            let findings =
+                detect_webfont_preload(&snap(vec![entry(&href, true, Some("font/woff2"))]));
             assert!(
                 !findings
                     .iter()

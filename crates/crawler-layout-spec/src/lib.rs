@@ -629,7 +629,10 @@ fn check_inside(
 fn check_horizontal_gap(left: &BoundingBox, right: &BoundingBox, gap: PxRange) -> (bool, String) {
     let g = (right.x - left.right()).round() as i64;
     if g < gap.min as i64 || g > gap.max as i64 {
-        (false, format!("gap={g}px outside [{},{}]", gap.min, gap.max))
+        (
+            false,
+            format!("gap={g}px outside [{},{}]", gap.min, gap.max),
+        )
     } else {
         (true, format!("gap={g}px in [{},{}]", gap.min, gap.max))
     }
@@ -638,7 +641,10 @@ fn check_horizontal_gap(left: &BoundingBox, right: &BoundingBox, gap: PxRange) -
 fn check_vertical_gap(top: &BoundingBox, bottom: &BoundingBox, gap: PxRange) -> (bool, String) {
     let g = (bottom.y - top.bottom()).round() as i64;
     if g < gap.min as i64 || g > gap.max as i64 {
-        (false, format!("gap={g}px outside [{},{}]", gap.min, gap.max))
+        (
+            false,
+            format!("gap={g}px outside [{},{}]", gap.min, gap.max),
+        )
     } else {
         (true, format!("gap={g}px in [{},{}]", gap.min, gap.max))
     }
@@ -761,7 +767,10 @@ mod tests {
     fn empty_name_fails_validation() {
         let mut s = header_spec();
         s.name = String::new();
-        assert!(s.validate().iter().any(|e| matches!(e, LayoutSpecError::EmptyName)));
+        assert!(s
+            .validate()
+            .iter()
+            .any(|e| matches!(e, LayoutSpecError::EmptyName)));
     }
 
     #[test]
@@ -852,12 +861,8 @@ mod tests {
                 axis: AlignAxis::Left,
                 tolerance: 2,
             },
-            LayoutAssertion::Visible {
-                object: "a".into(),
-            },
-            LayoutAssertion::InViewport {
-                object: "a".into(),
-            },
+            LayoutAssertion::Visible { object: "a".into() },
+            LayoutAssertion::InViewport { object: "a".into() },
         ];
         for k in kinds {
             let j = serde_json::to_string(&k).expect("serializes");
@@ -1039,12 +1044,8 @@ mod tests {
                 selector: "#x".into(),
             }],
             assertions: vec![
-                LayoutAssertion::Visible {
-                    object: "x".into(),
-                },
-                LayoutAssertion::InViewport {
-                    object: "x".into(),
-                },
+                LayoutAssertion::Visible { object: "x".into() },
+                LayoutAssertion::InViewport { object: "x".into() },
             ],
         };
         let mut snap = BoundsSnapshot::new();

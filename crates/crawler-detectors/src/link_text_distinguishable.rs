@@ -170,10 +170,7 @@ pub fn detect_link_text_distinguishable(
         if accessible_text.is_empty() {
             continue;
         }
-        groups
-            .entry(accessible_text)
-            .or_default()
-            .push(entry);
+        groups.entry(accessible_text).or_default().push(entry);
     }
     for (text, members) in &groups {
         if members.len() < 2 {
@@ -196,8 +193,7 @@ pub fn detect_link_text_distinguishable(
             continue;
         }
         // CASE B: hrefs split (different targets) — strict.
-        let mut hrefs: std::collections::BTreeSet<&str> =
-            std::collections::BTreeSet::new();
+        let mut hrefs: std::collections::BTreeSet<&str> = std::collections::BTreeSet::new();
         for m in members {
             hrefs.insert(m.href.as_str());
         }
@@ -268,10 +264,10 @@ mod tests {
 
     #[test]
     fn single_link_no_findings() {
-        assert!(detect_link_text_distinguishable(&snap(vec![link(
-            "Read more", "/a", None, None
-        )]))
-        .is_empty());
+        assert!(
+            detect_link_text_distinguishable(&snap(vec![link("Read more", "/a", None, None)]))
+                .is_empty()
+        );
     }
 
     #[test]
@@ -387,8 +383,7 @@ mod tests {
         assert!(j.contains("\"pageUrl\""));
         assert!(j.contains("\"ariaLabel\""));
         assert!(j.contains("\"ariaDescribedby\""));
-        let back: LinkTextDistinguishableSnapshot =
-            serde_json::from_str(&j).unwrap();
+        let back: LinkTextDistinguishableSnapshot = serde_json::from_str(&j).unwrap();
         assert_eq!(back.entries.len(), 1);
     }
 

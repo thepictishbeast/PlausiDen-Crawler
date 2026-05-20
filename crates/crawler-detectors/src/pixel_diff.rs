@@ -110,10 +110,7 @@ pub struct PixelDiffSnapshot {
 
 /// Pure detector: snapshot → findings.
 #[must_use]
-pub fn detect_pixel_diff(
-    snap: &PixelDiffSnapshot,
-    cfg: &PixelDiffConfig,
-) -> Vec<AxisFinding> {
+pub fn detect_pixel_diff(snap: &PixelDiffSnapshot, cfg: &PixelDiffConfig) -> Vec<AxisFinding> {
     if !snap.dimensions_match {
         return vec![AxisFinding {
             severity: AxisSeverity::Strict,
@@ -167,18 +164,12 @@ pub fn compute_metrics(
     current_png: &[u8],
     cfg: &PixelDiffConfig,
 ) -> Option<PixelDiffMetrics> {
-    let baseline = image::load_from_memory_with_format(
-        baseline_png,
-        image::ImageFormat::Png,
-    )
-    .ok()?
-    .to_rgba8();
-    let current = image::load_from_memory_with_format(
-        current_png,
-        image::ImageFormat::Png,
-    )
-    .ok()?
-    .to_rgba8();
+    let baseline = image::load_from_memory_with_format(baseline_png, image::ImageFormat::Png)
+        .ok()?
+        .to_rgba8();
+    let current = image::load_from_memory_with_format(current_png, image::ImageFormat::Png)
+        .ok()?
+        .to_rgba8();
     if baseline.dimensions() != current.dimensions() {
         return None;
     }

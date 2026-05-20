@@ -238,8 +238,13 @@ mod tests {
     #[test]
     fn js_returns_required_keys() {
         for k in [
-            "scanned", "offenderCount", "offenders",
-            "selector", "type", "inForm", "hasOnlyEmptyAttrs",
+            "scanned",
+            "offenderCount",
+            "offenders",
+            "selector",
+            "type",
+            "inForm",
+            "hasOnlyEmptyAttrs",
         ] {
             assert!(EMPTY_BUTTON_JS.contains(k), "missing key: {k}");
         }

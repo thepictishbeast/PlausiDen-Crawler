@@ -106,7 +106,13 @@ pub fn detect_text_wrap_collapse(snap: &TextWrapCollapseSnapshot) -> Vec<AxisFin
         .map(|h| {
             format!(
                 "{} (\"{}\", {}c × {}L = {:.1}c/L, {}×{}px) ",
-                h.selector, h.text, h.char_count, h.approx_lines, h.chars_per_line, h.rect_width, h.rect_height
+                h.selector,
+                h.text,
+                h.char_count,
+                h.approx_lines,
+                h.chars_per_line,
+                h.rect_width,
+                h.rect_height
             )
         })
         .collect();

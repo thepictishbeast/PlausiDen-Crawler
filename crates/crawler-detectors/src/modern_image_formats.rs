@@ -240,7 +240,8 @@ mod tests {
         let s = snap(vec![hit("/x.png", "png", 600, true)]);
         let f = detect_modern_image_formats(&s);
         assert!(
-            f[0].detail.contains("inside <picture> but no avif/webp source"),
+            f[0].detail
+                .contains("inside <picture> but no avif/webp source"),
             "expected picture-wrapper note: {}",
             f[0].detail
         );

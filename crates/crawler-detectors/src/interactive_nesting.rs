@@ -192,9 +192,14 @@ mod tests {
     #[test]
     fn js_returns_required_keys() {
         for k in [
-            "scanned", "offenderCount", "offenders",
-            "innerSelector", "innerTag", "innerText",
-            "outerSelector", "outerTag",
+            "scanned",
+            "offenderCount",
+            "offenders",
+            "innerSelector",
+            "innerTag",
+            "innerText",
+            "outerSelector",
+            "outerTag",
         ] {
             assert!(INTERACTIVE_NESTING_JS.contains(k), "missing key: {k}");
         }
@@ -204,9 +209,10 @@ mod tests {
     fn js_recognizes_interactive_tag_set() {
         // All HTML-spec interactive elements appear in either the
         // querySelectorAll or the isInteractive dispatch.
-        for tag in ["a[href]", "button", "input", "select", "textarea", "label",
-                    "details", "summary", "audio", "video", "iframe", "embed",
-                    "object", "img"] {
+        for tag in [
+            "a[href]", "button", "input", "select", "textarea", "label", "details", "summary",
+            "audio", "video", "iframe", "embed", "object", "img",
+        ] {
             assert!(
                 INTERACTIVE_NESTING_JS.contains(tag),
                 "missing interactive tag in querySelectorAll: {tag}"
@@ -273,7 +279,7 @@ mod tests {
             }],
         };
         let findings = detect_interactive_nesting_issues(&snap);
-        assert!(findings[0].detail.contains("<a>") );
+        assert!(findings[0].detail.contains("<a>"));
     }
 
     #[test]

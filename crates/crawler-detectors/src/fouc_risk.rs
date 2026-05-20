@@ -179,11 +179,7 @@ pub const FOUC_RISK_DOM_CAPTURE_JS: &str = r#"
 mod tests {
     use super::*;
 
-    fn snap(
-        hits: Vec<FoucRiskHit>,
-        has_inline: bool,
-        has_ext: bool,
-    ) -> FoucRiskSnapshot {
+    fn snap(hits: Vec<FoucRiskHit>, has_inline: bool, has_ext: bool) -> FoucRiskSnapshot {
         FoucRiskSnapshot {
             page_url: "https://x".into(),
             hits,

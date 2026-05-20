@@ -253,7 +253,11 @@ mod tests {
             selector: format!("body > form > input[name={field}]"),
             field: field.to_owned(),
             has_described_message: has_msg,
-            message_text: if has_msg { "Bad value".to_owned() } else { String::new() },
+            message_text: if has_msg {
+                "Bad value".to_owned()
+            } else {
+                String::new()
+            },
             message_suggests_fix: suggests,
             no_suggest_exempt: exempt,
         }

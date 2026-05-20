@@ -79,7 +79,12 @@ pub fn detect_render_blocking_resources(snap: &RenderBlockingSnapshot) -> Vec<Ax
         .blockers
         .iter()
         .take(5)
-        .map(|b| format!("{} {} → {} ({})", b.selector, b.element_kind, b.url, b.reason))
+        .map(|b| {
+            format!(
+                "{} {} → {} ({})",
+                b.selector, b.element_kind, b.url, b.reason
+            )
+        })
         .collect();
     vec![AxisFinding {
         severity,
@@ -200,10 +205,7 @@ mod tests {
 
     #[test]
     fn multiple_blockers_strict() {
-        let s = snap(vec![
-            blocker("link", "/a.css"),
-            blocker("script", "/x.js"),
-        ]);
+        let s = snap(vec![blocker("link", "/a.css"), blocker("script", "/x.js")]);
         let f = detect_render_blocking_resources(&s);
         assert_eq!(f.len(), 1);
         assert_eq!(f[0].severity, AxisSeverity::Strict);

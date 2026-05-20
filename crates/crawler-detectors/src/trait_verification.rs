@@ -121,17 +121,32 @@ impl TraitPredicateRegistry {
     pub fn ecosystem_default() -> Self {
         let mut m = BTreeMap::new();
         // Runtime-verifiable.
-        m.insert("screen-reader-accessible".to_owned(), TraitPredicate::ScreenReaderAccessible);
-        m.insert("keyboard-operable".to_owned(), TraitPredicate::KeyboardOperable);
+        m.insert(
+            "screen-reader-accessible".to_owned(),
+            TraitPredicate::ScreenReaderAccessible,
+        );
+        m.insert(
+            "keyboard-operable".to_owned(),
+            TraitPredicate::KeyboardOperable,
+        );
         m.insert("focusable".to_owned(), TraitPredicate::Focusable);
         m.insert("rtl-aware".to_owned(), TraitPredicate::RtlAware);
         m.insert("lang-aware".to_owned(), TraitPredicate::LangAware);
         m.insert("theme-aware".to_owned(), TraitPredicate::ThemeAware);
         m.insert("mobile-friendly".to_owned(), TraitPredicate::MobileFriendly);
         m.insert("lazy-loadable".to_owned(), TraitPredicate::LazyLoadable);
-        m.insert("reduced-motion-aware".to_owned(), TraitPredicate::ReducedMotionAware);
-        m.insert("touch-target-sized".to_owned(), TraitPredicate::TouchTargetSized);
-        m.insert("has-accessible-name".to_owned(), TraitPredicate::HasAccessibleName);
+        m.insert(
+            "reduced-motion-aware".to_owned(),
+            TraitPredicate::ReducedMotionAware,
+        );
+        m.insert(
+            "touch-target-sized".to_owned(),
+            TraitPredicate::TouchTargetSized,
+        );
+        m.insert(
+            "has-accessible-name".to_owned(),
+            TraitPredicate::HasAccessibleName,
+        );
         // Source-level (not runtime-verifiable).
         for src in [
             "manifested",
@@ -517,7 +532,9 @@ pub fn probes_to_eval_arg(probes: &[TraitProbeInput]) -> serde_json::Result<serd
 /// # Errors
 /// Returns `serde_json::Error` if the registry contains data that fails
 /// to encode (in practice: only OOM or bug).
-pub fn registry_to_eval_arg(registry: &TraitPredicateRegistry) -> serde_json::Result<serde_json::Value> {
+pub fn registry_to_eval_arg(
+    registry: &TraitPredicateRegistry,
+) -> serde_json::Result<serde_json::Value> {
     let mut out = serde_json::Map::new();
     for (k, v) in &registry.by_trait {
         let pred = serde_json::to_value(v)?;
@@ -546,9 +563,20 @@ mod tests {
     #[test]
     fn js_returns_required_keys() {
         for k in [
-            "vpW", "vpH", "dir", "prefersReducedMotion", "probes",
-            "entityId", "selector", "matchedCount", "verdicts",
-            "traitId", "predicate", "instanceSelector", "holds", "reason",
+            "vpW",
+            "vpH",
+            "dir",
+            "prefersReducedMotion",
+            "probes",
+            "entityId",
+            "selector",
+            "matchedCount",
+            "verdicts",
+            "traitId",
+            "predicate",
+            "instanceSelector",
+            "holds",
+            "reason",
         ] {
             assert!(TRAIT_VERIFICATION_JS.contains(k), "missing key in JS: {k}");
         }
@@ -580,12 +608,21 @@ mod tests {
     #[test]
     fn registry_default_covers_ecosystem_runtime_traits() {
         let r = TraitPredicateRegistry::ecosystem_default();
-        assert_eq!(r.get("screen-reader-accessible"), Some(TraitPredicate::ScreenReaderAccessible));
-        assert_eq!(r.get("mobile-friendly"), Some(TraitPredicate::MobileFriendly));
+        assert_eq!(
+            r.get("screen-reader-accessible"),
+            Some(TraitPredicate::ScreenReaderAccessible)
+        );
+        assert_eq!(
+            r.get("mobile-friendly"),
+            Some(TraitPredicate::MobileFriendly)
+        );
         assert_eq!(r.get("rtl-aware"), Some(TraitPredicate::RtlAware));
         assert_eq!(r.get("theme-aware"), Some(TraitPredicate::ThemeAware));
         assert_eq!(r.get("lazy-loadable"), Some(TraitPredicate::LazyLoadable));
-        assert_eq!(r.get("touch-target-sized"), Some(TraitPredicate::TouchTargetSized));
+        assert_eq!(
+            r.get("touch-target-sized"),
+            Some(TraitPredicate::TouchTargetSized)
+        );
     }
 
     #[test]
@@ -638,7 +675,9 @@ mod tests {
                         predicate: "mobile-friendly".to_owned(),
                         instance_selector: ".loom-heading[1]".to_owned(),
                         holds: Some(false),
-                        reason: "predicate mobile-friendly failed for declared trait mobile-friendly".to_owned(),
+                        reason:
+                            "predicate mobile-friendly failed for declared trait mobile-friendly"
+                                .to_owned(),
                     },
                 ],
             }],

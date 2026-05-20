@@ -196,11 +196,7 @@ mod tests {
         }
     }
 
-    fn entry(
-        content: Option<&str>,
-        timeout: Option<u32>,
-        url: Option<&str>,
-    ) -> MetaRefreshEntry {
+    fn entry(content: Option<&str>, timeout: Option<u32>, url: Option<&str>) -> MetaRefreshEntry {
         MetaRefreshEntry {
             selector: "meta[http-equiv=\"refresh\"]".to_owned(),
             content: content.map(str::to_owned),

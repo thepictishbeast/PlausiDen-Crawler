@@ -285,7 +285,11 @@ mod tests {
     fn examples_capped_at_5() {
         let mut hits = Vec::new();
         for i in 0..10 {
-            hits.push(hit(&format!("body > p > a:nth-of-type({})", i + 1), "L", 1.8));
+            hits.push(hit(
+                &format!("body > p > a:nth-of-type({})", i + 1),
+                "L",
+                1.8,
+            ));
         }
         let s = snap(hits);
         let f = detect_link_color_only(&s);

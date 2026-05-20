@@ -189,9 +189,7 @@ pub fn detect_unique_id_issues(snap: &UniqueIdSnapshot) -> Vec<crate::AxisFindin
         let first = &snap.empties[0];
         parts.push(format!(
             "{} element(s) with empty `id=\"\"` (invalid per HTML spec; first: <{}> @ {})",
-            snap.empty_count,
-            first.tag,
-            first.selector,
+            snap.empty_count, first.tag, first.selector,
         ));
     }
     let mut out = Vec::with_capacity(1);
@@ -234,10 +232,20 @@ mod tests {
     #[test]
     fn js_returns_required_keys() {
         for k in [
-            "totalIds", "uniqueIds", "duplicates", "duplicateCount",
-            "empties", "emptyCount",
-            "id", "count", "firstSelector", "firstTag", "secondSelector", "secondTag",
-            "selector", "tag",
+            "totalIds",
+            "uniqueIds",
+            "duplicates",
+            "duplicateCount",
+            "empties",
+            "emptyCount",
+            "id",
+            "count",
+            "firstSelector",
+            "firstTag",
+            "secondSelector",
+            "secondTag",
+            "selector",
+            "tag",
         ] {
             assert!(UNIQUE_ID_JS.contains(k), "missing key: {k}");
         }

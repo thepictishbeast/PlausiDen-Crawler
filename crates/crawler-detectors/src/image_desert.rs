@@ -86,10 +86,7 @@ pub fn detect_image_desert(snap: &ImageDesertSnapshot) -> Vec<AxisFinding> {
                 snap.content_section_count, snap.total_text_chars, carriers, ratio
             ),
         });
-    } else if snap.content_section_count >= 3
-        && ratio < 0.5
-        && snap.total_text_chars > 1000
-    {
+    } else if snap.content_section_count >= 3 && ratio < 0.5 && snap.total_text_chars > 1000 {
         out.push(AxisFinding {
             severity: AxisSeverity::Warn,
             kind: "image-desert.sparse".to_owned(),

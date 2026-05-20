@@ -132,9 +132,7 @@ pub struct TabindexPositiveSnapshot {
 /// allows it. The brittleness + maintenance cost is real but not a
 /// gate-blocking failure.
 #[must_use]
-pub fn detect_tabindex_positive_issues(
-    snap: &TabindexPositiveSnapshot,
-) -> Vec<crate::AxisFinding> {
+pub fn detect_tabindex_positive_issues(snap: &TabindexPositiveSnapshot) -> Vec<crate::AxisFinding> {
     if snap.offenders.is_empty() {
         return Vec::new();
     }
@@ -182,8 +180,15 @@ mod tests {
     #[test]
     fn js_returns_required_keys() {
         for k in [
-            "scanned", "offenderCount", "maxValue", "offenders",
-            "selector", "tag", "value", "rawValue", "text",
+            "scanned",
+            "offenderCount",
+            "maxValue",
+            "offenders",
+            "selector",
+            "tag",
+            "value",
+            "rawValue",
+            "text",
         ] {
             assert!(TABINDEX_POSITIVE_JS.contains(k), "missing key: {k}");
         }

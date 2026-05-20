@@ -346,11 +346,20 @@ mod tests {
     fn js_returns_required_keys() {
         for k in [
             "scanned",
-            "empty", "emptyCount",
-            "missing", "missingCount",
-            "ambiguous", "ambiguousCount",
-            "wrongType", "wrongTypeCount",
-            "selector", "text", "forValue", "count", "targetTag", "targetRole",
+            "empty",
+            "emptyCount",
+            "missing",
+            "missingCount",
+            "ambiguous",
+            "ambiguousCount",
+            "wrongType",
+            "wrongTypeCount",
+            "selector",
+            "text",
+            "forValue",
+            "count",
+            "targetTag",
+            "targetRole",
         ] {
             assert!(LABEL_FOR_RESOLUTION_JS.contains(k), "missing key: {k}");
         }
@@ -358,7 +367,9 @@ mod tests {
 
     #[test]
     fn js_enumerates_labelable_tags() {
-        for tag in ["input", "select", "textarea", "button", "progress", "meter", "output"] {
+        for tag in [
+            "input", "select", "textarea", "button", "progress", "meter", "output",
+        ] {
             assert!(
                 LABEL_FOR_RESOLUTION_JS.contains(&format!("'{tag}'")),
                 "missing labelable tag: {tag}"
@@ -368,7 +379,17 @@ mod tests {
 
     #[test]
     fn js_enumerates_labelable_aria_roles() {
-        for role in ["textbox", "checkbox", "radio", "combobox", "listbox", "searchbox", "slider", "spinbutton", "switch"] {
+        for role in [
+            "textbox",
+            "checkbox",
+            "radio",
+            "combobox",
+            "listbox",
+            "searchbox",
+            "slider",
+            "spinbutton",
+            "switch",
+        ] {
             assert!(
                 LABEL_FOR_RESOLUTION_JS.contains(&format!("'{role}'")),
                 "missing labelable role: {role}"

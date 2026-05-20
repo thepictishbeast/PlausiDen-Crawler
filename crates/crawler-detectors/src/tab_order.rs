@@ -301,9 +301,22 @@ mod tests {
     #[test]
     fn js_returns_required_keys() {
         for k in [
-            "vpW", "vpH", "dir", "focusableCount", "jumps",
-            "fromSelector", "fromTag", "fromText", "fromCx", "fromCy",
-            "toSelector", "toTag", "toText", "toCx", "toCy", "sameRow",
+            "vpW",
+            "vpH",
+            "dir",
+            "focusableCount",
+            "jumps",
+            "fromSelector",
+            "fromTag",
+            "fromText",
+            "fromCx",
+            "fromCy",
+            "toSelector",
+            "toTag",
+            "toText",
+            "toCx",
+            "toCy",
+            "sameRow",
         ] {
             assert!(TAB_ORDER_JS.contains(k), "missing key in JS: {k}");
         }

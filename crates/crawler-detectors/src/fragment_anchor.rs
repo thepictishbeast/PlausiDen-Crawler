@@ -263,10 +263,17 @@ mod tests {
     fn js_returns_required_keys() {
         for k in [
             "scanned",
-            "missing", "missingCount",
-            "empty", "emptyCount",
-            "duplicate", "duplicateCount",
-            "selector", "text", "fragment", "href", "count",
+            "missing",
+            "missingCount",
+            "empty",
+            "emptyCount",
+            "duplicate",
+            "duplicateCount",
+            "selector",
+            "text",
+            "fragment",
+            "href",
+            "count",
         ] {
             assert!(FRAGMENT_ANCHOR_JS.contains(k), "missing key: {k}");
         }

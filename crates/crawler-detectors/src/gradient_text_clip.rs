@@ -249,7 +249,12 @@ pub const GRADIENT_TEXT_CLIP_DOM_CAPTURE_JS: &str = r#"
 mod tests {
     use super::*;
 
-    fn hit(selector: &str, char_count: u32, rect_width: u32, font_size: u32) -> GradientTextClipHit {
+    fn hit(
+        selector: &str,
+        char_count: u32,
+        rect_width: u32,
+        font_size: u32,
+    ) -> GradientTextClipHit {
         let expected = char_count as f32 * font_size as f32 * 0.55;
         GradientTextClipHit {
             selector: selector.into(),
