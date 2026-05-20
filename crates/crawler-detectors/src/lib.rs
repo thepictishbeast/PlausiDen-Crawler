@@ -90,6 +90,7 @@ pub mod label_for_resolution;
 pub mod layout_thrash;
 pub mod info_leak_headers;
 pub mod inline_script;
+pub mod interactive_nesting;
 pub mod link_color_only;
 pub mod link_target_blank_safety;
 pub mod link_text;
