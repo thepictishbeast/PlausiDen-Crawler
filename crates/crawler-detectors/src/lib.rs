@@ -106,6 +106,7 @@ pub mod permissions_policy;
 pub mod pixel_diff;
 pub mod placeholder_text;
 pub mod referrer_policy;
+pub mod reflow;
 pub mod render_blocking_resources;
 pub mod reporting_endpoints;
 pub mod resize_text_200pct;
