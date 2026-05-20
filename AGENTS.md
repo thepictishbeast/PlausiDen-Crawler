@@ -84,18 +84,19 @@ crawler --output <dir>                Override the runs/ output directory.
 
 ---
 
-## Known investigation: chromium-shell zombies (task #182)
+## Chromium lifecycle (formerly task #182)
 
-Per loop preamble: chromiumoxide can spawn defunct chromium child processes that survive past journey completion. Symptom: `crawler --headless` hangs after a successful journey because the parent is waiting on a zombie child.
+`crawler --journey ... --headless` used to leave defunct `chromium-shell` entries in `/proc` after journey completion. Root cause: the runner's `let _ = browser.close().await;` shutdown step did not actively wait on the OS process, leaving chromiumoxide's tokio `kill_on_drop` to reap in the background with no timing guarantee.
 
-Workaround: manually `kill -9` the chromium zombies via `pkill chromium-shell`.
+Fixed in `crates/crawler-runner/src/chromium_lifecycle.rs`:
+1. CDP `Browser.close` with a 3s timeout.
+2. Up to 10 × 50ms `try_wait` polls.
+3. `Browser::kill` (SIGKILL + wait) as fallback.
+4. Optional `chrome_crashpad_handler` sweep gated on `CRAWLER_REAP_CRASHPAD=1` for single-user hosts.
 
-Permanent fix is filed as task #182. Suspected root cause: the chromiumoxide handle's Drop impl doesn't always SIGTERM the browser process. Investigation paths:
-- Pin chromiumoxide to a known-good version.
-- Wrap the browser-handle Drop with explicit kill via process group.
-- Or switch to playwright-rust if chromiumoxide can't be made reliable.
+Full root cause + design notes: see `CRAWLER_ZOMBIE_AUDIT.md`.
 
-Until #182 closes, expect occasional manual intervention on CI runners (the GitHub Actions runner cleans up between jobs, so this is primarily a local-dev concern).
+`make kill-chromium-zombies` is preserved as a disaster-recovery escape hatch for the rare case where the runner SIGSEGVs before reaching shutdown (so the lifecycle module never runs).
 
 ---
 

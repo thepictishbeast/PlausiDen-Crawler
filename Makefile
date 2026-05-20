@@ -77,10 +77,19 @@ docs: ## Generate workspace rustdoc.
 ci: fmt-check clippy test ## CI gate set locally.
 
 # ----------------------------------------------------------------
-# Zombie cleanup (task #182)
+# Zombie cleanup (task #182 — disaster recovery only)
 # ----------------------------------------------------------------
+# As of the lifecycle-fix commit, the runner reaps its own chromium
+# children via crawler-runner::chromium_lifecycle on the normal exit
+# path. This target remains for the rare case where the runner
+# SIGSEGVs before reaching shutdown (so the signal handler never
+# runs). See CRAWLER_ZOMBIE_AUDIT.md.
+#
+# For unconditional crashpad reaping on a single-user host, prefer:
+#   export CRAWLER_REAP_CRASHPAD=1
+# which makes the runner clean up crashpad handlers itself.
 
 .PHONY: kill-chromium-zombies
-kill-chromium-zombies: ## Workaround for #182: kill stuck chromium-shell processes.
+kill-chromium-zombies: ## Disaster-recovery: kill orphaned chromium-shell processes.
 	pkill -9 chromium-shell || true
 	pkill -9 chrome_crashpad_handler || true

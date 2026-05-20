@@ -32,6 +32,7 @@
 #![forbid(unsafe_code)]
 
 mod cdp_raw;
+mod chromium_lifecycle;
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -822,9 +823,19 @@ async fn run() -> Result<ExitCode> {
         report.counts.failed_requests,
     );
 
-    // Shutdown.
+    // Shutdown. See `chromium_lifecycle::shutdown_browser` +
+    // CRAWLER_ZOMBIE_AUDIT.md (#182) for the reap sequence.
     raw_capture.abort();
-    let _ = browser.close().await;
+    let shutdown_outcome = chromium_lifecycle::shutdown_browser(&mut browser).await;
+    info!("{}", shutdown_outcome.log_line());
+    if !shutdown_outcome.process_reaped() {
+        tracing::warn!(
+            "chromium child not definitively reaped (cdp_close_ok={} try_wait_err={:?} forced_kill_err={:?})",
+            shutdown_outcome.cdp_close_ok,
+            shutdown_outcome.try_wait_err,
+            shutdown_outcome.forced_kill_err
+        );
+    }
     let _ = browser_handle.await;
     let _ = started_epoch_ms;
 
