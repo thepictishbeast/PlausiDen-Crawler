@@ -73,6 +73,7 @@ pub mod favicon;
 pub mod font_loading;
 pub mod form_error_id_and_suggest;
 pub mod form_labels;
+pub mod fragment_anchor;
 pub mod fouc_risk;
 pub mod gradient_text_clip;
 pub mod heading_order;
