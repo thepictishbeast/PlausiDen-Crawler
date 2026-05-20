@@ -221,6 +221,11 @@ pub enum EventKind {
     /// to headingOrder (structural) — this one checks editorial
     /// substance.
     HeadingQuality,
+    /// eagerBelowFold detector — `<img>` elements below the
+    /// initial viewport without `loading="lazy"`. Inverse of
+    /// lazyAboveFold; flags bandwidth-waste rather than
+    /// LCP-blocking deferrals.
+    EagerBelowFold,
 }
 
 /// Severity of a finding-bucketed event (cssHealth / uiOverflow

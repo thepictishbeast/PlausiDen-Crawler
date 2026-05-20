@@ -72,6 +72,7 @@ pub mod doc_title;
 pub mod doctype_charset;
 pub mod document_policy;
 pub mod dom_size;
+pub mod eager_below_fold;
 pub mod empty_button;
 pub mod favicon;
 pub mod font_loading;

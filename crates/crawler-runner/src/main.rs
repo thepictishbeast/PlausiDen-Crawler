@@ -85,6 +85,9 @@ use crawler_detectors::doctype_charset::{
 use crawler_detectors::document_policy::{
     build_document_policy_snapshot, detect_document_policy_issues,
 };
+use crawler_detectors::eager_below_fold::{
+    detect_eager_below_fold, EagerBelowFoldSnapshot, EAGER_BELOW_FOLD_JS,
+};
 use crawler_detectors::favicon::{detect_favicon_issues, FaviconSnapshot, FAVICON_JS};
 use crawler_detectors::heading_quality::{
     detect_heading_quality_issues, HeadingQualitySnapshot, HEADING_QUALITY_JS,
@@ -686,6 +689,9 @@ async fn run() -> Result<ExitCode> {
             }
             if let Err(e) = capture_heading_quality(&page, &events, started_at).await {
                 tracing::debug!("heading_quality snapshot failed: {e}");
+            }
+            if let Err(e) = capture_eager_below_fold(&page, &events, started_at).await {
+                tracing::debug!("eager_below_fold snapshot failed: {e}");
             }
             // T75 response-header batch (2026-05-17): hsts is the
             // first detector wired through the new
@@ -1564,6 +1570,28 @@ async fn capture_heading_quality(
         events,
         findings,
         EventKind::HeadingQuality,
+        started_at.elapsed().as_millis() as u64,
+    )
+    .await;
+    Ok(())
+}
+
+/// Bandwidth-waste detector: flags below-fold <img> without
+/// `loading="lazy"`. Inverse of lazy_above_fold.
+async fn capture_eager_below_fold(
+    page: &chromiumoxide::Page,
+    events: &Arc<Mutex<Vec<CapturedEvent>>>,
+    started_at: Instant,
+) -> Result<()> {
+    let result = page.evaluate(EAGER_BELOW_FOLD_JS).await?;
+    let snap: EagerBelowFoldSnapshot = result
+        .into_value()
+        .context("deserialize eager_below_fold snapshot")?;
+    let findings = detect_eager_below_fold(&snap);
+    push_axis_findings(
+        events,
+        findings,
+        EventKind::EagerBelowFold,
         started_at.elapsed().as_millis() as u64,
     )
     .await;
