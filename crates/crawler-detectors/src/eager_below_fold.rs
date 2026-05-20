@@ -67,9 +67,7 @@ pub struct EagerBelowFoldSnapshot {
 
 /// Pure detector.
 #[must_use]
-pub fn detect_eager_below_fold(
-    snap: &EagerBelowFoldSnapshot,
-) -> Vec<crate::AxisFinding> {
+pub fn detect_eager_below_fold(snap: &EagerBelowFoldSnapshot) -> Vec<crate::AxisFinding> {
     let mut out = Vec::new();
     for img in &snap.images {
         // Below-fold: the image's top edge is strictly below the

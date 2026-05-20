@@ -160,10 +160,9 @@ mod tests {
         let f = detect_inline_theme_overrides(&snap(vec![hit("span", true, true)]));
         assert_eq!(f.len(), 2);
         assert!(f.iter().any(|x| x.kind == "inline_theme_override.color"));
-        assert!(
-            f.iter()
-                .any(|x| x.kind == "inline_theme_override.background")
-        );
+        assert!(f
+            .iter()
+            .any(|x| x.kind == "inline_theme_override.background"));
     }
 
     #[test]

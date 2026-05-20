@@ -122,9 +122,7 @@ const SAAS_CLICHES: &[&str] = &[
 
 /// Pure detector.
 #[must_use]
-pub fn detect_heading_quality_issues(
-    snap: &HeadingQualitySnapshot,
-) -> Vec<crate::AxisFinding> {
+pub fn detect_heading_quality_issues(snap: &HeadingQualitySnapshot) -> Vec<crate::AxisFinding> {
     let mut out = Vec::new();
     for h in &snap.headings {
         let normalized = h.text.split_whitespace().collect::<Vec<_>>().join(" ");
@@ -209,9 +207,10 @@ mod tests {
 
     #[test]
     fn editorial_sentence_does_not_flag() {
-        let f = detect_heading_quality_issues(&snap(&[
-            (2, "Why insurance is essential for financial well-being."),
-        ]));
+        let f = detect_heading_quality_issues(&snap(&[(
+            2,
+            "Why insurance is essential for financial well-being.",
+        )]));
         assert!(f.is_empty());
     }
 

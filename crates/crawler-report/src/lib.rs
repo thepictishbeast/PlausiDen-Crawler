@@ -35,9 +35,7 @@ use serde::{Deserialize, Serialize};
 /// BUG ASSUMPTION: `#[non_exhaustive]` so adding a future kind
 /// (e.g. a new detector axis) is non-breaking. Match arms in
 /// downstream code MUST include `_ =>` fallback.
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[non_exhaustive]
 #[serde(rename_all = "kebab-case")]
 pub enum EventKind {

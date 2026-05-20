@@ -89,15 +89,6 @@ use crawler_detectors::eager_below_fold::{
     detect_eager_below_fold, EagerBelowFoldSnapshot, EAGER_BELOW_FOLD_JS,
 };
 use crawler_detectors::favicon::{detect_favicon_issues, FaviconSnapshot, FAVICON_JS};
-use crawler_detectors::heading_quality::{
-    detect_heading_quality_issues, HeadingQualitySnapshot, HEADING_QUALITY_JS,
-};
-use crawler_detectors::inline_theme_override::{
-    detect_inline_theme_overrides, InlineThemeOverrideSnapshot, INLINE_THEME_OVERRIDE_JS,
-};
-use crawler_detectors::stale_preconnect::{
-    detect_stale_preconnects, StalePreconnectSnapshot, STALE_PRECONNECT_JS,
-};
 use crawler_detectors::font_loading::{detect_font_loading_issues, FontLoadingSnapshot};
 use crawler_detectors::form_error_id_and_suggest::{
     detect_form_errors, FormErrorSnapshot, FORM_ERROR_DOM_CAPTURE_JS,
@@ -108,9 +99,15 @@ use crawler_detectors::form_labels::{
 use crawler_detectors::heading_order::{
     detect_heading_order_issues, HeadingOrderSnapshot, HEADING_ORDER_JS,
 };
+use crawler_detectors::heading_quality::{
+    detect_heading_quality_issues, HeadingQualitySnapshot, HEADING_QUALITY_JS,
+};
 use crawler_detectors::hsts::{build_hsts_snapshot, detect_hsts_issues};
 use crawler_detectors::html_lang::{detect_html_lang_issues, HtmlLangSnapshot, HTML_LANG_JS};
 use crawler_detectors::info_leak_headers::{build_info_leak_snapshot, detect_info_leak_issues};
+use crawler_detectors::inline_theme_override::{
+    detect_inline_theme_overrides, InlineThemeOverrideSnapshot, INLINE_THEME_OVERRIDE_JS,
+};
 use crawler_detectors::link_color_only::{
     detect_link_color_only, LinkColorOnlySnapshot, LINK_COLOR_ONLY_DOM_CAPTURE_JS,
 };
@@ -175,6 +172,9 @@ use crawler_detectors::speculation_rules::{
     detect_speculation_rules_issues, SpeculationRulesSnapshot, SPECULATION_RULES_DOM_CAPTURE_JS,
 };
 use crawler_detectors::sri::{detect_sri_issues, SriSnapshot, SRI_DOM_CAPTURE_JS};
+use crawler_detectors::stale_preconnect::{
+    detect_stale_preconnects, StalePreconnectSnapshot, STALE_PRECONNECT_JS,
+};
 use crawler_detectors::status_messages::{
     detect_status_messages, StatusMessagesSnapshot, STATUS_MESSAGES_DOM_CAPTURE_JS,
 };
@@ -683,8 +683,7 @@ async fn run() -> Result<ExitCode> {
             if let Err(e) = capture_stale_preconnect(&page, &events, started_at).await {
                 tracing::debug!("stale_preconnect snapshot failed: {e}");
             }
-            if let Err(e) = capture_inline_theme_override(&page, &events, started_at).await
-            {
+            if let Err(e) = capture_inline_theme_override(&page, &events, started_at).await {
                 tracing::debug!("inline_theme_override snapshot failed: {e}");
             }
             if let Err(e) = capture_heading_quality(&page, &events, started_at).await {
@@ -2557,9 +2556,7 @@ async fn run_capture_reference(args: Args, url: String) -> Result<ExitCode> {
         );
         match tokio::time::timeout(Duration::from_secs(5), decode_promise).await {
             Ok(Ok(_)) => {}
-            Ok(Err(e)) => warn!(
-                "image-decode wait failed at {viewport_px}px: {e} — continuing"
-            ),
+            Ok(Err(e)) => warn!("image-decode wait failed at {viewport_px}px: {e} — continuing"),
             Err(_) => warn!(
                 "image-decode wait at {viewport_px}px exceeded 5s — continuing with partial paint"
             ),
