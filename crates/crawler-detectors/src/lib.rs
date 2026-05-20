@@ -98,6 +98,7 @@ pub mod modern_image_formats;
 pub mod multiple_ways;
 pub mod network_error_logging;
 pub mod noscript_fallback;
+pub mod offscreen_content;
 pub mod offscreen_focusable;
 pub mod origin_agent_cluster;
 pub mod outbound_links;
