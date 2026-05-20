@@ -131,6 +131,7 @@ pub mod runtime_landmarks;
 pub mod skip_link;
 pub mod speculation_rules;
 pub mod sri;
+pub mod stale_preconnect;
 pub mod status_messages;
 pub mod tab_order;
 pub mod tabindex_positive;
