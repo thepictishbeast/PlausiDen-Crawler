@@ -85,6 +85,7 @@ pub mod iframe_sandbox;
 pub mod iframe_title;
 pub mod image_desert;
 pub mod image_dimensions;
+pub mod label_for_resolution;
 pub mod layout_thrash;
 pub mod info_leak_headers;
 pub mod inline_script;
