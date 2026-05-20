@@ -55,6 +55,27 @@ pub struct HeadingQualitySnapshot {
     pub headings: Vec<Heading>,
 }
 
+/// Substring-match list. Anywhere these appear inside a
+/// heading text is a flag. Narrower than SAAS_CLICHES —
+/// these are unambiguous marketing words that can't appear
+/// in a legitimate editorial heading by accident.
+/// Kept in sync with forge-phases::slop_dictionary::SAAS_SUBSTRINGS.
+const SAAS_SUBSTRINGS: &[&str] = &[
+    "ai-native",
+    "out of the box",
+    "purpose-built",
+    "battle-tested",
+    "lightning-fast",
+    "blazing fast",
+    "world-class",
+    "best-in-class",
+    "industry-leading",
+    "next-generation",
+    "cutting-edge",
+    "state-of-the-art",
+    "your single source of truth",
+];
+
 /// SaaS-marketing cliche list. Matched case-insensitively as
 /// the WHOLE heading text (after trimming + collapsing
 /// whitespace). Picked deliberately conservative — these
@@ -133,6 +154,20 @@ pub fn detect_heading_quality_issues(
                     h.level, h.text
                 ),
             });
+        }
+        // Substring pass — narrower list, catches the cliche
+        // embedded in an otherwise-editorial heading.
+        for needle in SAAS_SUBSTRINGS {
+            if lower.contains(needle) {
+                out.push(crate::AxisFinding {
+                    severity: crate::AxisSeverity::Warn,
+                    kind: "heading_quality.marketing-substring".to_owned(),
+                    detail: format!(
+                        "<h{}> contains marketing phrase {:?} (within {:?}). Unambiguous SaaS-marketing slop; rewrite the heading to drop it.",
+                        h.level, needle, h.text
+                    ),
+                });
+            }
         }
     }
     out
