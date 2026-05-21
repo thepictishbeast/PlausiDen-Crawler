@@ -87,6 +87,7 @@ pub mod hidden_elements;
 pub mod hreflang;
 pub mod hsts;
 pub mod html_lang;
+pub mod iframe_allow_attribute;
 pub mod iframe_sandbox;
 pub mod iframe_title;
 pub mod image_desert;
