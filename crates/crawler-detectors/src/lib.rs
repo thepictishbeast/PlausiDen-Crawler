@@ -104,6 +104,7 @@ pub mod link_text;
 pub mod link_text_distinguishable;
 pub mod link_underline;
 pub mod local_storage_use;
+pub mod mailto_link_audit;
 pub mod long_tasks;
 pub mod meta_description;
 pub mod meta_refresh;
