@@ -323,6 +323,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "crawler-mcp"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "crawler-reference-capture"
 version = "0.1.0"
 dependencies = [
@@ -349,6 +359,7 @@ dependencies = [
  "clap",
  "crawler-detectors",
  "crawler-journey",
+ "crawler-reference-capture",
  "crawler-report",
  "futures",
  "serde",
