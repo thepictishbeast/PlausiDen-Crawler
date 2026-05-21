@@ -52,6 +52,7 @@
 
 use serde::{Deserialize, Serialize};
 
+pub mod aria_live_value;
 pub mod aria_required_attrs;
 pub mod autocomplete;
 pub mod autoplay_media;
