@@ -152,6 +152,7 @@ pub mod web_manifest;
 pub mod web_vitals;
 pub mod webfont_preload_audit;
 pub mod x_frame_options;
+pub mod zero_dimension_image;
 
 /// Severity bucket shared across every detector axis. Mirrors the
 /// TS string-literal `'strict' | 'warn'` exactly (lowercase wire
