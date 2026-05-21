@@ -40,6 +40,12 @@ members = [
     # chromiumoxide runner can emit the manifest forge-core
     # extractors consume. Contract only; runner does the IO.
     "crates/crawler-reference-capture",
+    # #326 (paul 2026-05-21): crawler-mcp — Model Context Protocol
+    # server exposing reference-capture / journey / detector runs
+    # as JSON-RPC tools. Survives `cargo clean`; standardises the
+    # screenshot+detect+diff loop across sessions. Mirrors the
+    # forge-mcp pattern (PlausiDen-Forge PR #26).
+    "crates/crawler-mcp",
 ]
 
 [workspace.package]
