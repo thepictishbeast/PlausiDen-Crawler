@@ -67,6 +67,7 @@ pub mod cross_origin_form_post;
 pub mod cross_page_meta_description;
 pub mod cross_page_title;
 pub mod css_health;
+pub mod deprecated_motion_element;
 pub mod dialog_label;
 pub mod doc_title;
 pub mod doctype_charset;
