@@ -68,6 +68,7 @@ pub mod cross_page_meta_description;
 pub mod cross_page_title;
 pub mod css_health;
 pub mod dialog_label;
+pub mod display_none_focusable;
 pub mod doc_title;
 pub mod doctype_charset;
 pub mod document_policy;
