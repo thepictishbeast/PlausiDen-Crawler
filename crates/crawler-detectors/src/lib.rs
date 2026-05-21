@@ -74,6 +74,7 @@ pub mod document_policy;
 pub mod dom_size;
 pub mod eager_below_fold;
 pub mod empty_button;
+pub mod empty_paragraph;
 pub mod favicon;
 pub mod font_loading;
 pub mod form_error_id_and_suggest;
