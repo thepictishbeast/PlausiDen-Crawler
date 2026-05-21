@@ -100,6 +100,7 @@ pub mod layout_thrash;
 pub mod lazy_above_fold;
 pub mod link_color_only;
 pub mod link_target_blank_safety;
+pub mod list_item_outside_list;
 pub mod link_text;
 pub mod link_text_distinguishable;
 pub mod link_underline;
