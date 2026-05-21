@@ -138,6 +138,7 @@ pub mod stale_preconnect;
 pub mod status_messages;
 pub mod tab_order;
 pub mod tabindex_positive;
+pub mod tap_target_collision;
 pub mod tap_targets;
 pub mod text_wrap_collapse;
 pub mod time_datetime;
