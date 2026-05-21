@@ -139,6 +139,7 @@ pub mod status_messages;
 pub mod tab_order;
 pub mod tabindex_positive;
 pub mod tap_targets;
+pub mod text_line_height;
 pub mod text_wrap_collapse;
 pub mod time_datetime;
 pub mod trait_verification;
