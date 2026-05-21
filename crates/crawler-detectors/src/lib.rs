@@ -77,6 +77,7 @@ pub mod empty_button;
 pub mod favicon;
 pub mod font_loading;
 pub mod form_error_id_and_suggest;
+pub mod form_field_outside_form;
 pub mod form_labels;
 pub mod fouc_risk;
 pub mod fragment_anchor;
