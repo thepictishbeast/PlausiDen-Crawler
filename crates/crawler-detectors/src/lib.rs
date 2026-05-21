@@ -52,6 +52,7 @@
 
 use serde::{Deserialize, Serialize};
 
+pub mod aria_controls_resolution;
 pub mod aria_required_attrs;
 pub mod autocomplete;
 pub mod autoplay_media;
