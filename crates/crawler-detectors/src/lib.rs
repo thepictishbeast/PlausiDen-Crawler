@@ -105,6 +105,7 @@ pub mod link_text_distinguishable;
 pub mod link_underline;
 pub mod local_storage_use;
 pub mod long_tasks;
+pub mod meta_color_scheme;
 pub mod meta_description;
 pub mod meta_refresh;
 pub mod mixed_content;
