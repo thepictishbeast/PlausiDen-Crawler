@@ -99,6 +99,7 @@ pub mod label_for_resolution;
 pub mod layout_thrash;
 pub mod lazy_above_fold;
 pub mod link_color_only;
+pub mod link_rel_attribute;
 pub mod link_target_blank_safety;
 pub mod link_text;
 pub mod link_text_distinguishable;
