@@ -120,6 +120,7 @@ pub mod permissions_policy;
 pub mod pixel_diff;
 pub mod placeholder_alt;
 pub mod placeholder_text;
+pub mod reduced_motion_compliance;
 pub mod referrer_policy;
 pub mod reflow;
 pub mod render_blocking_resources;
