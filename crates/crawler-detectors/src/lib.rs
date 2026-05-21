@@ -85,6 +85,7 @@ pub mod heading_order;
 pub mod heading_quality;
 pub mod hidden_elements;
 pub mod hreflang;
+pub mod hreflang_mutual_reference;
 pub mod hsts;
 pub mod html_lang;
 pub mod iframe_sandbox;
