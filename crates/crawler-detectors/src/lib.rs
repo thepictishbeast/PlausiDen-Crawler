@@ -75,6 +75,7 @@ pub mod dom_size;
 pub mod eager_below_fold;
 pub mod empty_button;
 pub mod favicon;
+pub mod font_face_no_fallback;
 pub mod font_loading;
 pub mod form_error_id_and_suggest;
 pub mod form_labels;
