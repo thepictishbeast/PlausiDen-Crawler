@@ -140,6 +140,7 @@ pub mod tab_order;
 pub mod tabindex_positive;
 pub mod tap_targets;
 pub mod text_wrap_collapse;
+pub mod third_party_script_count;
 pub mod time_datetime;
 pub mod trait_verification;
 pub mod trusted_types_runtime;
