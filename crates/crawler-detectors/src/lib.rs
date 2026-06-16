@@ -71,6 +71,7 @@ pub mod dialog_label;
 pub mod doc_title;
 pub mod doctype_charset;
 pub mod document_policy;
+pub mod download_attribute_audit;
 pub mod dom_size;
 pub mod eager_below_fold;
 pub mod empty_button;
