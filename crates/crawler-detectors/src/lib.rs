@@ -117,6 +117,7 @@ pub mod offscreen_focusable;
 pub mod origin_agent_cluster;
 pub mod outbound_links;
 pub mod permissions_policy;
+pub mod picture_source_coverage;
 pub mod pixel_diff;
 pub mod placeholder_alt;
 pub mod placeholder_text;
