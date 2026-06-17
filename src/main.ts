@@ -15,7 +15,8 @@ import { chromium, type Page } from 'playwright';
 import { mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { runStep, type Journey, type StepResult } from './journey.js';
-import { diffReports, findPriorRun, renderPositiveSignal, compareAriaTrees, type CapturedEvent, type Report } from './report.js';
+import { diffReports, findPriorRun, renderPositiveSignal, compareAriaTrees } from './report.js';
+import type { Report, CapturedEvent, Budget } from './types.js';
 import { compareToBaseline as visualDiffCompare, defaultBaselineDir as visualDiffDefaultBaselineDir } from './visualDiff.js';
 import { captureAriaTree, ariaTreeToText, interactableNodes, scoreAriaTree } from './aria.js';
 import { installWebVitals, collectVitals } from './webVitals.js';
@@ -89,53 +90,7 @@ import { readWhitelist, applyWhitelist, renderWhitelistSummary } from './scoreWh
 import { renderSupersocietyBadge } from './supersocietyBadge.js';
 import { computeAggregateScore, renderAggregateBadge } from './supersocietyBadgeAggregate.js';
 
-interface Budget {
-  newConsoleErrors: number;
-  newPageErrors: number;
-  newFailedRequests: number;
-  newA11yViolations: number;
-  newCssHealthStrict: number;
-  newUiOverflowStrict: number;
-  newRuntimeContrastStrict: number;
-  newRuntimeImagesStrict: number;
-  newRuntimeFocusStrict: number;
-  newWebVitalsStrict: number;
-  newCspViolations: number;
-  // T83: strict aria-drift findings (>30% line-delta) were silently
-  // missing from the gate. Default budget is 0 — any strict drift
-  // blocks ship. Warn-band drift (10-30%) stays advisory.
-  newAriaDriftStrict: number;
-  // T16: axes that were registered in the positive-signal table but
-  // not wired into the gate. Closing the gap so a strict regression
-  // in any axis blocks ship — otherwise a "REGRESSION (1 strict)"
-  // line in the table coexists with a top-level PASS, which is a
-  // contradiction the operator can't trust.
-  newHeadingOrderStrict: number;
-  newRuntimeLandmarksStrict: number;
-  newLinkTextStrict: number;
-  newPlaceholderTextStrict: number;
-  newlyBrokenSteps: number;
-}
-
-const DEFAULT_BUDGET: Budget = {
-  newConsoleErrors: 0,
-  newPageErrors: 0,
-  newFailedRequests: 0,
-  newA11yViolations: 0,
-  newCssHealthStrict: 0,
-  newUiOverflowStrict: 0,
-  newRuntimeContrastStrict: 0,
-  newRuntimeImagesStrict: 0,
-  newRuntimeFocusStrict: 0,
-  newWebVitalsStrict: 0,
-  newCspViolations: 0,
-  newAriaDriftStrict: 0,
-  newHeadingOrderStrict: 0,
-  newRuntimeLandmarksStrict: 0,
-  newLinkTextStrict: 0,
-  newPlaceholderTextStrict: 0,
-  newlyBrokenSteps: 0,
-};
+import { DEFAULT_BUDGET } from './budget.js';
 
 async function main(args: string[]): Promise<number> {
   const urlIdx = args.indexOf('--url');
