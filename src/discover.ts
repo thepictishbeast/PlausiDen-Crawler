@@ -374,7 +374,7 @@ export async function runDiscover(
       queue.push({ url: link, depth: depth + 1 });
     }
 
-    console.log(`[crawler] discover ${pages.length}/${maxPages} d=${depth} status=${status ?? 'n/a'} interactables=${snap.interactables.length} inputs=${snap.inputs.length} new-links=${outgoing.length} ${url}`);
+    info(`[crawler] discover ${pages.length}/${maxPages} d=${depth} status=${status ?? 'n/a'} interactables=${snap.interactables.length} inputs=${snap.inputs.length} new-links=${outgoing.length} ${url}`);
   }
 
   // Write a per-run discovery summary (independent of report.json so it
@@ -407,6 +407,10 @@ export async function runDiscover(
     );
     writeFileSync(join(outDir, 'discover-findings.txt'), findings);
   } catch { /* ignore */ }
+
+  return { pages, stepResults, events };
+}
+ ignore */ }
 
   return { pages, stepResults, events };
 }
