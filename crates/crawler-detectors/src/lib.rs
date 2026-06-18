@@ -147,6 +147,7 @@ pub mod ui_overflow;
 pub mod unique_id;
 pub(crate) mod url_helpers;
 pub mod vary_header;
+pub mod video_captions_missing;
 pub mod viewport_meta;
 pub mod web_manifest;
 pub mod web_vitals;
