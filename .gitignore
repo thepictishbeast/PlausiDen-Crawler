@@ -7,3 +7,6 @@ test-results/
 .DS_Store
 package-lock.json
 target/
+
+# agent onboarding kept local-only (cruft standard)
+AGENTS.md
