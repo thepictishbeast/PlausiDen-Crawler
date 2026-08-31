@@ -159,7 +159,18 @@ export async function captureUIOverflowSnapshot(page: Page): Promise<UIOverflowS
       // bug. Also skip select since the dropdown handles overflow.
       const tagLower = el.tagName.toLowerCase();
       const isFormCtrl = tagLower === 'input' || tagLower === 'textarea' || tagLower === 'select';
-      if (!isFormCtrl && el.scrollWidth > el.clientWidth + 2 && cs.overflowX !== 'auto' && cs.overflowX !== 'scroll' && cs.textOverflow !== 'ellipsis') {
+      // sr-only pattern: a ~1px box whose content is INTENTIONALLY
+      // visually hidden for screen readers. Its scrollWidth always
+      // exceeds its clientWidth — that is the technique, not a bug.
+      // (False-positived on the portfolio's sr-only header h1, 2026-08-31.)
+      const isSrOnlyBox = rect.width <= 1 && rect.height <= 1;
+      // Only elements that CLIP their own content can text-clip it.
+      // overflow visible means wider children paint beyond — the
+      // viewport-bleed check above owns that case; flagging the
+      // parent here double-reported full-bleed layouts that the
+      // page-level overflow clip handles without a scrollbar.
+      const clipsOwnContent = cs.overflowX === 'hidden' || cs.overflowX === 'clip';
+      if (!isFormCtrl && !isSrOnlyBox && clipsOwnContent && el.scrollWidth > el.clientWidth + 2 && cs.textOverflow !== 'ellipsis') {
         textClippedElements.push({
           selector: selectorOf(el),
           left: Math.round(rect.left),

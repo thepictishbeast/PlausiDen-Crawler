@@ -1,0 +1,16 @@
+{
+  "name": "poc",
+  "description": "Generic tenant smoke for forge's crawl phase (the default journey every `forge build` looks for). Tenant-agnostic on purpose: it drives only the root route, which every Forge tenant serves, catching console errors, failed requests, CSP violations and missing assets above and below the fold. Serve the tenant's static/ on 127.0.0.1:8123 before the build (e.g. `python3 -m http.server 8123 -d static`) or the crawl phase degrades to a dev-server-down warn.",
+  "baseUrl": "http://127.0.0.1:8123/",
+  "steps": [
+    { "kind": "goto", "url": "http://127.0.0.1:8123/", "timeout": 10000, "label": "home" },
+    { "kind": "wait", "ms": 1500, "label": "settle-fonts" },
+    { "kind": "screenshot", "label": "01-home-above-fold" },
+    { "kind": "press", "key": "End", "label": "scroll-to-bottom" },
+    { "kind": "wait", "ms": 800 },
+    { "kind": "screenshot", "label": "02-home-bottom" },
+    { "kind": "press", "key": "Home", "label": "scroll-to-top" },
+    { "kind": "wait", "ms": 400 },
+    { "kind": "screenshot", "label": "03-home-top-second-pass" }
+  ]
+}
