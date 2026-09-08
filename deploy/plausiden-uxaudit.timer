@@ -1,0 +1,17 @@
+[Unit]
+Description=Nightly Lighthouse page-performance audit
+
+[Timer]
+# OnCalendar, never OnUnitActiveSec. Five OnUnitActiveSec timers on this
+# host silently stopped firing after a reboot while still reporting
+# `enabled` and `active`, and went unnoticed for four weeks. After
+# installing, confirm by reading the NEXT column of
+# `systemctl list-timers plausiden-uxaudit.timer` — "enabled" is not
+# evidence that it will ever fire.
+OnCalendar=*-*-* 04:20:00
+Persistent=true
+RandomizedDelaySec=600
+Unit=plausiden-uxaudit.service
+
+[Install]
+WantedBy=timers.target

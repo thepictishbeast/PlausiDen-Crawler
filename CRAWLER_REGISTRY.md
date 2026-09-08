@@ -79,6 +79,31 @@ If none of (1)/(2)/(3), defer or reject — adding tools is not free.
 | **0xMassi/webclaw** | reject | Small project; no unique capability. |
 | **buckyroberts/Spider** | reject | Tutorial code from a YouTube channel. Not production-grade. |
 
+## Audit & quality tools
+
+Not crawlers, so they do not belong in any table above — this file is
+organised by language ecosystem for *crawlers*. These are tools that
+audit a page the crawler has already loaded. Judged against the same
+three tests.
+
+Source: a 12-agent evaluation of ~36 UI/UX tools (2026-09-08). All three
+independent judges reached the same verdict on the one adoption, and all
+three independently specified the **Node library API** over the CLI.
+
+| Tool | Status | Notes |
+|---|---|---|
+| **GoogleChrome/lighthouse** | **adopted-as-dep** | Apache-2.0, pinned `lighthouse@13.4.1` exact (not a caret — a minor bump renames audit ids and would silently shrink coverage). The only one of ~36 candidates to pass test 1. Used as a **library via the Node API**; drives Chrome through `chrome-launcher` pointed at the Chromium Playwright already downloaded, so it adds **no** second browser stack. Adapter at `src/lighthouseAdapter.ts`, entry `src/lighthouseAudit.ts`, run by `plausiden-uxaudit.timer`, results normalised to JSONL for `analytics.plausiden.com`. **Only 14 audit ids are ingested** (`src/lighthouseAllowlist.ts`): the byte-weight and network-timing audits no detector covers. Its Accessibility category IS axe-core — already a dependency, already injected at `src/audit.ts` — and its LCP/CLS/INP duplicate the `web-vitals` dep and `web_vitals.rs`; emitting the whole LHR would double-count both into analytics. Offline-clean: no account, no upload, and the bundled `@sentry/node` is opt-in and disabled for the programmatic API. |
+| **@lhci/cli** (Lighthouse CI) | **reject** | Same library underneath, wrapped in target lists, retries, output directories and exit codes — every one of which `crawler-runner`, `journeys/` and `runs/` already provide. It also assumes a build/PR workflow that does not exist here. Adopting it would mean two runners that disagree about what a run is. Fails test 1: the library is the part that adds capability, the wrapper is the part that duplicates. |
+| **lighthouse** (global CLI) | **reject** | Same reason as `@lhci/cli`, one layer thinner. The library is adopted; the command is orchestration we have. |
+| **@axe-core/cli** | **reject** | Strongest reject on the list: zero new capability. It runs the same `axe-core` already in `package.json` and already injected at `src/audit.ts`, and would add a Selenium/chromedriver chain to do out-of-process, one URL at a time, what the crawler does in-process across a journey matrix. (Note the name trap: the literal `axe-cli` on npm is the abandoned 2022 predecessor.) |
+| **pa11y** | **reject** | Almost entirely duplicated — Puppeteer, headless Chromium and axe-core are already here. The only thing it adds is the HTML_CodeSniffer ruleset, a noisier WCAG-techniques second opinion. If that opinion is ever wanted, vendor HTML_CodeSniffer's single JS file through the existing `src/audit.ts` injection path rather than adopting a whole duplicate browser stack. See `docs/PA11Y_WCAG_PARITY.md`. |
+| **pa11y-ci** | **reject** | The most duplicative candidate evaluated. Sitemap crawling, concurrency, per-target thresholds and CI exit codes are exactly `crawlee` + `journeys/` + `crawler-runner` + `crawler-report`. Orchestration for a runner we would not adopt. |
+| **uxlint** | **reject** | Name does not resolve cleanly: two unrelated projects share it, and the probable referent is a ~6-star personal LLM UX reviewer whose 4.5.0 version number badly oversells its maturity. The other is a 2022-dead eslint wrapper that is not a UX tool at all. An LLM critique generator is also not deterministic, which is the property every other row here is judged on. |
+| **Visual Regression Tracker** | **deferred** | Apache-2.0, self-hosted. Baseline **history** across branches/OS/viewport plus an approve/review workflow is the one layer that genuinely does not exist here — `pixel_diff.rs` compares against a checked-in baseline and has no lifecycle. Deliberately the only deferred entry for this concern, so one need does not accumulate three registry rows. |
+| **reg-cli** | **reject** | Supplies only glue — pairing, manifest, promotion — over a differ, a capture and a finding taxonomy `pixel_diff.rs` already owns. The contrast with the row above is deliberate: VRT is deferred for baseline *history*, which we would otherwise build from scratch; reg-cli is rejected because its layer already exists. |
+| **Maestro** | **deferred** | Apache-2.0 JVM CLI. The cleanest test-3 pass on the list: Playwright **cannot** drive an APK or IPA, and the estate does ship one. Adopt the **native** driver only — its newer web-browser mode duplicates Playwright and is the weaker option. Note `docs/MULTIPLATFORM.md:35` already names it "Primary": that is an unexecuted plan, not a prior adoption. `--format junit` is mandatory; the default reporter is NOOP. |
+| **dembrandt** | **deferred** | Design-token drift. No such question is being asked yet. |
+
 ## Adjacent (proxy / infra)
 
 | Tool | Status | Notes |
@@ -124,6 +149,9 @@ The following are deferred with explicit triggers:
 | 0x676e67/wreq | First crawl target that blocks headless Chromium TLS-fingerprint. |
 | a11ywatch/crawler | Formal a11y journey support added to PlausiDen-Crawler scope. |
 | zu1k/proxypool | First crawl target requiring egress-IP rotation. |
+| Visual Regression Tracker | First need for baseline **history** across branches/viewports plus an approve/review workflow — as opposed to pass/fail against a checked-in baseline, which `pixel_diff.rs` already does. |
+| Maestro | Native-mobile auditing formally enters scope: the Tempered Studio APK needs journey coverage **and** an Android emulator is available to run it (the emulator, not Maestro, is the real cost). |
+| dembrandt | First design-token drift question. |
 
 When a trigger fires, file an issue against this repo with the
 [CONTRIBUTOR_CHECKLIST](https://github.com/thepictishbeast/PlausiDen-Meta/blob/main/CONTRIBUTOR_CHECKLIST.md)

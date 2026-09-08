@@ -1,0 +1,42 @@
+[Unit]
+Description=Lighthouse page-performance audit -> analytics.plausiden.com
+Documentation=https://github.com/thepictishbeast/PlausiDen-Crawler
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=paul
+Group=paul
+WorkingDirectory=/home/paul/projects/PlausiDen-Crawler
+ExecStart=/usr/bin/npm run --silent audit:lighthouse -- --targets journeys/lighthouse-targets.json --out /var/lib/plausiden-analytics/ux-inbox
+TimeoutStartSec=1800
+Nice=19
+IOSchedulingClass=idle
+
+# /tmp is noexec on this host, and Chromium unpacks helpers into TMPDIR.
+# PrivateTmp=yes would add a second layer of the same problem, so it is
+# deliberately absent and TMPDIR points at a filesystem that allows exec.
+Environment=TMPDIR=/tank/scratch/uxaudit/tmp
+
+NoNewPrivileges=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+ReadWritePaths=/var/lib/plausiden-analytics/ux-inbox /tank/scratch/uxaudit
+
+# Three hardening directives that other units on this host carry are
+# deliberately NOT here, because each one breaks this job in a way that
+# looks like a Lighthouse bug rather than a unit-file bug:
+#
+#   ProtectHome=          hides /home/paul/projects/PlausiDen-Crawler/node_modules
+#                         and ~/.cache/ms-playwright, so neither Lighthouse
+#                         nor Chromium can be found at all.
+#   RestrictAddressFamilies=  emptied (as in the seo unit) blocks every socket,
+#                         and Chromium cannot reach the target.
+#   MemoryDenyWriteExecute=yes  a JIT engine cannot start under it.
+
+[Install]
+WantedBy=multi-user.target

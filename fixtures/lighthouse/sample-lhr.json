@@ -1,0 +1,554 @@
+{
+ "lighthouseVersion": "13.4.1",
+ "requestedUrl": "https://plausiden.com/",
+ "mainDocumentUrl": "https://plausiden.com/",
+ "finalDisplayedUrl": "https://plausiden.com/",
+ "finalUrl": "https://plausiden.com/",
+ "fetchTime": "2026-09-08T23:09:32.538Z",
+ "environment": {
+  "hostUserAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36"
+ },
+ "runWarnings": [],
+ "audits": {
+  "speed-index": {
+   "id": "speed-index",
+   "title": "Speed Index",
+   "score": 1,
+   "scoreDisplayMode": "numeric",
+   "numericValue": 1168.2281940293915,
+   "numericUnit": "millisecond",
+   "displayValue": "1.2 s",
+   "scoringOptions": {
+    "p10": 3387,
+    "median": 5800
+   }
+  },
+  "unused-css-rules": {
+   "id": "unused-css-rules",
+   "title": "Reduce unused CSS",
+   "score": 0,
+   "scoreDisplayMode": "metricSavings",
+   "numericValue": 150,
+   "numericUnit": "millisecond",
+   "displayValue": "Est savings of 22 KiB",
+   "metricSavings": {
+    "FCP": 150,
+    "LCP": 150
+   },
+   "details": {
+    "type": "opportunity",
+    "items": [
+     {
+      "url": "https://plausiden.com/static/motion.css?v=1788672242",
+      "wastedBytes": 12305,
+      "wastedPercent": 85.36773679360414,
+      "totalBytes": 14414
+     },
+     {
+      "url": "https://plausiden.com/static/index-CWVVhmVm.css",
+      "wastedBytes": 10630,
+      "wastedPercent": 81.60865594398499,
+      "totalBytes": 13025
+     }
+    ],
+    "overallSavingsBytes": 22935,
+    "overallSavingsMs": 150
+   },
+   "guidanceLevel": 1
+  },
+  "unused-javascript": {
+   "id": "unused-javascript",
+   "title": "Reduce unused JavaScript",
+   "score": 1,
+   "scoreDisplayMode": "metricSavings",
+   "numericValue": 0,
+   "numericUnit": "millisecond",
+   "displayValue": "",
+   "metricSavings": {
+    "FCP": 0,
+    "LCP": 0
+   },
+   "details": {
+    "type": "opportunity",
+    "items": [],
+    "overallSavingsBytes": 0,
+    "overallSavingsMs": 0
+   },
+   "guidanceLevel": 1
+  },
+  "unminified-css": {
+   "id": "unminified-css",
+   "title": "Minify CSS",
+   "score": 0,
+   "scoreDisplayMode": "metricSavings",
+   "numericValue": 0,
+   "numericUnit": "millisecond",
+   "displayValue": "Est savings of 11 KiB",
+   "metricSavings": {
+    "FCP": 150,
+    "LCP": 0
+   },
+   "details": {
+    "type": "opportunity",
+    "items": [
+     {
+      "url": "https://plausiden.com/static/motion.css?v=1788672242",
+      "totalBytes": 14440,
+      "wastedBytes": 11064,
+      "wastedPercent": 76.62324724166271
+     }
+    ],
+    "overallSavingsBytes": 11064,
+    "overallSavingsMs": 0
+   },
+   "guidanceLevel": 3
+  },
+  "unminified-javascript": {
+   "id": "unminified-javascript",
+   "title": "Minify JavaScript",
+   "score": 1,
+   "scoreDisplayMode": "metricSavings",
+   "numericValue": 0,
+   "numericUnit": "millisecond",
+   "displayValue": "",
+   "warnings": [],
+   "metricSavings": {
+    "FCP": 0,
+    "LCP": 0
+   },
+   "details": {
+    "type": "opportunity",
+    "items": [],
+    "overallSavingsBytes": 0,
+    "overallSavingsMs": 0
+   },
+   "guidanceLevel": 3
+  },
+  "total-byte-weight": {
+   "id": "total-byte-weight",
+   "title": "Avoids enormous network payloads",
+   "score": 1,
+   "scoreDisplayMode": "metricSavings",
+   "numericValue": 362041,
+   "numericUnit": "byte",
+   "displayValue": "Total size was 354 KiB",
+   "details": {
+    "type": "table",
+    "items": [
+     {
+      "url": "https://plausiden.com/static/images/hero-team.jpg",
+      "totalBytes": 253171
+     },
+     {
+      "url": "https://plausiden.com/static/fonts/QGYvz_MVcBeNP4NJtEtq.woff2",
+      "totalBytes": 32703
+     }
+    ]
+   },
+   "guidanceLevel": 1
+  },
+  "server-response-time": {
+   "id": "server-response-time",
+   "title": "Initial server response time was short",
+   "score": 1,
+   "scoreDisplayMode": "metricSavings",
+   "numericValue": 1,
+   "numericUnit": "millisecond",
+   "displayValue": "Root document took 0 ms",
+   "metricSavings": {
+    "FCP": 0,
+    "LCP": 0
+   },
+   "details": {
+    "type": "opportunity",
+    "items": [
+     {
+      "url": "https://plausiden.com/",
+      "responseTime": 1
+     }
+    ],
+    "overallSavingsMs": 0
+   },
+   "guidanceLevel": 1
+  },
+  "network-rtt": {
+   "id": "network-rtt",
+   "title": "Network Round Trip Times",
+   "score": 1,
+   "scoreDisplayMode": "informative",
+   "numericValue": 0,
+   "numericUnit": "millisecond",
+   "displayValue": "0 ms",
+   "details": {
+    "type": "table",
+    "items": [
+     {
+      "origin": "https://plausiden.com",
+      "rtt": 0
+     }
+    ]
+   }
+  },
+  "network-server-latency": {
+   "id": "network-server-latency",
+   "title": "Server Backend Latencies",
+   "score": 1,
+   "scoreDisplayMode": "informative",
+   "numericValue": 6.566,
+   "numericUnit": "millisecond",
+   "displayValue": "10 ms",
+   "details": {
+    "type": "table",
+    "items": [
+     {
+      "origin": "https://plausiden.com",
+      "serverResponseTime": 6.566
+     }
+    ]
+   }
+  },
+  "modern-http-insight": {
+   "id": "modern-http-insight",
+   "title": "Modern HTTP",
+   "score": 1,
+   "scoreDisplayMode": "metricSavings",
+   "metricSavings": {
+    "FCP": 0,
+    "LCP": 0
+   },
+   "details": {
+    "type": "table",
+    "items": []
+   },
+   "guidanceLevel": 3
+  },
+  "network-dependency-tree-insight": {
+   "id": "network-dependency-tree-insight",
+   "title": "Network dependency tree",
+   "score": 0,
+   "scoreDisplayMode": "numeric",
+   "metricSavings": {
+    "LCP": 0
+   },
+   "details": {
+    "type": "list",
+    "items": [
+     {
+      "type": "list-section",
+      "value": {
+       "type": "network-tree",
+       "chains": {
+        "437B6FEE2CA3336BDF88E937ED43098B": {
+         "url": "https://plausiden.com/",
+         "navStartToEndTime": 167,
+         "transferSize": 7731,
+         "isLongest": true,
+         "children": {
+          "1254257.2": {
+           "url": "https://plausiden.com/static/self-hosted-fonts.css?v=1788672242",
+           "navStartToEndTime": 196,
+           "transferSize": 671,
+           "isLongest": true,
+           "children": {
+            "1254257.22": {
+             "url": "https://plausiden.com/static/fonts/QGYvz_MVcBeNP4NJtEtq.woff2",
+             "navStartToEndTime": 267,
+             "transferSize": 32703,
+             "isLongest": true,
+             "children": {}
+            },
+            "1254257.34": {
+             "url": "https://plausiden.com/static/fonts/LDIoaomQNQcsA88c7O9yZ4KMCoOg4Ko20yw.woff2",
+             "navStartToEndTime": 267,
+             "transferSize": 27753,
+             "children": {}
+            }
+           }
+          },
+          "1254257.20": {
+           "url": "https://plausiden.com/static/site.webmanifest",
+           "navStartToEndTime": 236,
+           "transferSize": 612,
+           "children": {}
+          },
+          "1254257.4": {
+           "url": "https://plausiden.com/static/index-CWVVhmVm.css",
+           "navStartToEndTime": 166,
+           "transferSize": 13051,
+           "children": {}
+          },
+          "1254257.7": {
+           "url": "https://plausiden.com/static/motion.css?v=1788672242",
+           "navStartToEndTime": 165,
+           "transferSize": 14440,
+           "children": {}
+          },
+          "1254257.3": {
+           "url": "https://plausiden.com/static/loom-tokens.css?v=1788672242",
+           "navStartToEndTime": 164,
+           "transferSize": 870,
+           "children": {}
+          },
+          "1254257.6": {
+           "url": "https://plausiden.com/static/animations.css?v=1788672242",
+           "navStartToEndTime": 164,
+           "transferSize": 1074,
+           "children": {}
+          },
+          "1254257.5": {
+           "url": "https://plausiden.com/static/nav-responsive.css?v=1788672242",
+           "navStartToEndTime": 163,
+           "transferSize": 706,
+           "children": {}
+          }
+         }
+        }
+       },
+       "longestChain": {
+        "duration": 267
+       }
+      }
+     },
+     {
+      "type": "list-section",
+      "title": "Preconnected origins",
+      "description": "[preconnect](https://developer.chrome.com/docs/lighthouse/performance/uses-rel-preconnect/) hints help the browser establish a connection earlier in the page load, saving time when the first request for that origin is made. The following are the origins that the page preconnected to.",
+      "value": {
+       "type": "text",
+       "value": "no origins were preconnected"
+      }
+     }
+    ]
+   },
+   "guidanceLevel": 1
+  },
+  "bootup-time": {
+   "id": "bootup-time",
+   "title": "JavaScript execution time",
+   "score": 1,
+   "scoreDisplayMode": "metricSavings",
+   "numericValue": 71.41999999999999,
+   "numericUnit": "millisecond",
+   "displayValue": "0.1 s",
+   "metricSavings": {
+    "TBT": 0
+   },
+   "details": {
+    "type": "table",
+    "items": [
+     {
+      "url": "https://plausiden.com/",
+      "total": 179.248,
+      "scripting": 7.787999999999997,
+      "scriptParseCompile": 1.6440000000000001
+     },
+     {
+      "url": "https://plausiden.com/static/menu.js?v=1788672242",
+      "total": 84.96000000000001,
+      "scripting": 2.9680000000000004,
+      "scriptParseCompile": 0.9680000000000001
+     }
+    ]
+   },
+   "guidanceLevel": 1
+  },
+  "mainthread-work-breakdown": {
+   "id": "mainthread-work-breakdown",
+   "title": "Minimizes main-thread work",
+   "score": 1,
+   "scoreDisplayMode": "metricSavings",
+   "numericValue": 415.3720000000002,
+   "numericUnit": "millisecond",
+   "displayValue": "0.4 s",
+   "metricSavings": {
+    "TBT": 0
+   },
+   "details": {
+    "type": "table",
+    "items": [
+     {
+      "group": "styleLayout",
+      "groupLabel": "Style & Layout",
+      "duration": 175.81600000000003
+     },
+     {
+      "group": "other",
+      "groupLabel": "Other",
+      "duration": 136.58000000000007
+     }
+    ]
+   },
+   "guidanceLevel": 1
+  },
+  "valid-source-maps": {
+   "id": "valid-source-maps",
+   "title": "Page has valid source maps",
+   "score": 1,
+   "scoreDisplayMode": "binary",
+   "details": {
+    "type": "table",
+    "items": []
+   }
+  },
+  "color-contrast": {
+   "id": "color-contrast",
+   "title": "Background and foreground colors have a sufficient contrast ratio",
+   "score": 1,
+   "scoreDisplayMode": "binary",
+   "details": {
+    "type": "table",
+    "items": []
+   }
+  },
+  "aria-allowed-attr": {
+   "id": "aria-allowed-attr",
+   "title": "`[aria-*]` attributes match their roles",
+   "score": 1,
+   "scoreDisplayMode": "binary",
+   "details": {
+    "type": "table",
+    "items": []
+   }
+  },
+  "image-alt": {
+   "id": "image-alt",
+   "title": "Image elements have `[alt]` attributes",
+   "score": 1,
+   "scoreDisplayMode": "binary",
+   "details": {
+    "type": "table",
+    "items": []
+   }
+  },
+  "largest-contentful-paint": {
+   "id": "largest-contentful-paint",
+   "title": "Largest Contentful Paint",
+   "score": 0.86,
+   "scoreDisplayMode": "numeric",
+   "numericValue": 2654.566,
+   "numericUnit": "millisecond",
+   "displayValue": "2.7 s",
+   "scoringOptions": {
+    "p10": 2500,
+    "median": 4000
+   }
+  },
+  "cumulative-layout-shift": {
+   "id": "cumulative-layout-shift",
+   "title": "Cumulative Layout Shift",
+   "score": 1,
+   "scoreDisplayMode": "numeric",
+   "numericValue": 0.0003291797419524237,
+   "numericUnit": "unitless",
+   "displayValue": "0",
+   "scoringOptions": {
+    "p10": 0.1,
+    "median": 0.25
+   },
+   "details": {
+    "type": "debugdata",
+    "items": [
+     {
+      "cumulativeLayoutShiftMainFrame": 0.0003291797419524237,
+      "newEngineResultDiffered": false
+     }
+    ]
+   }
+  },
+  "total-blocking-time": {
+   "id": "total-blocking-time",
+   "title": "Total Blocking Time",
+   "score": 1,
+   "scoreDisplayMode": "numeric",
+   "numericValue": 6,
+   "numericUnit": "millisecond",
+   "displayValue": "10 ms",
+   "scoringOptions": {
+    "p10": 200,
+    "median": 600
+   }
+  },
+  "render-blocking-insight": {
+   "id": "render-blocking-insight",
+   "title": "Render-blocking requests",
+   "score": 0,
+   "scoreDisplayMode": "metricSavings",
+   "displayValue": "Est savings of 250 ms",
+   "metricSavings": {
+    "FCP": 250,
+    "LCP": 250
+   },
+   "details": {
+    "type": "table",
+    "items": [
+     {
+      "url": "https://plausiden.com/static/self-hosted-fonts.css?v=1788672242",
+      "totalBytes": 671
+     },
+     {
+      "url": "https://plausiden.com/static/index-CWVVhmVm.css",
+      "totalBytes": 13051,
+      "wastedMs": 150
+     }
+    ]
+   },
+   "guidanceLevel": 3
+  },
+  "image-delivery-insight": {
+   "id": "image-delivery-insight",
+   "title": "Improve image delivery",
+   "score": 0,
+   "scoreDisplayMode": "metricSavings",
+   "displayValue": "Est savings of 233 KiB",
+   "metricSavings": {
+    "FCP": 0,
+    "LCP": 1200
+   },
+   "details": {
+    "type": "table",
+    "items": [
+     {
+      "node": {
+       "type": "node",
+       "lhId": "page-0-IMG",
+       "path": "1,HTML,1,BODY,1,DIV,0,DIV,1,MAIN,3,SECTION,2,DIV,0,DIV,1,DIV,1,DIV,0,IMG",
+       "selector": "div.grid > div.relative > div.relative > img.w-full",
+       "boundingRect": {
+        "top": 5210,
+        "bottom": 5463,
+        "left": 17,
+        "right": 395,
+        "width": 378,
+        "height": 252
+       },
+       "snippet": "<img src=\"/static/images/hero-team.jpg\" alt=\"Team collaboration\" class=\"w-full h-auto object-cover\">",
+       "nodeLabel": "Team collaboration"
+      },
+      "url": "https://plausiden.com/static/images/hero-team.jpg",
+      "totalBytes": 252924,
+      "wastedBytes": 238807,
+      "subItems": {
+       "type": "subitems",
+       "items": [
+        {
+         "reason": "This image file is larger than it needs to be (1600x1067) for its displayed dimensions (378x252). Use responsive images to reduce the image download size.",
+         "wastedBytes": 238807
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "guidanceLevel": 3
+  },
+  "third-parties-insight": {
+   "id": "third-parties-insight",
+   "title": "3rd parties",
+   "score": null,
+   "scoreDisplayMode": "error",
+   "errorMessage": "data.Renderer.processes.values(...).find is not a function",
+   "errorStack": "TypeError: data.Renderer.processes.values(...).find is not a function\n    at collectMainThreadActivity (file:///home/paul/projects/PlausiDen-Crawler/node_modules/@paulirish/trace_engine/models/trace/extras/ThirdParties.js:17:10)\n    at Module.summarizeByThirdParty (file:///home/paul/projects/PlausiDen-Crawler/node_modules/@paulirish/trace_engine/models/trace/extras/ThirdParties.js:30:30)\n    at Module.generateInsight (file:///home/paul/projects/PlausiDen-Crawler/node_modules/@paulirish/trace_engine/models/trace/insights/ThirdParties.js:58:49)\n    at #computeInsightSet (file:///home/paul/projects/PlausiDen-Crawler/node_modules/@paulirish/trace_engine/models/trace/Processor.js:373:39)\n    at #computeInsightsForNavigation (file:///home/paul/projects/PlausiDen-Crawler/node_modules/@paulirish/trace_engine/models/trace/Processor.js:513:32)\n    at #computeInsights (file:///home/paul/projects/PlausiDen-Crawler/node_modules/@paulirish/trace_engine/models/trace/Processor.js:445:47)\n    at TraceProcessor.parse (file:///home/paul/projects/PlausiDen-Crawler/node_modules/@paulirish/trace_engine/models/trace/Processor.js:126:38)\n    at async TraceEngineResult.runTraceEngine (file:///home/paul/projects/PlausiDen-Crawler/node_modules/lighthouse/core/computed/trace-engine-result.js:43:5)\n    at async TraceEngineResult.compute_ (file:///home/paul/projects/PlausiDen-Crawler/node_modules/lighthouse/core/computed/trace-engine-result.js:256:7)",
+   "guidanceLevel": 3
+  }
+ }
+}

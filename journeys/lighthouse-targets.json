@@ -1,0 +1,18 @@
+{
+  "_comment": [
+    "Targets for the nightly Lighthouse pass (plausiden-uxaudit.timer).",
+    "Public pages only, on purpose: an authenticated target would need a",
+    "login journey, and a login that quietly fails audits the login page N",
+    "times and still reports findings. If an authenticated page is ever",
+    "added here, the journey must assert on a signed-in-only selector",
+    "first.",
+    "Serial, so keep this list short: each target is one Chrome launch and",
+    "roughly 20-40 seconds."
+  ],
+  "targets": [
+    { "url": "https://plausiden.com/", "form_factor": "mobile" },
+    { "url": "https://plausiden.com/", "form_factor": "desktop" },
+    { "url": "https://plausiden.org/", "form_factor": "mobile" },
+    { "url": "https://william-armstrong.com/", "form_factor": "mobile" }
+  ]
+}

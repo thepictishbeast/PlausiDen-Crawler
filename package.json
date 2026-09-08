@@ -10,6 +10,8 @@
     "audit:tablet": "node --loader ts-node/esm src/main.ts --journey journeys/plausiden-smoke-tablet.json",
     "audit:all": "npm run audit && npm run audit:tablet && npm run audit:mobile",
     "audit:ui": "npx playwright test --ui",
+    "audit:lighthouse": "node --import tsx src/lighthouseAudit.ts",
+    "test:lighthouse-adapter": "npx tsx src/lighthouseAdapter.test.ts",
     "audit:rust": "cargo run --release -p crawler-runner --",
     "audit:rust:smoke": "cargo run --release -p crawler-runner -- --journey journeys/lfi-landing-smoke.json",
     "audit:rust:smoke-dark": "cargo run --release -p crawler-runner -- --journey journeys/plausiden-smoke-dark.json",
@@ -37,6 +39,7 @@
     "axe-core": "^4.11.4",
     "crawlee": "^3.16.0",
     "jsqr": "^1.4.0",
+    "lighthouse": "13.4.1",
     "puppeteer": "^24.41.0",
     "web-vitals": "^5.2.0"
   },

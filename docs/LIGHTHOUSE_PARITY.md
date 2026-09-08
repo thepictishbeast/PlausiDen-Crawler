@@ -1,5 +1,51 @@
 # Lighthouse Parity Audit
 
+> ## ⚠ READ THIS BEFORE USING THE TABLES BELOW (2026-09-08)
+>
+> **The tables in this document are stale in two independent ways, and
+> both of them will mislead you if you derive a work list from them.**
+>
+> **1. Detectors listed as gaps now exist.** Every one of these was
+> written after this document, and the rows below still say `gap`:
+>
+> | Row that still says `gap` | Detector that closed it |
+> |---|---|
+> | render-blocking-resources ("highest-leverage gap") | `crates/crawler-detectors/src/render_blocking_resources.rs` |
+> | modern-image-formats, uses-optimized-images | `modern_image_formats.rs` (its own header names both audits) |
+> | doctype, charset | `doctype_charset.rs` |
+> | robots-txt, is-crawlable | `robots_txt.rs` |
+> | uses-rel-preconnect | `stale_preconnect.rs` |
+>
+> **2. Half these audit ids no longer exist in Lighthouse.** This
+> document was written against the v11 category index. A real run of
+> **Lighthouse 13.4.1** against `https://plausiden.com/` on 2026-09-08
+> emitted 160 audits, and these ids were **not among them**:
+>
+> ```
+> render-blocking-resources    duplicated-javascript    uses-http2
+> uses-responsive-images       legacy-javascript        font-size
+> modern-image-formats         critical-request-chains  efficient-animated-content
+> uses-optimized-images        third-party-summary
+> ```
+>
+> Lighthouse 13 replaced most of them with "insight" audits —
+> `render-blocking-insight`, `image-delivery-insight`,
+> `legacy-javascript-insight`, `network-dependency-tree-insight`,
+> `modern-http-insight`, `third-parties-insight`. Anything written
+> against the old names silently matches nothing, produces no findings,
+> and reports a clean run.
+>
+> **The list that is actually maintained** is
+> `src/lighthouseAllowlist.ts`, derived from a live run rather than from
+> this document, and mirrored on the analytics side in
+> `PlausiDen-Analytics/src/uxaudit.rs`. Fourteen ids: the residual gap
+> after striking the rows above is almost entirely **byte-weight and
+> network-timing** audits, which need trace and network plumbing the
+> crawler has not built. Lighthouse is adopted as a dependency for
+> exactly those; see `CRAWLER_REGISTRY.md`.
+>
+> Treat everything below as a historical v11 snapshot, not a work list.
+
 **Status:** parity audit. Maps every Lighthouse audit (Performance,
 Accessibility, Best Practices, SEO, PWA) to a Crawler detector.
 Identifies the gaps Crawler must close to fully replace Lighthouse.
@@ -156,3 +202,14 @@ Point-in-time audit (Crawler at commit f20361e, Lighthouse v11.x).
 Re-audit on every Crawler detector addition or Lighthouse version
 bump. Cross-reference with PA11Y_WCAG_PARITY.md — the accessibility
 overlap is intentional duplication so each doc reads standalone.
+
+**That re-audit did not happen for either kind of drift, and this
+document was consulted anyway.** Both a detector sweep and a Lighthouse
+major bump landed while the tables kept saying `gap` — which is why
+adopting Lighthouse in 2026-09 started by re-deriving the list against
+`crates/crawler-detectors/src/` and a live LHR rather than from here.
+A parity document with no test behind it decays silently and reads
+authoritative the whole time. If the tables below are ever refreshed,
+refresh them from `Object.keys(lhr.audits)` of a real run and from
+`ls crates/crawler-detectors/src/`, never from memory of the audit
+names.
