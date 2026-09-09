@@ -132,7 +132,7 @@ const base = (over: Record<string, unknown> = {}) =>
   assert(f.data.score === null, 'a null score stays null, never 0 and never 1', String(f.data.score));
 }
 
-// 5. Every audit unscored is `unusable`, not `clean`. Fourteen null
+// 5. Every audit unscored is `unusable`, not `clean`. Seventeen null
 //    scores would otherwise be a fully-accepted, fully-green lie.
 {
   const allNull = JSON.parse(JSON.stringify(LHR));

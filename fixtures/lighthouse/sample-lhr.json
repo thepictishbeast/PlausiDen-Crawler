@@ -17,7 +17,7 @@
    "scoreDisplayMode": "numeric",
    "numericValue": 1168.2281940293915,
    "numericUnit": "millisecond",
-   "displayValue": "1.2 s",
+   "displayValue": "1.2\u00a0s",
    "scoringOptions": {
     "p10": 3387,
     "median": 5800
@@ -30,7 +30,7 @@
    "scoreDisplayMode": "metricSavings",
    "numericValue": 150,
    "numericUnit": "millisecond",
-   "displayValue": "Est savings of 22 KiB",
+   "displayValue": "Est savings of 22\u00a0KiB",
    "metricSavings": {
     "FCP": 150,
     "LCP": 150
@@ -83,7 +83,7 @@
    "scoreDisplayMode": "metricSavings",
    "numericValue": 0,
    "numericUnit": "millisecond",
-   "displayValue": "Est savings of 11 KiB",
+   "displayValue": "Est savings of 11\u00a0KiB",
    "metricSavings": {
     "FCP": 150,
     "LCP": 0
@@ -131,7 +131,7 @@
    "scoreDisplayMode": "metricSavings",
    "numericValue": 362041,
    "numericUnit": "byte",
-   "displayValue": "Total size was 354 KiB",
+   "displayValue": "Total size was 354\u00a0KiB",
    "details": {
     "type": "table",
     "items": [
@@ -154,7 +154,7 @@
    "scoreDisplayMode": "metricSavings",
    "numericValue": 1,
    "numericUnit": "millisecond",
-   "displayValue": "Root document took 0 ms",
+   "displayValue": "Root document took 0\u00a0ms",
    "metricSavings": {
     "FCP": 0,
     "LCP": 0
@@ -178,7 +178,7 @@
    "scoreDisplayMode": "informative",
    "numericValue": 0,
    "numericUnit": "millisecond",
-   "displayValue": "0 ms",
+   "displayValue": "0\u00a0ms",
    "details": {
     "type": "table",
     "items": [
@@ -196,7 +196,7 @@
    "scoreDisplayMode": "informative",
    "numericValue": 6.566,
    "numericUnit": "millisecond",
-   "displayValue": "10 ms",
+   "displayValue": "10\u00a0ms",
    "details": {
     "type": "table",
     "items": [
@@ -329,7 +329,7 @@
    "scoreDisplayMode": "metricSavings",
    "numericValue": 71.41999999999999,
    "numericUnit": "millisecond",
-   "displayValue": "0.1 s",
+   "displayValue": "0.1\u00a0s",
    "metricSavings": {
     "TBT": 0
    },
@@ -359,7 +359,7 @@
    "scoreDisplayMode": "metricSavings",
    "numericValue": 415.3720000000002,
    "numericUnit": "millisecond",
-   "displayValue": "0.4 s",
+   "displayValue": "0.4\u00a0s",
    "metricSavings": {
     "TBT": 0
    },
@@ -427,7 +427,7 @@
    "scoreDisplayMode": "numeric",
    "numericValue": 2654.566,
    "numericUnit": "millisecond",
-   "displayValue": "2.7 s",
+   "displayValue": "2.7\u00a0s",
    "scoringOptions": {
     "p10": 2500,
     "median": 4000
@@ -462,7 +462,7 @@
    "scoreDisplayMode": "numeric",
    "numericValue": 6,
    "numericUnit": "millisecond",
-   "displayValue": "10 ms",
+   "displayValue": "10\u00a0ms",
    "scoringOptions": {
     "p10": 200,
     "median": 600
@@ -473,7 +473,7 @@
    "title": "Render-blocking requests",
    "score": 0,
    "scoreDisplayMode": "metricSavings",
-   "displayValue": "Est savings of 250 ms",
+   "displayValue": "Est savings of 250\u00a0ms",
    "metricSavings": {
     "FCP": 250,
     "LCP": 250
@@ -499,7 +499,7 @@
    "title": "Improve image delivery",
    "score": 0,
    "scoreDisplayMode": "metricSavings",
-   "displayValue": "Est savings of 233 KiB",
+   "displayValue": "Est savings of 233\u00a0KiB",
    "metricSavings": {
     "FCP": 0,
     "LCP": 1200
@@ -544,11 +544,127 @@
   "third-parties-insight": {
    "id": "third-parties-insight",
    "title": "3rd parties",
-   "score": null,
-   "scoreDisplayMode": "error",
-   "errorMessage": "data.Renderer.processes.values(...).find is not a function",
-   "errorStack": "TypeError: data.Renderer.processes.values(...).find is not a function\n    at collectMainThreadActivity (file:///home/paul/projects/PlausiDen-Crawler/node_modules/@paulirish/trace_engine/models/trace/extras/ThirdParties.js:17:10)\n    at Module.summarizeByThirdParty (file:///home/paul/projects/PlausiDen-Crawler/node_modules/@paulirish/trace_engine/models/trace/extras/ThirdParties.js:30:30)\n    at Module.generateInsight (file:///home/paul/projects/PlausiDen-Crawler/node_modules/@paulirish/trace_engine/models/trace/insights/ThirdParties.js:58:49)\n    at #computeInsightSet (file:///home/paul/projects/PlausiDen-Crawler/node_modules/@paulirish/trace_engine/models/trace/Processor.js:373:39)\n    at #computeInsightsForNavigation (file:///home/paul/projects/PlausiDen-Crawler/node_modules/@paulirish/trace_engine/models/trace/Processor.js:513:32)\n    at #computeInsights (file:///home/paul/projects/PlausiDen-Crawler/node_modules/@paulirish/trace_engine/models/trace/Processor.js:445:47)\n    at TraceProcessor.parse (file:///home/paul/projects/PlausiDen-Crawler/node_modules/@paulirish/trace_engine/models/trace/Processor.js:126:38)\n    at async TraceEngineResult.runTraceEngine (file:///home/paul/projects/PlausiDen-Crawler/node_modules/lighthouse/core/computed/trace-engine-result.js:43:5)\n    at async TraceEngineResult.compute_ (file:///home/paul/projects/PlausiDen-Crawler/node_modules/lighthouse/core/computed/trace-engine-result.js:256:7)",
+   "description": "3rd party code can significantly impact load performance. [Reduce and defer loading of 3rd party code](https://developer.chrome.com/docs/performance/insights/third-parties) to prioritize your page's content.",
+   "score": 1,
+   "scoreDisplayMode": "numeric",
+   "details": {
+    "type": "table",
+    "headings": [
+     {
+      "key": "entity",
+      "valueType": "text",
+      "label": "3rd party",
+      "subItemsHeading": {
+       "key": "url",
+       "valueType": "url"
+      }
+     },
+     {
+      "key": "transferSize",
+      "granularity": 1,
+      "valueType": "bytes",
+      "label": "Transfer size",
+      "subItemsHeading": {
+       "key": "transferSize"
+      }
+     },
+     {
+      "key": "mainThreadTime",
+      "granularity": 1,
+      "valueType": "ms",
+      "label": "Main thread time",
+      "subItemsHeading": {
+       "key": "mainThreadTime"
+      }
+     }
+    ],
+    "items": []
+   },
    "guidanceLevel": 3
+  },
+  "duplicated-javascript-insight": {
+   "id": "duplicated-javascript-insight",
+   "title": "Duplicated JavaScript",
+   "description": "Remove large, [duplicate JavaScript modules](https://developer.chrome.com/docs/performance/insights/duplicated-javascript) from bundles to reduce unnecessary bytes consumed by network activity.",
+   "score": 1,
+   "scoreDisplayMode": "metricSavings",
+   "metricSavings": {
+    "FCP": 0,
+    "LCP": 0
+   },
+   "details": {
+    "type": "table",
+    "headings": [
+     {
+      "key": "source",
+      "valueType": "code",
+      "subItemsHeading": {
+       "key": "url",
+       "valueType": "url"
+      },
+      "label": "Source"
+     },
+     {
+      "key": "wastedBytes",
+      "valueType": "bytes",
+      "subItemsHeading": {
+       "key": "sourceTransferBytes"
+      },
+      "granularity": 10,
+      "label": "Duplicated bytes"
+     }
+    ],
+    "items": [],
+    "debugData": {
+     "type": "debugdata",
+     "wastedBytes": 0
+    }
+   },
+   "guidanceLevel": 2
+  },
+  "legacy-javascript-insight": {
+   "id": "legacy-javascript-insight",
+   "title": "Legacy JavaScript",
+   "description": "Polyfills and transforms enable older browsers to use new JavaScript features. However, many aren't necessary for modern browsers. Consider modifying your JavaScript build process to not transpile [Baseline](https://web.dev/articles/baseline-and-polyfills) features, unless you know you must support older browsers. [Learn why most sites can deploy ES6+ code without transpiling](https://developer.chrome.com/docs/performance/insights/legacy-javascript)",
+   "score": 1,
+   "scoreDisplayMode": "metricSavings",
+   "metricSavings": {
+    "FCP": 0,
+    "LCP": 0
+   },
+   "details": {
+    "type": "table",
+    "headings": [
+     {
+      "key": "url",
+      "valueType": "url",
+      "subItemsHeading": {
+       "key": "location",
+       "valueType": "source-location"
+      },
+      "label": "URL"
+     },
+     {
+      "key": null,
+      "valueType": "code",
+      "subItemsHeading": {
+       "key": "signal"
+      },
+      "label": ""
+     },
+     {
+      "key": "wastedBytes",
+      "valueType": "bytes",
+      "label": "Wasted bytes"
+     }
+    ],
+    "items": [],
+    "debugData": {
+     "type": "debugdata",
+     "wastedBytes": 0
+    }
+   },
+   "guidanceLevel": 2
   }
  }
 }
