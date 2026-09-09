@@ -102,6 +102,30 @@ export interface AllowedAudit {
  * same question.
  */
 export const ALLOWED_AUDITS: readonly AllowedAudit[] = Object.freeze([
+  // ── recovered by pinning the audit unit to Node 22 (2026-09-09) ──
+  //
+  // These three returned scoreDisplayMode "error" on EVERY run under
+  // Node 20: they use ES2025 iterator helpers (.values().flatMap,
+  // .values().reduce, .values().find) that Node 20 does not implement,
+  // so Lighthouse caught the TypeError and scored them as errors.
+  // Measured on this host against a live page:
+  //   node 20.19.2 -> error, error, error
+  //   node 22.23.2 -> metricSavings, metricSavings, numeric
+  {
+    id: 'duplicated-javascript-insight',
+    what: 'The same module shipped more than once across bundles.',
+    adjacentDetector: null,
+  },
+  {
+    id: 'legacy-javascript-insight',
+    what: 'Transpiled polyfills served to browsers that do not need them.',
+    adjacentDetector: null,
+  },
+  {
+    id: 'third-parties-insight',
+    what: 'What third-party origins cost the page in main-thread time.',
+    adjacentDetector: null,
+  },
   {
     id: 'speed-index',
     what: 'How quickly the page paints its content, as one number.',
@@ -189,27 +213,30 @@ export const ALLOWED_AUDITS: readonly AllowedAudit[] = Object.freeze([
 /**
  * Ids that ARE net-new but that this host cannot collect, and why.
  *
- * Lighthouse 13.4.1 declares `engines.node >= 22.19`. This host runs
- * Node 20.19.2, which predates the ES2025 iterator helpers
- * (`Iterator.prototype.flatMap` / `.reduce` / `.find`). The three
- * insights below use them and come back
- * `scoreDisplayMode: "error"` on every single run:
- *
- *   duplicated-javascript-insight  "duplication.values.flatMap is not a function"
- *   legacy-javascript-insight      "wastedBytesByRequestId.values(...).reduce is not a function"
- *   third-parties-insight          "data.Renderer.processes.values(...).find is not a function"
- *
- * They are recorded here rather than in ALLOWED_AUDITS because an
- * allowlisted id that errors every run would pin the run state to
- * `unusable` forever, and a check that is red on ordinary days is not
- * read on the day it is right. Move them up when this host reaches
- * Node 22.
+ * Empty since 2026-09-09. Kept because the category is real and will
+ * recur: an audit that errors on every run must NOT be allowlisted. An
+ * allowlisted id that always errors pins the run state to `unusable`
+ * forever, and a check that is red on ordinary days is not read on the
+ * day it is right. Record such an id here instead, with the reason and
+ * the condition that would clear it — as the Node 20 entries below did
+ * until the audit unit was pinned to Node 22.
  */
-export const BLOCKED_BY_NODE_VERSION: readonly string[] = Object.freeze([
-  'duplicated-javascript-insight',
-  'legacy-javascript-insight',
-  'third-parties-insight',
-]);
+// Empty since 2026-09-09: the estate now runs these under Node 22.
+//
+// On Node 20 all three returned scoreDisplayMode "error" on every run —
+// they use ES2025 iterator helpers (`.values().flatMap`, `.values().reduce`,
+// `.values().find`) that Node 20 does not implement, so Lighthouse caught
+// the TypeError and scored them as errors. Allowlisting them there would
+// have pinned every run to unusable.
+//
+// Verified on this host against a live page, both versions:
+//   node 20.19.2 -> error, error, error
+//   node 22.23.2 -> metricSavings, metricSavings, numeric
+//
+// The uxaudit unit pins /opt/node22 explicitly. If that pin is ever
+// removed, these three must come back out of ALLOWED_IDS or every run
+// reports three errors.
+export const BLOCKED_BY_NODE_VERSION: readonly string[] = Object.freeze([]);
 
 export const ALLOWED_IDS: readonly string[] = Object.freeze(
   ALLOWED_AUDITS.map((a) => a.id),

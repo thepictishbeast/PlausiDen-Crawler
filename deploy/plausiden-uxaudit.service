@@ -5,11 +5,22 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
+# Pinned to Node 22, deliberately.
+#
+# Debian 13 ships Node 20 and lighthouse@13 declares engines >=22.19.
+# Three insight audits use ES2025 iterator helpers Node 20 lacks and
+# returned scoreDisplayMode "error" on EVERY run — measured, both
+# versions, against a live page.
+#
+# Installed alongside rather than replacing the system node, because
+# ermine-stagenet.service and plausiden-crawler.service both run on
+# /usr/bin/node and upgrading underneath them is not this job's business.
+Environment=PATH=/opt/node22/bin:/usr/local/bin:/usr/bin:/bin
 Type=oneshot
 User=paul
 Group=paul
 WorkingDirectory=/home/paul/projects/PlausiDen-Crawler
-ExecStart=/usr/bin/npm run --silent audit:lighthouse -- --targets journeys/lighthouse-targets.json --out /var/lib/plausiden-analytics/ux-inbox
+ExecStart=/opt/node22/bin/npm run --silent audit:lighthouse -- --targets journeys/lighthouse-targets.json --out /var/lib/plausiden-analytics/ux-inbox
 TimeoutStartSec=1800
 Nice=19
 IOSchedulingClass=idle
@@ -37,6 +48,17 @@ ReadWritePaths=/var/lib/plausiden-analytics/ux-inbox /tank/scratch/uxaudit
 #   RestrictAddressFamilies=  emptied (as in the seo unit) blocks every socket,
 #                         and Chromium cannot reach the target.
 #   MemoryDenyWriteExecute=yes  a JIT engine cannot start under it.
+
+# Keep 30 days of raw Lighthouse reports and no more.
+#
+# Each run writes a full LHR (~1.3MB); unbounded that is ~470MB/year per
+# target and nobody would notice until /tank filled. 30 days is long
+# enough to diff a regression against, which is the only reason to keep
+# them at all.
+#
+# `-` prefix: a failed prune must not mark the audit run failed. The
+# audit is the point; housekeeping is not.
+ExecStartPost=-/usr/bin/find /tank/scratch/uxaudit -type f -mtime +30 -delete
 
 [Install]
 WantedBy=multi-user.target
